@@ -1,0 +1,37 @@
+{
+  "name": "rocket-league-6mans-bot",
+  "version": "1.0.0",
+  "description": "State-of-the-art Rocket League 6mans Discord bot with interactive UI, Captains draft select menus, automated voice channels, and ELO tracking.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "vitest run",
+    "register": "ts-node src/scripts/registerCommands.ts"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "rocket-league",
+    "6mans",
+    "queue",
+    "elo",
+    "matchmaking"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.3",
+    "better-sqlite3": "^11.3.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.5.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.10"
+  }
+}

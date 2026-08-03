@@ -1,0 +1,34 @@
+import {
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+} from 'discord.js';
+import { Player } from '../database/queries';
+import { getRankTier } from '../services/mmrService';
+
+/**
+ * Builds a Discord Select Menu for Captains to draft a teammate from the remaining player pool.
+ */
+export function getCaptainsDraftSelectMenu(
+  remainingPlayers: Player[],
+  pickNumber: number,
+  turn: 'BLUE' | 'ORANGE'
+): ActionRowBuilder<StringSelectMenuBuilder> {
+  const teamLabel = turn === 'BLUE' ? '🔵 Blue Captain' : '🟠 Orange Captain';
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('draft_select_player')
+    .setPlaceholder(`${teamLabel}: Choose a teammate (Pick #${pickNumber} of 3)...`)
+    .addOptions(
+      remainingPlayers.map(player => {
+        const tier = getRankTier(player.mmr);
+        return new StringSelectMenuOptionBuilder()
+          .setLabel(`${player.username} (${player.mmr} MMR)`)
+          .setDescription(`Rank: ${tier.name} • W/L: ${player.wins}-${player.losses}`)
+          .setValue(player.discord_id)
+          .setEmoji(tier.emoji);
+      })
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+}

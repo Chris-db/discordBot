@@ -1,0 +1,77 @@
+import {
+  ChatInputCommandInteraction,
+  REST,
+  Routes,
+} from 'discord.js';
+import { queueCommand } from '../commands/queue';
+import { matchCommand } from '../commands/match';
+import { statsCommand, leaderboardCommand, setMmrCommand, historyCommand } from '../commands/stats';
+import { helpCommand } from '../commands/help';
+import { banCommand } from '../commands/ban';
+import config from '../config';
+import { logger } from '../utils/logger';
+
+export const commands = [
+  queueCommand,
+  matchCommand,
+  statsCommand,
+  leaderboardCommand,
+  setMmrCommand,
+  historyCommand,
+  helpCommand,
+  banCommand,
+];
+
+/**
+ * Executes a slash command when received.
+ */
+export async function handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  const command = commands.find(c => c.data.name === interaction.commandName);
+  if (!command) {
+    await interaction.reply({ content: '❌ Unknown command!', ephemeral: true });
+    return;
+  }
+
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    logger.error(`Error executing command ${interaction.commandName}:`, error);
+    const content = '❌ An error occurred while executing this command.';
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content }).catch(() => null);
+    } else {
+      await interaction.reply({ content, ephemeral: true }).catch(() => null);
+    }
+  }
+}
+
+/**
+ * Registers all slash commands with Discord API.
+ */
+export async function registerCommands(): Promise<void> {
+  if (!config.discordToken || !config.clientId) {
+    logger.warn('DISCORD_TOKEN or CLIENT_ID missing in .env. Skipping command registration.');
+    return;
+  }
+
+  const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const body = commands.map(c => c.data.toJSON());
+
+  try {
+    if (config.guildId) {
+      logger.info(`Registering ${body.length} commands to Guild ${config.guildId}...`);
+      await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), {
+        body,
+      });
+      logger.info('Successfully registered guild slash commands!');
+    } else {
+      logger.info(`Registering ${body.length} global slash commands...`);
+      await rest.put(Routes.applicationCommands(config.clientId), {
+        body,
+      });
+      logger.info('Successfully registered global slash commands!');
+    }
+  } catch (error) {
+    logger.error('Failed to register slash commands:', error);
+  }
+}
