@@ -16,6 +16,10 @@ export interface AppConfig {
   setupTimeoutMinutes: number;
   /** How long a captain has to make a pick before it is auto-picked for them. */
   draftPickTimeoutSeconds: number;
+  /** Nightly SQLite snapshots. The database holds every rank and is not in version control. */
+  backupEnabled: boolean;
+  backupDir: string;
+  backupRetentionDays: number;
 }
 
 const config: AppConfig = {
@@ -28,6 +32,9 @@ const config: AppConfig = {
   matchTimeoutHours: parseInt(process.env.MATCH_TIMEOUT_HOURS || '3', 10),
   setupTimeoutMinutes: parseInt(process.env.SETUP_TIMEOUT_MINUTES || '15', 10),
   draftPickTimeoutSeconds: parseInt(process.env.DRAFT_PICK_TIMEOUT_SECONDS || '90', 10),
+  backupEnabled: (process.env.BACKUP_ENABLED || 'true').toLowerCase() !== 'false',
+  backupDir: process.env.BACKUP_DIR || path.join('data', 'backups'),
+  backupRetentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '14', 10),
 };
 
 export default config;

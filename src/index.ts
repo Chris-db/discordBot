@@ -14,6 +14,7 @@ import {
   sweepStaleMatches,
   recoverStuckQueues,
 } from './services/queueService';
+import { startBackupSchedule } from './services/backupService';
 import { logger } from './utils/logger';
 import db from './database/db';
 
@@ -61,6 +62,11 @@ client.once(Events.ClientReady, async readyClient => {
       logger.error('Error sweeping stale matches:', err);
     });
   }, 5 * 60_000);
+
+  // Nightly database snapshots. data/6mans.sqlite holds every player's rank and history and
+  // is (correctly) not in version control, so this is the only thing standing between a disk
+  // failure and losing the season.
+  startBackupSchedule();
 
   // Checkpoint SQLite WAL every 30 minutes to maintain small WAL file sizes
   setInterval(() => {

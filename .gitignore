@@ -4,6 +4,9 @@ data/*.sqlite
 data/*.sqlite-journal
 data/*.sqlite-wal
 data/*.sqlite-shm
+# Nightly snapshots (data/backups/) — never commit a database
+data/**/*.sqlite
+data/**/*.sqlite.partial
 .env
 *.log
 .DS_Store
