@@ -133,20 +133,29 @@ export function buildTeamsVoteEmbed(
   orangeTeam: Player[],
   yesCount: number,
   noCount: number,
-  seenCount: number = 1
+  seenCount: number = 1,
+  mode: 'random' | 'balanced' = 'random'
 ): EmbedBuilder {
+  const isBalanced = mode === 'balanced';
+  const rerollLabel = isBalanced ? 'No, Next Split' : 'No, Randomize';
+  const blueMmr = Math.round(blueTeam.reduce((s, p) => s + p.mmr, 0) / (blueTeam.length || 1));
+  const orangeMmr = Math.round(
+    orangeTeam.reduce((s, p) => s + p.mmr, 0) / (orangeTeam.length || 1)
+  );
+
   return new EmbedBuilder()
-    .setTitle('🎲 TEAM VERIFICATION VOTE')
+    .setTitle(`🎲 TEAM VERIFICATION VOTE — ${isBalanced ? 'BALANCED' : 'RANDOM'}`)
     .setColor(RL_COLORS.BLUE)
     .setDescription(
-      `Are these teams valid? Vote to proceed or randomize new teams:\n\n` +
-      `🔵 **Team Blue:** ${blueTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n` +
-      `🟠 **Team Orange:** ${orangeTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n\n` +
+      `Are these teams valid? Vote to proceed, or re-roll for the ` +
+      `${isBalanced ? 'next-closest balanced split' : 'next random matchup'}:\n\n` +
+      `🔵 **Team Blue** (avg ${blueMmr}): ${blueTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n` +
+      `🟠 **Team Orange** (avg ${orangeMmr}): ${orangeTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n\n` +
       `🎲 **Matchup ${seenCount}/10 seen** (No duplicate team pairings)\n\n` +
       `✅ **Yes, Proceed:** \`${yesCount} votes\`\n` +
-      `🔄 **No, Randomize:** \`${noCount} votes\``
+      `🔄 **${rerollLabel}:** \`${noCount} votes\``
     )
-    .setFooter({ text: '4 votes required to proceed or randomize • Voting closes in 30s' })
+    .setFooter({ text: '4 votes required to proceed or re-roll • Voting closes in 30s' })
     .setTimestamp();
 }
 

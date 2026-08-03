@@ -220,6 +220,36 @@ export async function handleModeVote(
   return { success: true, message: `Voted for **${votedMode.toUpperCase()}**!` };
 }
 
+export type TeamMode = 'captains' | 'balanced' | 'random';
+
+/**
+ * Picks the winning mode from the vote tally, breaking ties with a coin flip.
+ *
+ * The old rule was a fixed priority (balanced > captains > random), which meant balanced
+ * won every tie -- including 0-0-0, where nobody voted at all. Captains could only win
+ * with a strict majority, so a group that prefers captains would reasonably conclude the
+ * vote was rigged.
+ */
+export function resolveWinningMode(counts: Record<TeamMode, number>): {
+  winningMode: TeamMode;
+  tiedModes: TeamMode[];
+  maxVotes: number;
+} {
+  const modes: TeamMode[] = ['captains', 'balanced', 'random'];
+  const maxVotes = Math.max(...modes.map(m => counts[m]));
+  const tiedModes = modes.filter(m => counts[m] === maxVotes);
+
+  // Nobody voted at all: that's not a tie, it's an absent lobby. Coin-flipping it into a
+  // captains draft would ask an unresponsive queue to keep making picks, so take the mode
+  // that needs no further input.
+  if (maxVotes === 0) {
+    return { winningMode: 'balanced', tiedModes: ['balanced'], maxVotes };
+  }
+
+  const winningMode = tiedModes[Math.floor(Math.random() * tiedModes.length)];
+  return { winningMode, tiedModes, maxVotes };
+}
+
 /**
  * Determines the winning mode and executes the queue pop.
  */
@@ -238,32 +268,30 @@ export async function finalizeVoteAndPop(
     random: (queue.vote_counts.random || []).length,
   };
 
-  let winningMode: 'captains' | 'balanced' | 'random' = 'balanced';
-  const maxVotes = Math.max(counts.captains, counts.balanced, counts.random);
+  const { winningMode, tiedModes, maxVotes } = resolveWinningMode(counts);
 
-  // Resolve tiebreaker: balanced > captains > random
-  if (counts.balanced === maxVotes) {
-    winningMode = 'balanced';
-  } else if (counts.captains === maxVotes) {
-    winningMode = 'captains';
-  } else {
-    winningMode = 'random';
-  }
+  logger.info(
+    `Channel ${channelId} queue voting ended. Winning mode: ${winningMode}` +
+      (tiedModes.length > 1
+        ? ` (coin flip between ${tiedModes.join(', ')} at ${maxVotes} vote(s) each)`
+        : '')
+  );
 
-  logger.info(`Channel ${channelId} queue voting ended. Winning mode: ${winningMode}`);
-
-  const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (voteMsg) {
+    const tiebreakNote =
+      tiedModes.length > 1
+        ? `\n🎲 Tied at ${maxVotes} vote${maxVotes === 1 ? '' : 's'} (${tiedModes
+            .map(m => m.toUpperCase())
+            .join(' vs ')}) — decided by coin flip.`
+        : '';
     await voteMsg.edit({
-      content: `✅ **VOTING COMPLETE!** Winning mode: **${winningMode.toUpperCase()}**`,
+      content: `✅ **VOTING COMPLETE!** Winning mode: **${winningMode.toUpperCase()}**${tiebreakNote}`,
       components: [],
     }).catch(() => null);
   }
 
-  const players = getPlayersByIds(queue.player_ids);
-
   if (winningMode === 'balanced' || winningMode === 'random') {
-    await startTeamsVotePhase(client, channelId, guildId, queue, false, undefined, winningMode);
+    await startTeamsVotePhase(client, channelId, guildId, queue, winningMode);
   } else if (winningMode === 'captains') {
     await startCaptainsVotePhase(client, channelId, guildId, queue, false);
   }
@@ -499,30 +527,21 @@ export async function startTeamsVotePhase(
   channelId: string,
   guildId: string,
   queue: ActiveQueue,
-  isRandomize: boolean = false,
-  messageToEdit?: Message,
-  mode: 'random' | 'balanced' = 'random'
+  mode: 'random' | 'balanced' = 'random',
+  messageToEdit?: Message
 ): Promise<void> {
   const players = getPlayersByIds(queue.player_ids);
-  let blueTeam: Player[];
-  let orangeTeam: Player[];
-  let matchupKey: string;
 
+  // seenMatchups carries the re-roll history, so both generators walk to a new matchup
+  // rather than repeating one the queue has already rejected.
   const seenMatchups = queue.team_vote_state?.seenMatchups || [];
 
-  if (isRandomize || mode === 'random') {
-    const res = createRandomTeams(players, seenMatchups);
-    blueTeam = res.blueTeam;
-    orangeTeam = res.orangeTeam;
-    matchupKey = res.matchupKey!;
-  } else {
-    const res = createBalancedTeams(players);
-    blueTeam = res.blueTeam;
-    orangeTeam = res.orangeTeam;
-    matchupKey = res.matchupKey!;
-  }
+  const { blueTeam, orangeTeam, matchupKey } =
+    mode === 'balanced'
+      ? createBalancedTeams(players, seenMatchups)
+      : createRandomTeams(players, seenMatchups);
 
-  const newSeen = seenMatchups.length >= 10 ? [matchupKey] : [...seenMatchups, matchupKey];
+  const newSeen = seenMatchups.length >= 10 ? [matchupKey!] : [...seenMatchups, matchupKey!];
 
   queue.state = 'TEAMS_VOTE';
   queue.team_vote_state = {
@@ -531,14 +550,15 @@ export async function startTeamsVotePhase(
     yesVotes: [],
     noVotes: [],
     seenMatchups: newSeen,
+    mode,
   };
   saveQueue(queue);
 
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, 0, 0, newSeen.length);
-  const buttons = getTeamsVoteButtons({ yes: 0, no: 0 });
+  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, 0, 0, newSeen.length, mode);
+  const buttons = getTeamsVoteButtons({ yes: 0, no: 0 }, mode);
 
   let sentMsg: Message;
   if (messageToEdit) {
@@ -633,8 +653,9 @@ export async function handleTeamsVote(
   const blueTeam = getPlayersByIds(queue.team_vote_state.blueTeam);
   const orangeTeam = getPlayersByIds(queue.team_vote_state.orangeTeam);
 
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount);
-  const buttons = getTeamsVoteButtons({ yes: yesCount, no: noCount });
+  const mode = queue.team_vote_state.mode || 'random';
+  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount, mode);
+  const buttons = getTeamsVoteButtons({ yes: yesCount, no: noCount }, mode);
 
   await message.edit({
     embeds: [embed],
@@ -652,7 +673,12 @@ export async function handleTeamsVote(
 
   return {
     success: true,
-    message: vote === 'yes' ? 'Voted **YES** to proceed with these teams!' : 'Voted **NO** to randomize new teams!',
+    message:
+      vote === 'yes'
+        ? 'Voted **YES** to proceed with these teams!'
+        : `Voted **NO** — re-roll for the ${
+            mode === 'balanced' ? 'next-closest balanced split' : 'next random matchup'
+          }!`,
   };
 }
 
@@ -673,15 +699,23 @@ export async function finalizeTeamsVote(
   const noCount = queue.team_vote_state.noVotes.length;
 
   if (!allBots && noCount > yesCount) {
-    logger.info(`Channel ${channelId} team verification vote rejected. Randomizing new teams without repeat...`);
+    // Re-roll in the mode the queue actually voted for. This used to hardcode a random
+    // re-roll, so voting Balanced and then rejecting the split silently handed back
+    // random teams. Rows written before mode was persisted default to random.
+    const mode = queue.team_vote_state.mode || 'random';
+    logger.info(
+      `Channel ${channelId} team verification vote rejected. Generating next ${mode} matchup without repeat...`
+    );
     if (message) {
+      const rerollLabel =
+        mode === 'balanced' ? 'next-closest balanced split' : 'new random matchup';
       await message.edit({
-        content: `🔄 **TEAMS REJECTED** (${noCount} NO vs ${yesCount} YES). Generating new team matchup without repeat...`,
+        content: `🔄 **TEAMS REJECTED** (${noCount} NO vs ${yesCount} YES). Generating a ${rerollLabel}...`,
         components: [],
       }).catch(() => null);
     }
 
-    await startTeamsVotePhase(client, channelId, guildId, queue, true, message);
+    await startTeamsVotePhase(client, channelId, guildId, queue, mode, message);
   } else {
     logger.info(`Channel ${channelId} team verification vote approved. Starting match (teams locked in)...`);
     if (message) {

@@ -9,26 +9,37 @@ import {
   getActiveBan,
   revokeBan,
   getActiveBansByGuild,
+  getActiveMatchForPlayer,
 } from '../database/queries';
+import { removePlayerFromWaitingQueues } from '../services/queuePanel';
 import { logger } from '../utils/logger';
 
 export function parseDurationToIso(duration: string): string | null {
   const d = duration.toLowerCase().trim();
   if (d === 'permanent' || d === 'perm' || d === '0') return null;
-  const match = d.match(/^(\d+)([hdmw])$/);
+  // `mo` must be matched before `m`, and `m` means minutes -- it used to mean months, so
+  // `/ban add 30m` (obviously "thirty minutes") banned the player for thirty months.
+  const match = d.match(/^(\d+)(mo|[hdmw])$/);
   if (!match) {
-    throw new Error('Invalid duration format. Use e.g. 1h, 12h, 1d, 7d, 30d, or permanent.');
+    throw new Error(
+      'Invalid duration format. Use e.g. 30m, 1h, 12h, 1d, 7d, 2w, 1mo, or permanent.'
+    );
   }
   const value = parseInt(match[1], 10);
   const unit = match[2];
+  if (value <= 0) {
+    throw new Error('Duration must be greater than zero.');
+  }
   const now = new Date();
-  if (unit === 'h') {
+  if (unit === 'm') {
+    now.setMinutes(now.getMinutes() + value);
+  } else if (unit === 'h') {
     now.setHours(now.getHours() + value);
   } else if (unit === 'd') {
     now.setDate(now.getDate() + value);
   } else if (unit === 'w') {
     now.setDate(now.getDate() + value * 7);
-  } else if (unit === 'm') {
+  } else if (unit === 'mo') {
     now.setMonth(now.getMonth() + value);
   }
   return now.toISOString();
@@ -49,7 +60,7 @@ export const banCommand = {
         .addStringOption(opt =>
           opt
             .setName('duration')
-            .setDescription('Duration (e.g. 1h, 12h, 1d, 7d, 30d, permanent)')
+            .setDescription('Duration: 30m, 1h, 12h, 1d, 7d, 2w, 1mo, or permanent')
             .setRequired(true)
         )
         .addStringOption(opt =>
@@ -111,6 +122,13 @@ export const banCommand = {
         ? `<t:${Math.floor(new Date(ban.expires_at).getTime() / 1000)}:R>`
         : '**Permanent**';
 
+      // A ban that leaves the player sitting in the queue they were banned from isn't a ban.
+      const removedFrom = await removePlayerFromWaitingQueues(
+        interaction.client,
+        guildId,
+        user.id
+      );
+
       const embed = new EmbedBuilder()
         .setColor(0xed4245)
         .setTitle('🚫 Player Banned from Queue')
@@ -121,6 +139,23 @@ export const banCommand = {
           { name: 'Reason', value: reason, inline: false }
         )
         .setTimestamp();
+
+      if (removedFrom.length > 0) {
+        embed.addFields({
+          name: 'Removed From Queue',
+          value: removedFrom.map(id => `<#${id}>`).join(', '),
+          inline: false,
+        });
+      }
+
+      const activeMatch = getActiveMatchForPlayer(user.id);
+      if (activeMatch) {
+        embed.addFields({
+          name: '⚠️ Currently In A Match',
+          value: `Still in Match #${activeMatch.match_id}. Run \`/match cancel ${activeMatch.match_id}\` if they should be pulled out of it.`,
+          inline: false,
+        });
+      }
 
       await interaction.reply({ embeds: [embed] });
       logger.info(`Player ${user.id} banned by ${interaction.user.id} until ${expiresAt || 'permanent'}. Reason: ${reason}`);

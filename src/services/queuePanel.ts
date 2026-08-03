@@ -18,6 +18,7 @@ import {
   updateMatch,
   getMatchByTextChannel,
   getActiveBan,
+  getAllQueues,
   ActiveQueue,
 } from '../database/queries';
 import db from '../database/db';
@@ -240,6 +241,47 @@ export async function handleJoinQueue(
 /**
  * Handles a player clicking "Leave Queue" using an atomic SQLite transaction.
  */
+/**
+ * Removes a player from every waiting queue in a guild and refreshes the affected panels.
+ *
+ * The ban check only ran at join time, so banning someone who was already sitting in a
+ * queue left them there and they popped into the next match anyway. Queues past WAITING
+ * are left alone -- pulling a player out mid ready-check or mid-draft would strand the
+ * other five; use /match cancel for that.
+ *
+ * Returns the channel ids the player was removed from.
+ */
+export async function removePlayerFromWaitingQueues(
+  client: Client,
+  guildId: string,
+  discordId: string
+): Promise<string[]> {
+  const affected = db.transaction(() => {
+    const removedFrom: string[] = [];
+    for (const queue of getAllQueues()) {
+      if (queue.guild_id !== guildId) continue;
+      if (queue.state !== 'WAITING') continue;
+      if (!queue.player_ids.includes(discordId)) continue;
+
+      queue.player_ids = queue.player_ids.filter(id => id !== discordId);
+      if (queue.player_join_times) {
+        delete queue.player_join_times[discordId];
+      }
+      saveQueue(queue);
+      removedFrom.push(queue.channel_id);
+    }
+    return removedFrom;
+  })();
+
+  for (const channelId of affected) {
+    await refreshQueuePanel(client, channelId).catch(err =>
+      logger.warn(`Failed to refresh panel for ${channelId} after removing ${discordId}: ${err}`)
+    );
+  }
+
+  return affected;
+}
+
 export async function handleLeaveQueue(
   client: Client,
   channelId: string,

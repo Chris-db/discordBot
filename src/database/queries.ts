@@ -43,6 +43,9 @@ export interface ActiveQueue {
     yesVotes: string[];
     noVotes: string[];
     seenMatchups?: string[];
+    // The mode the queue actually voted for. Without this a re-roll has no way to know
+    // whether to generate another balanced split or a random one.
+    mode?: 'random' | 'balanced';
     message_id?: string;
   };
 }

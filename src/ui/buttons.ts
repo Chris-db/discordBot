@@ -84,10 +84,15 @@ export function getCaptainsVoteButtons(voteCounts: {
 /**
  * ActionRow for Voting on proposed Random/Balanced Teams verification.
  */
-export function getTeamsVoteButtons(voteCounts: {
-  yes: number;
-  no: number;
-}): ActionRowBuilder<ButtonBuilder> {
+export function getTeamsVoteButtons(
+  voteCounts: {
+    yes: number;
+    no: number;
+  },
+  mode: 'random' | 'balanced' = 'random'
+): ActionRowBuilder<ButtonBuilder> {
+  // The re-roll stays in the voted mode, so the label has to match what the button does.
+  const rerollLabel = mode === 'balanced' ? 'No, Next Split' : 'No, Randomize';
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('teams_verify_yes')
@@ -96,7 +101,7 @@ export function getTeamsVoteButtons(voteCounts: {
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('teams_verify_no')
-      .setLabel(`No, Randomize (${voteCounts.no})`)
+      .setLabel(`${rerollLabel} (${voteCounts.no})`)
       .setEmoji('🔄')
       .setStyle(ButtonStyle.Danger)
   );

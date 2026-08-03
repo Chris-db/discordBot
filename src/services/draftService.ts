@@ -55,42 +55,48 @@ export function getAllUniqueMatchups(players: Player[]): DraftResult[] {
 }
 
 /**
- * Splits 6 players into two teams of 3 to minimize average MMR difference.
+ * Returns the MMR gap between the two sides of a matchup.
  */
-export function createBalancedTeams(players: Player[]): DraftResult {
+export function getMatchupMmrDiff(matchup: DraftResult): number {
+  const blueSum = matchup.blueTeam.reduce((sum, p) => sum + p.mmr, 0);
+  const orangeSum = matchup.orangeTeam.reduce((sum, p) => sum + p.mmr, 0);
+  return Math.abs(blueSum - orangeSum);
+}
+
+/**
+ * Returns all 10 unique matchups ordered from most to least balanced.
+ */
+export function rankMatchupsByBalance(players: Player[]): DraftResult[] {
+  return getAllUniqueMatchups(players).sort(
+    (a, b) => getMatchupMmrDiff(a) - getMatchupMmrDiff(b)
+  );
+}
+
+/**
+ * Splits 6 players into two teams of 3 to minimize average MMR difference.
+ *
+ * Balanced mode has only one optimal answer, so a re-roll needs somewhere to go: passing
+ * the matchups already shown walks down the ranking to the next-closest split rather than
+ * handing back the same teams (or silently falling back to a random pairing).
+ */
+export function createBalancedTeams(players: Player[], seenMatchups: string[] = []): DraftResult {
   if (players.length !== 6) {
     throw new Error('Balanced teams requires exactly 6 players.');
   }
 
-  let bestBlue: Player[] = [];
-  let bestOrange: Player[] = [];
-  let minDiff = Infinity;
+  const ranked = rankMatchupsByBalance(players);
+  // Once all 10 have been shown, start again from the most balanced split.
+  const chosen = ranked.find(m => !seenMatchups.includes(m.matchupKey!)) || ranked[0];
 
-  // Generate all combinations of 3 players out of 6 (20 combinations)
-  const indices = [0, 1, 2, 3, 4, 5];
-  const totalMmr = players.reduce((sum, p) => sum + p.mmr, 0);
+  // getAllUniqueMatchups always puts the lowest discord_id on teamA, which would otherwise
+  // make the same player Blue in every balanced match.
+  const swapColors = Math.random() > 0.5;
 
-  for (let i = 0; i < 6; i++) {
-    for (let j = i + 1; j < 6; j++) {
-      for (let k = j + 1; k < 6; k++) {
-        const blueIndices = [i, j, k];
-        const blueSum = blueIndices.reduce((sum, idx) => sum + players[idx].mmr, 0);
-        const orangeSum = totalMmr - blueSum;
-        const diff = Math.abs(blueSum - orangeSum);
-
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestBlue = blueIndices.map(idx => players[idx]);
-          bestOrange = indices
-            .filter(idx => !blueIndices.includes(idx))
-            .map(idx => players[idx]);
-        }
-      }
-    }
-  }
-
-  const matchupKey = getMatchupKey(bestBlue, bestOrange);
-  return { blueTeam: bestBlue, orangeTeam: bestOrange, matchupKey };
+  return {
+    blueTeam: swapColors ? chosen.orangeTeam : chosen.blueTeam,
+    orangeTeam: swapColors ? chosen.blueTeam : chosen.orangeTeam,
+    matchupKey: chosen.matchupKey,
+  };
 }
 
 /**
