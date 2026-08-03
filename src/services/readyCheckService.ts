@@ -106,10 +106,13 @@ export async function startReadyCheckPhase(
     });
   }
 
-  // Create SQLite match record in READY_CHECK state
+  // Create SQLite match record in READY_CHECK state.
+  // queue_channel_id is set here (not only later in startVotingPhase) so cancel/cleanup
+  // paths can always tell the persistent rank queue apart from the temporary match queue.
   const match = createMatch({
     guild_id: guildId,
     channel_id: channelId,
+    queue_channel_id: channelId,
     state: 'READY_CHECK',
     blue_team: [...queue.player_ids],
     orange_team: [],
@@ -145,6 +148,10 @@ export async function startReadyCheckPhase(
     return;
   }
 
+  // Record the VC against the match, not just the queue row. cancelMatch deletes the queue
+  // row before channel cleanup runs, which used to leave this VC orphaned in the server.
+  updateMatch(match.match_id, { ready_check_vc_id: readyCheckVc.id });
+
   // 1. Save matchQueue for textChannelId (#match-123) in READY_CHECK state so timer and voting can run against it
   const matchQueue: ActiveQueue = {
     channel_id: textChannelId,
@@ -157,14 +164,30 @@ export async function startReadyCheckPhase(
   };
   saveQueue(matchQueue);
 
-  // 2. Immediately reset the original rank queue channel so new players can join concurrently during Ready Check!
-  queue.player_ids = [];
-  queue.player_join_times = {};
-  queue.state = 'WAITING';
-  queue.vote_counts = {};
-  queue.draft_state = undefined;
-  queue.ready_check_vc_id = undefined;
-  saveQueue(queue);
+  // 2. Immediately free up the original rank queue channel so new players can join
+  //    concurrently during Ready Check.
+  //
+  //    Remove only the 6 players who popped, rather than clearing the row. Clearing it
+  //    threw away anyone waiting behind them — which happened on every ready-check re-pop
+  //    (the caller saves the overflow players, then this ran and wiped them) and any time
+  //    a 7th player joined while the ready check was being set up.
+  const poppedIds = new Set(matchQueue.player_ids);
+  const sourceQueue = getQueue(channelId);
+  if (sourceQueue) {
+    sourceQueue.player_ids = sourceQueue.player_ids.filter(id => !poppedIds.has(id));
+    const survivingJoinTimes: Record<string, number> = {};
+    for (const id of sourceQueue.player_ids) {
+      survivingJoinTimes[id] = sourceQueue.player_join_times?.[id] ?? Date.now();
+    }
+    sourceQueue.player_join_times = survivingJoinTimes;
+    sourceQueue.state = 'WAITING';
+    sourceQueue.vote_counts = {};
+    sourceQueue.draft_state = undefined;
+    sourceQueue.captain_vote_state = undefined;
+    sourceQueue.team_vote_state = undefined;
+    sourceQueue.ready_check_vc_id = undefined;
+    saveQueue(sourceQueue);
+  }
   await refreshQueuePanel(client, channelId);
 
   const mentions = matchQueue.player_ids

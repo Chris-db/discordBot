@@ -46,5 +46,6 @@ export {
 // Timeouts & Recovery
 export {
   checkQueueTimeouts,
+  sweepStaleMatches,
   recoverStuckQueues,
 } from './queueTimeout';

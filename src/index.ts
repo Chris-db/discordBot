@@ -8,7 +8,12 @@ import config from './config';
 import { initializeDatabase } from './database/schema';
 import { handleCommand, registerCommands } from './handlers/commandHandler';
 import { handleInteraction } from './handlers/interactionHandler';
-import { handleChannelMessage, checkQueueTimeouts, recoverStuckQueues } from './services/queueService';
+import {
+  handleChannelMessage,
+  checkQueueTimeouts,
+  sweepStaleMatches,
+  recoverStuckQueues,
+} from './services/queueService';
 import { logger } from './utils/logger';
 import db from './database/db';
 
@@ -48,6 +53,14 @@ client.once(Events.ClientReady, async readyClient => {
       logger.error('Error checking queue timeouts:', err);
     });
   }, 60_000);
+
+  // Every 5 minutes, release matches that have been abandoned mid-flight. Without this a
+  // match that nobody reports keeps all 6 of its players locked out of the queue forever.
+  setInterval(() => {
+    sweepStaleMatches(readyClient).catch(err => {
+      logger.error('Error sweeping stale matches:', err);
+    });
+  }, 5 * 60_000);
 
   // Checkpoint SQLite WAL every 30 minutes to maintain small WAL file sizes
   setInterval(() => {

@@ -367,8 +367,10 @@ export async function deleteMatchChannels(client: Client, matchId: number): Prom
     const guild = await client.guilds.fetch(match.guild_id);
     if (!guild) return;
 
+    // Prefer the id stored on the match — the queue row it used to live on may already
+    // have been deleted by whatever cancelled the match.
     const queueData = match.text_channel_id ? getQueue(match.text_channel_id) : getQueue(match.channel_id);
-    const readyCheckVcId = queueData?.ready_check_vc_id;
+    const readyCheckVcId = match.ready_check_vc_id || queueData?.ready_check_vc_id;
 
     const channelIds = [match.text_channel_id, match.blue_voice_id, match.orange_voice_id, readyCheckVcId];
     for (const cid of channelIds) {
@@ -469,7 +471,17 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
     );
 
     if (match.state === 'COMPLETED' && (match.winner === 'BLUE' || match.winner === 'ORANGE')) {
-      const { blueDelta, orangeDelta } = calculateMmrDelta(bluePlayers, orangePlayers, match.winner);
+      // Use the deltas that were actually applied, recorded by completeMatch. Recomputing
+      // here would run the Elo expectation against the already-updated ratings and show
+      // players a number that doesn't match what they gained.
+      const stored = match.gamble_status;
+      const recomputed =
+        stored?.blueDelta === undefined || stored?.orangeDelta === undefined
+          ? calculateMmrDelta(bluePlayers, orangePlayers, match.winner)
+          : undefined;
+      const blueDelta = stored?.blueDelta ?? recomputed!.blueDelta;
+      const orangeDelta = stored?.orangeDelta ?? recomputed!.orangeDelta;
+
       const blueResults = bluePlayers.map(p => ({ player: p, delta: blueDelta, newMmr: p.mmr }));
       const orangeResults = orangePlayers.map(p => ({ player: p, delta: orangeDelta, newMmr: p.mmr }));
 

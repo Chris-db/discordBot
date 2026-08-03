@@ -58,6 +58,8 @@ export interface Match {
   rl_pass: string;
   blue_voice_id?: string;
   orange_voice_id?: string;
+  /** Temporary "Ready Check #N" VC. Owned by the match so cleanup can always find it. */
+  ready_check_vc_id?: string;
   message_id?: string;
   text_channel_id?: string;
   queue_channel_id?: string;
@@ -122,11 +124,27 @@ export function getOrCreatePlayer(discordId: string, username: string): Player {
   return player;
 }
 
+/**
+ * Fetches players by id, preserving the order of `discordIds`.
+ *
+ * SQL `IN` gives no ordering guarantee — SQLite serves it from the discord_id
+ * primary-key index, so rows come back sorted by id. Callers rely on list order
+ * being meaningful (queue slot numbers, and the captain being index 0 of a team),
+ * so re-order the rows to match the request here rather than at every call site.
+ */
 export function getPlayersByIds(discordIds: string[]): Player[] {
   if (discordIds.length === 0) return [];
   const placeholders = discordIds.map(() => '?').join(',');
   const stmt = db.prepare(`SELECT * FROM players WHERE discord_id IN (${placeholders})`);
-  return stmt.all(...discordIds) as Player[];
+  const rows = stmt.all(...discordIds) as Player[];
+
+  const byId = new Map(rows.map(p => [p.discord_id, p]));
+  const ordered: Player[] = [];
+  for (const id of discordIds) {
+    const player = byId.get(id);
+    if (player) ordered.push(player);
+  }
+  return ordered;
 }
 
 export function updatePlayerAfterMatch(
@@ -363,6 +381,16 @@ export function getActiveMatchForPlayer(discordId: string): Match | undefined {
   return undefined;
 }
 
+/**
+ * All matches in a live state across every guild, used by the periodic stale-match sweep.
+ */
+export function getAllLiveMatches(): Match[] {
+  const stmt = db.prepare(
+    "SELECT * FROM matches WHERE state IN ('READY_CHECK', 'VOTING', 'CAPTAINS_VOTE', 'DRAFTING', 'IN_PROGRESS')"
+  );
+  return (stmt.all() as any[]).map(parseMatchRow);
+}
+
 export function getMatchHistory(guildId: string, limit: number = 5, discordId?: string): Match[] {
   if (discordId) {
     const stmt = db.prepare(`
@@ -420,6 +448,7 @@ export function updateMatch(
     feed_message_id?: string;
     blue_voice_id?: string;
     orange_voice_id?: string;
+    ready_check_vc_id?: string;
     blue_team?: string[];
     orange_team?: string[];
     rl_name?: string;
@@ -443,6 +472,7 @@ export function updateMatch(
   const newFeedMsg = updates.feed_message_id !== undefined ? updates.feed_message_id : current.feed_message_id;
   const newBlueVoice = updates.blue_voice_id !== undefined ? updates.blue_voice_id : current.blue_voice_id;
   const newOrangeVoice = updates.orange_voice_id !== undefined ? updates.orange_voice_id : current.orange_voice_id;
+  const newReadyVc = updates.ready_check_vc_id !== undefined ? updates.ready_check_vc_id : current.ready_check_vc_id;
   const newBlueTeam = updates.blue_team ? JSON.stringify(updates.blue_team) : JSON.stringify(current.blue_team);
   const newOrangeTeam = updates.orange_team ? JSON.stringify(updates.orange_team) : JSON.stringify(current.orange_team);
   const newRlName = updates.rl_name !== undefined ? updates.rl_name : current.rl_name;
@@ -462,6 +492,7 @@ export function updateMatch(
       feed_message_id = ?,
       blue_voice_id = ?,
       orange_voice_id = ?,
+      ready_check_vc_id = ?,
       blue_team = ?,
       orange_team = ?,
       rl_name = ?,
@@ -482,6 +513,7 @@ export function updateMatch(
     newFeedMsg || null,
     newBlueVoice || null,
     newOrangeVoice || null,
+    newReadyVc || null,
     newBlueTeam,
     newOrangeTeam,
     newRlName,
@@ -494,6 +526,70 @@ export function updateMatch(
 
 export function updateMatchGambleStatus(matchId: number, gambleStatus: GambleStatus): Match {
   return updateMatch(matchId, { gamble_status: gambleStatus });
+}
+
+/**
+ * Atomically read-modify-writes a match's report_status.
+ *
+ * Vote handlers used to read the row, mutate the JSON in JS, then write the whole
+ * row back. Two players clicking in the same tick both read the pre-vote state and
+ * the second write silently dropped the first vote. better-sqlite3 is synchronous,
+ * so running the read and the write inside one transaction genuinely serialises them.
+ *
+ * The mutator must be pure-synchronous — do not await inside it.
+ */
+export function mutateMatchReportStatus(
+  matchId: number,
+  mutate: (status: NonNullable<Match['report_status']>, match: Match) => void
+): Match | undefined {
+  return db.transaction(() => {
+    const match = getMatch(matchId);
+    if (!match) return undefined;
+
+    const status = match.report_status || {};
+    status.blueVotes = status.blueVotes || [];
+    status.orangeVotes = status.orangeVotes || [];
+    status.cancelVotes = status.cancelVotes || [];
+
+    mutate(status, match);
+    return updateMatch(matchId, { report_status: status });
+  })();
+}
+
+/**
+ * Atomically read-modify-writes a match's gamble_status. See mutateMatchReportStatus.
+ */
+export function mutateMatchGambleStatus(
+  matchId: number,
+  mutate: (status: GambleStatus, match: Match) => void
+): Match | undefined {
+  return db.transaction(() => {
+    const match = getMatch(matchId);
+    if (!match) return undefined;
+
+    const status = match.gamble_status || { state: 'NONE' as const, agreedPlayers: [] };
+    status.agreedPlayers = status.agreedPlayers || [];
+
+    mutate(status, match);
+    return updateMatch(matchId, { gamble_status: status });
+  })();
+}
+
+/**
+ * Atomically read-modify-writes a queue row. See mutateMatchReportStatus.
+ * Returns the saved queue, or undefined if the queue no longer exists.
+ */
+export function mutateQueue(
+  channelId: string,
+  mutate: (queue: ActiveQueue) => void
+): ActiveQueue | undefined {
+  return db.transaction(() => {
+    const queue = getQueue(channelId);
+    if (!queue) return undefined;
+    mutate(queue);
+    saveQueue(queue);
+    return queue;
+  })();
 }
 
 export function getMatchGambleStatus(matchId: number): GambleStatus {
@@ -513,6 +609,7 @@ function parseMatchRow(row: any): Match {
     rl_pass: row.rl_pass,
     blue_voice_id: row.blue_voice_id || undefined,
     orange_voice_id: row.orange_voice_id || undefined,
+    ready_check_vc_id: row.ready_check_vc_id || undefined,
     message_id: row.message_id || undefined,
     text_channel_id: row.text_channel_id || undefined,
     queue_channel_id: row.queue_channel_id || undefined,

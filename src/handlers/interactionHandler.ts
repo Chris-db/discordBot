@@ -95,6 +95,9 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     }
 
     if (customId === 'queue_leaderboard') {
+      // Defer first — image generation can outrun the 3s interaction deadline.
+      await interaction.deferReply({ ephemeral: true });
+
       const page = 1;
       const totalPlayers = getTotalPlayersCount();
       const topPlayers = getLeaderboard(10, 0);
@@ -114,11 +117,10 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
       const embed = buildLeaderboardEmbed(topPlayers, page, totalPlayers, topPlayerAvatarUrl, true);
       const buttons = getLeaderboardButtons(page, Math.max(1, Math.ceil(totalPlayers / 10)));
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [embed],
         components: [buttons],
         files: [attachment],
-        ephemeral: true,
       });
       return;
     }
@@ -261,21 +263,24 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     }
 
     if (customId.startsWith('match_mod_override_')) {
+      // Defer first. This branch looks instant, but canvas rendering elsewhere runs on the
+      // main thread and blocks the event loop, which can push the reply past Discord's 3s
+      // acknowledgement window and produce DiscordAPIError[10062] Unknown interaction.
+      await interaction.deferReply({ ephemeral: true });
+
       const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
       if (!isAdmin) {
-        await interaction.reply({
+        await interaction.editReply({
           content: '❌ You need **Manage Channels** permission to use Mod Override.',
-          ephemeral: true,
         });
         return;
       }
 
       const matchId = parseInt(customId.split('_').pop()!, 10);
       const buttons = getModOverrideButtons(matchId);
-      await interaction.reply({
+      await interaction.editReply({
         content: `🛠️ **Mod Override Control Panel for Match #${matchId}:**\nChoose an instant action below:`,
         components: [buttons],
-        ephemeral: true,
       });
       return;
     }
@@ -334,7 +339,17 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       await handleGambleDecline(interaction.client, interaction, matchId);
       return;
     }
-  } catch (error) {
+  } catch (error: any) {
+    // 10062 = the interaction token already expired. Replying again just throws a second
+    // error, so log it as a warning and move on rather than burying the real cause.
+    if (error?.code === 10062) {
+      logger.warn(
+        `Interaction ${customId} expired before the bot could respond (Discord's 3s window). ` +
+          `Usually means the event loop was blocked — check for a slow image render.`
+      );
+      return;
+    }
+
     logger.error(`Error handling button interaction ${customId}:`, error);
     if (!interaction.deferred && !interaction.replied) {
       await interaction.reply({ content: '❌ An error occurred.', ephemeral: true }).catch(() => null);

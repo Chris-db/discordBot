@@ -7,6 +7,7 @@ import {
 import {
   getQueue,
   saveQueue,
+  mutateQueue,
   getPlayersByIds,
   createMatch,
   updateMatch,
@@ -38,6 +39,7 @@ import { startNewMatch } from './matchService';
 import { generateCaptainsDraftImage } from './draftImage';
 import { generateModeVoteImage } from './voteImage';
 import { logger } from '../utils/logger';
+import config from '../config';
 import { refreshQueuePanel, resetQueueAfterPop } from './queuePanel';
 
 // Track active voting timers in memory so we don't duplicate timeouts
@@ -158,25 +160,34 @@ export async function handleModeVote(
   votedMode: 'captains' | 'balanced' | 'random',
   message: Message
 ): Promise<{ success: boolean; message: string }> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'VOTING') {
+  // Atomic — concurrent clicks used to clobber each other's votes.
+  let rejection: string | undefined;
+  const queue = mutateQueue(channelId, q => {
+    if (q.state !== 'VOTING') {
+      rejection = 'Voting is not currently active.';
+      return;
+    }
+    if (!q.player_ids.includes(userId)) {
+      rejection = 'Only queued players can vote!';
+      return;
+    }
+
+    // Remove existing vote by this user if any
+    for (const mode of ['captains', 'balanced', 'random'] as const) {
+      const list = q.vote_counts[mode] || [];
+      q.vote_counts[mode] = list.filter(id => id !== userId);
+    }
+
+    // Record new vote
+    q.vote_counts[votedMode].push(userId);
+  });
+
+  if (!queue) {
     return { success: false, message: 'Voting is not currently active.' };
   }
-
-  if (!queue.player_ids.includes(userId)) {
-    return { success: false, message: 'Only queued players can vote!' };
+  if (rejection) {
+    return { success: false, message: rejection };
   }
-
-  // Remove existing vote by this user if any
-  for (const mode of ['captains', 'balanced', 'random'] as const) {
-    const list = queue.vote_counts[mode] || [];
-    queue.vote_counts[mode] = list.filter(id => id !== userId);
-  }
-
-  // Record new vote
-  if (!queue.vote_counts[votedMode]) queue.vote_counts[votedMode] = [];
-  queue.vote_counts[votedMode].push(userId);
-  saveQueue(queue);
 
   const voteCounts = {
     captains: (queue.vote_counts.captains || []).length,
@@ -374,24 +385,33 @@ export async function handleCaptainsVote(
   vote: 'yes' | 'no',
   message: Message
 ): Promise<{ success: boolean; message: string }> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'CAPTAINS_VOTE' || !queue.captain_vote_state) {
+  let rejection: string | undefined;
+  const queue = mutateQueue(channelId, q => {
+    if (q.state !== 'CAPTAINS_VOTE' || !q.captain_vote_state) {
+      rejection = 'Captain verification is not currently active.';
+      return;
+    }
+    if (!q.player_ids.includes(userId)) {
+      rejection = 'Only queued players can vote on captains!';
+      return;
+    }
+
+    q.captain_vote_state.yesVotes = q.captain_vote_state.yesVotes.filter(id => id !== userId);
+    q.captain_vote_state.noVotes = q.captain_vote_state.noVotes.filter(id => id !== userId);
+
+    if (vote === 'yes') {
+      q.captain_vote_state.yesVotes.push(userId);
+    } else {
+      q.captain_vote_state.noVotes.push(userId);
+    }
+  });
+
+  if (!queue || !queue.captain_vote_state) {
     return { success: false, message: 'Captain verification is not currently active.' };
   }
-
-  if (!queue.player_ids.includes(userId)) {
-    return { success: false, message: 'Only queued players can vote on captains!' };
+  if (rejection) {
+    return { success: false, message: rejection };
   }
-
-  queue.captain_vote_state.yesVotes = queue.captain_vote_state.yesVotes.filter(id => id !== userId);
-  queue.captain_vote_state.noVotes = queue.captain_vote_state.noVotes.filter(id => id !== userId);
-
-  if (vote === 'yes') {
-    queue.captain_vote_state.yesVotes.push(userId);
-  } else {
-    queue.captain_vote_state.noVotes.push(userId);
-  }
-  saveQueue(queue);
 
   const yesCount = queue.captain_vote_state.yesVotes.length;
   const noCount = queue.captain_vote_state.noVotes.length;
@@ -578,24 +598,33 @@ export async function handleTeamsVote(
   vote: 'yes' | 'no',
   message: Message
 ): Promise<{ success: boolean; message: string }> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'TEAMS_VOTE' || !queue.team_vote_state) {
+  let rejection: string | undefined;
+  const queue = mutateQueue(channelId, q => {
+    if (q.state !== 'TEAMS_VOTE' || !q.team_vote_state) {
+      rejection = 'Team verification is not currently active.';
+      return;
+    }
+    if (!q.player_ids.includes(userId)) {
+      rejection = 'Only queued players can vote on teams!';
+      return;
+    }
+
+    q.team_vote_state.yesVotes = q.team_vote_state.yesVotes.filter(id => id !== userId);
+    q.team_vote_state.noVotes = q.team_vote_state.noVotes.filter(id => id !== userId);
+
+    if (vote === 'yes') {
+      q.team_vote_state.yesVotes.push(userId);
+    } else {
+      q.team_vote_state.noVotes.push(userId);
+    }
+  });
+
+  if (!queue || !queue.team_vote_state) {
     return { success: false, message: 'Team verification is not currently active.' };
   }
-
-  if (!queue.player_ids.includes(userId)) {
-    return { success: false, message: 'Only queued players can vote on teams!' };
+  if (rejection) {
+    return { success: false, message: rejection };
   }
-
-  queue.team_vote_state.yesVotes = queue.team_vote_state.yesVotes.filter(id => id !== userId);
-  queue.team_vote_state.noVotes = queue.team_vote_state.noVotes.filter(id => id !== userId);
-
-  if (vote === 'yes') {
-    queue.team_vote_state.yesVotes.push(userId);
-  } else {
-    queue.team_vote_state.noVotes.push(userId);
-  }
-  saveQueue(queue);
 
   const yesCount = queue.team_vote_state.yesVotes.length;
   const noCount = queue.team_vote_state.noVotes.length;
@@ -735,6 +764,46 @@ export async function sendCaptainsDraftCard(
         await handleCaptainPick(client, channelId, currentCaptain, pick.discord_id, sentMsg);
       }
     }, 1500);
+    return;
+  }
+
+  // An AFK captain used to hang the draft forever — there was no clock on a pick at all.
+  // Auto-pick the highest-MMR player left if this pick hasn't been made in time.
+  if (remaining.length > 0) {
+    const existing = activeVoteTimers.get(channelId);
+    if (existing) clearTimeout(existing);
+
+    const pickNumberAtSend = draft.pickNumber;
+    const timer = setTimeout(async () => {
+      activeVoteTimers.delete(channelId);
+
+      const current = getQueue(channelId);
+      if (
+        !current ||
+        current.state !== 'DRAFTING' ||
+        !current.draft_state ||
+        current.draft_state.pickNumber !== pickNumberAtSend
+      ) {
+        return; // the pick was made, or the draft moved on
+      }
+
+      const stillRemaining = getPlayersByIds(current.draft_state.remainingPlayers);
+      const autoPick = [...stillRemaining].sort((a, b) => b.mmr - a.mmr)[0];
+      if (!autoPick) return;
+
+      logger.info(
+        `Draft pick #${pickNumberAtSend} in ${channelId} timed out. Auto-picking ${autoPick.username}.`
+      );
+      await sentMsg
+        .reply({ content: `⏰ <@${currentCaptain}> ran out of time — auto-picking **${autoPick.username}**.` })
+        .catch(() => null);
+
+      await handleCaptainPick(client, channelId, currentCaptain, autoPick.discord_id, sentMsg).catch(
+        err => logger.error('Draft auto-pick failed:', err)
+      );
+    }, (config.draftPickTimeoutSeconds || 90) * 1000);
+
+    activeVoteTimers.set(channelId, timer);
   }
 }
 
@@ -757,6 +826,13 @@ export async function handleCaptainPick(
     queue.draft_state = processCaptainPick(queue.draft_state, pickerId, selectedPlayerId);
   } catch (error: any) {
     return { success: false, message: error.message || 'Invalid draft pick.' };
+  }
+
+  // The pick landed — stop the auto-pick clock for it.
+  const pendingTimer = activeVoteTimers.get(channelId);
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    activeVoteTimers.delete(channelId);
   }
 
   saveQueue(queue);

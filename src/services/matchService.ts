@@ -6,6 +6,7 @@ import {
   getMatchByTextChannel,
   getPlayersByIds,
   updatePlayerAfterMatch,
+  mutateMatchReportStatus,
   getQueue,
   deleteQueue,
   Player,
@@ -32,6 +33,9 @@ import { getMatchupKey, createRandomTeams } from './draftService';
 import { generateMatchVsImage } from './matchImage';
 import { generateMatchResultImage } from './resultImage';
 import { logger } from '../utils/logger';
+
+/** Votes needed to settle a result or cancel — a majority of the 6 players. */
+export const REPORT_VOTES_REQUIRED = 4;
 
 /**
  * Starts a new 6mans match with 3v3 teams, temporary voice channels, and RL Lobby details.
@@ -73,11 +77,13 @@ export async function startNewMatch(
 
     // Delete temporary Ready Check VC now that players are in Team Blue & Team Orange VCs
     const matchQueueData = getQueue(channelId);
-    if (matchQueueData?.ready_check_vc_id) {
-      const readyVc = await client.channels.fetch(matchQueueData.ready_check_vc_id).catch(() => null);
+    const readyVcId = updated.ready_check_vc_id || matchQueueData?.ready_check_vc_id;
+    if (readyVcId) {
+      const readyVc = await client.channels.fetch(readyVcId).catch(() => null);
       if (readyVc) {
         await readyVc.delete('Ready check completed, players moved to team VCs').catch(() => null);
       }
+      updateMatch(updated.match_id, { ready_check_vc_id: '' });
     }
 
     // 3. Send private Lobby credentials card
@@ -219,34 +225,34 @@ export async function handleMatchReportVote(
     return { success: false, message: 'Only players in this match can report scores!' };
   }
 
-  const status = match.report_status || {};
-  if (!status.blueVotes) status.blueVotes = [];
-  if (!status.orangeVotes) status.orangeVotes = [];
-  if (!status.cancelVotes) status.cancelVotes = [];
+  // Atomic — two players clicking in the same tick used to lose one of the votes.
+  const updated = mutateMatchReportStatus(matchId, status => {
+    // Remove any existing vote by this reporter
+    status.blueVotes = status.blueVotes!.filter(id => id !== reporterId);
+    status.orangeVotes = status.orangeVotes!.filter(id => id !== reporterId);
+    status.cancelVotes = status.cancelVotes!.filter(id => id !== reporterId);
 
-  // Remove existing vote by this reporter
-  status.blueVotes = status.blueVotes.filter(id => id !== reporterId);
-  status.orangeVotes = status.orangeVotes.filter(id => id !== reporterId);
-  status.cancelVotes = status.cancelVotes.filter(id => id !== reporterId);
+    if (reportedWinner === 'BLUE') {
+      status.blueVotes.push(reporterId);
+    } else {
+      status.orangeVotes.push(reporterId);
+    }
+  });
 
-  if (reportedWinner === 'BLUE') {
-    status.blueVotes.push(reporterId);
-  } else {
-    status.orangeVotes.push(reporterId);
+  if (!updated) {
+    return { success: false, message: 'This match is no longer active.' };
   }
-
-  updateMatch(matchId, { report_status: status });
 
   // Refresh Active Match Embed
   await updateActiveMatchEmbed(client, matchId);
 
-  const blueVotesCount = status.blueVotes.length;
-  const orangeVotesCount = status.orangeVotes.length;
+  const blueVotesCount = updated.report_status.blueVotes?.length || 0;
+  const orangeVotesCount = updated.report_status.orangeVotes?.length || 0;
 
-  if (blueVotesCount >= 4) {
+  if (blueVotesCount >= REPORT_VOTES_REQUIRED) {
     await completeMatch(client, matchId, 'BLUE');
     return { success: true, message: 'Confirmed! Team Blue wins!', completed: true };
-  } else if (orangeVotesCount >= 4) {
+  } else if (orangeVotesCount >= REPORT_VOTES_REQUIRED) {
     await completeMatch(client, matchId, 'ORANGE');
     return { success: true, message: 'Confirmed! Team Orange wins!', completed: true };
   }
@@ -255,7 +261,7 @@ export async function handleMatchReportVote(
     success: true,
     message: `Voted for **Team ${reportedWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'} Win** (${
       reportedWinner === 'BLUE' ? blueVotesCount : orangeVotesCount
-    }/4 votes needed).`,
+    }/${REPORT_VOTES_REQUIRED} votes needed).`,
   };
 }
 
@@ -278,32 +284,35 @@ export async function handleMatchCancelVote(
     return { success: false, message: 'Only players in this match can vote to cancel!' };
   }
 
-  const status = match.report_status || {};
-  if (!status.blueVotes) status.blueVotes = [];
-  if (!status.orangeVotes) status.orangeVotes = [];
-  if (!status.cancelVotes) status.cancelVotes = [];
+  const updated = mutateMatchReportStatus(matchId, status => {
+    // Remove existing vote by this player from blue/orange win votes
+    status.blueVotes = status.blueVotes!.filter(id => id !== voterId);
+    status.orangeVotes = status.orangeVotes!.filter(id => id !== voterId);
 
-  // Remove existing vote by this player from blue/orange win votes
-  status.blueVotes = status.blueVotes.filter(id => id !== voterId);
-  status.orangeVotes = status.orangeVotes.filter(id => id !== voterId);
+    if (!status.cancelVotes!.includes(voterId)) {
+      status.cancelVotes!.push(voterId);
+    }
+  });
 
-  if (!status.cancelVotes.includes(voterId)) {
-    status.cancelVotes.push(voterId);
+  if (!updated) {
+    return { success: false, message: 'This match is no longer active.' };
   }
-
-  updateMatch(matchId, { report_status: status });
 
   await updateActiveMatchEmbed(client, matchId);
 
-  const cancelVotesCount = status.cancelVotes.length;
-  if (cancelVotesCount >= 4) {
-    await cancelMatch(client, matchId, '4 Player Votes');
-    return { success: true, message: 'Confirmed! 4/4 votes reached — Match cancelled.', cancelled: true };
+  const cancelVotesCount = updated.report_status.cancelVotes?.length || 0;
+  if (cancelVotesCount >= REPORT_VOTES_REQUIRED) {
+    await cancelMatch(client, matchId, `${cancelVotesCount} Player Votes`);
+    return {
+      success: true,
+      message: `Confirmed! ${cancelVotesCount}/${REPORT_VOTES_REQUIRED} votes reached — Match cancelled.`,
+      cancelled: true,
+    };
   }
 
   return {
     success: true,
-    message: `Voted to **Cancel Match** (${cancelVotesCount}/4 votes needed).`,
+    message: `Voted to **Cancel Match** (${cancelVotesCount}/${REPORT_VOTES_REQUIRED} votes needed).`,
   };
 }
 
@@ -432,11 +441,21 @@ export async function cancelMatch(
     completed_at: new Date().toISOString(),
   });
 
+  // Tear the Ready Check VC down straight away rather than waiting for the delayed channel
+  // cleanup — an empty "Ready Check #N" room sitting in the sidebar looks like the bot broke.
+  const readyVcId = match.ready_check_vc_id || (match.text_channel_id ? getQueue(match.text_channel_id)?.ready_check_vc_id : undefined);
+  if (readyVcId) {
+    const readyVc = await client.channels.fetch(readyVcId).catch(() => null);
+    if (readyVc) {
+      await readyVc.delete('Match cancelled').catch(() => null);
+    }
+  }
+
+  // Only the temporary #match-ID queue row may be deleted. match.channel_id points at
+  // the persistent rank queue channel, and deleting that row wipes the panel message id
+  // plus everyone currently waiting in it.
   if (match.text_channel_id) {
     deleteQueue(match.text_channel_id);
-  }
-  if (match.channel_id && match.channel_id !== match.queue_channel_id) {
-    deleteQueue(match.channel_id);
   }
 
   // Update public feed card
@@ -517,6 +536,11 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
       match.orange_voice_id,
       match.report_status
     );
+
+    // The original message carries match_vs.png. Editing with an embed that doesn't
+    // reference it drops the VS card from the match message on the first report vote.
+    // The attachment is still on the message, so re-pointing at it is enough.
+    embed.setImage('attachment://match_vs.png');
 
     await msg.edit({ embeds: [embed] });
   } catch (error) {

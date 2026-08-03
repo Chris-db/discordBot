@@ -8,6 +8,7 @@ import {
 import {
   getMatch,
   updateMatchGambleStatus,
+  mutateMatchGambleStatus,
   getPlayersByIds,
   applyGambleResultToPlayer,
   GambleStatus,
@@ -162,8 +163,7 @@ export async function handleGambleAgree(
     return;
   }
 
-  const status = match.gamble_status;
-  if (status.agreedPlayers.includes(interaction.user.id)) {
+  if (match.gamble_status.agreedPlayers.includes(interaction.user.id)) {
     await interaction.reply({
       content: '✅ You have already agreed to the gamble!',
       ephemeral: true,
@@ -171,8 +171,15 @@ export async function handleGambleAgree(
     return;
   }
 
-  status.agreedPlayers.push(interaction.user.id);
-  updateMatchGambleStatus(matchId, status);
+  // Atomic — six players racing to agree used to drop each other's agreements,
+  // which meant the 6/6 threshold could never be reached.
+  const updated = mutateMatchGambleStatus(matchId, s => {
+    if (!s.agreedPlayers.includes(interaction.user.id)) {
+      s.agreedPlayers.push(interaction.user.id);
+    }
+  });
+  if (!updated) return;
+  const status = updated.gamble_status!;
 
   const bluePlayers = getPlayersByIds(match.blue_team);
   const orangePlayers = getPlayersByIds(match.orange_team);

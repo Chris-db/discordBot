@@ -88,7 +88,18 @@ export function initializeDatabase(): void {
   } catch {
     // Column already exists
   }
-  const newCols = ['text_channel_id', 'queue_channel_id', 'feed_channel_id', 'feed_message_id', 'gamble_status', 'started_at'];
+  const newCols = [
+    'text_channel_id',
+    'queue_channel_id',
+    'feed_channel_id',
+    'feed_message_id',
+    'gamble_status',
+    'started_at',
+    // The ready-check VC belongs to the match, not the queue. It used to live only on the
+    // active_queues row, which cancelMatch deletes before channel cleanup runs — so the VC
+    // was orphaned in Discord every time a match was cancelled during ready check.
+    'ready_check_vc_id',
+  ];
   for (const col of newCols) {
     try {
       db.exec(`ALTER TABLE matches ADD COLUMN ${col} TEXT;`);

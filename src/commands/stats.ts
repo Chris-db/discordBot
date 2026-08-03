@@ -28,6 +28,10 @@ export const statsCommand = {
     ),
 
   async execute(interaction: ChatInputCommandInteraction) {
+    // Canvas rendering plus avatar downloads can exceed Discord's 3s interaction
+    // deadline on a cold avatar cache, which surfaces as "the application did not respond".
+    await interaction.deferReply();
+
     const user = interaction.options.getUser('user') || interaction.user;
     const player = getOrCreatePlayer(user.id, user.username);
     const rankData = getPlayerRank(player.discord_id);
@@ -46,7 +50,7 @@ export const statsCommand = {
     const avatarUrl = user.displayAvatarURL({ size: 256 });
     const embed = buildStatsEmbed(player, rank, totalPlayers, avatarUrl);
     embed.setImage(`attachment://${fileName}`);
-    return interaction.reply({ embeds: [embed], files: [attachment] });
+    return interaction.editReply({ embeds: [embed], files: [attachment] });
   },
 };
 
@@ -56,6 +60,8 @@ export const leaderboardCommand = {
     .setDescription('Display the server ELO Leaderboard'),
 
   async execute(interaction: ChatInputCommandInteraction) {
+    await interaction.deferReply();
+
     const page = 1;
     const totalPlayers = getTotalPlayersCount();
     const topPlayers = getLeaderboard(10, 0);
@@ -75,7 +81,7 @@ export const leaderboardCommand = {
 
     const embed = buildLeaderboardEmbed(topPlayers, page, totalPlayers, topPlayerAvatarUrl, true);
     const buttons = getLeaderboardButtons(page, Math.max(1, Math.ceil(totalPlayers / 10)));
-    return interaction.reply({ embeds: [embed], components: [buttons], files: [attachment] });
+    return interaction.editReply({ embeds: [embed], components: [buttons], files: [attachment] });
   },
 };
 
@@ -126,6 +132,8 @@ export const historyCommand = {
     ),
 
   async execute(interaction: ChatInputCommandInteraction) {
+    await interaction.deferReply();
+
     const targetUser = interaction.options.getUser('user') || undefined;
     const guildId = interaction.guildId!;
     const matches = getMatchHistory(guildId, 10, targetUser?.id);
@@ -134,7 +142,7 @@ export const historyCommand = {
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'history.png' });
     const embed = buildMatchHistoryEmbed(matches, targetUser);
 
-    return interaction.reply({
+    return interaction.editReply({
       embeds: [embed],
       files: [attachment],
     });

@@ -108,10 +108,12 @@ export const matchCommand = {
       const matchId = interaction.options.getInteger('match_id', true);
       const winner = interaction.options.getString('winner', true) as 'BLUE' | 'ORANGE';
 
+      // Completing a match does a lot of Discord I/O (result image, channel sends, VC
+      // teardown) — well past the 3s interaction window.
+      await interaction.deferReply({ ephemeral: true });
       const res = await forceReportMatch(interaction.client, matchId, winner);
-      return interaction.reply({
+      return interaction.editReply({
         content: res.success ? `✅ ${res.message}` : `❌ ${res.message}`,
-        ephemeral: true,
       });
     }
 
@@ -124,10 +126,13 @@ export const matchCommand = {
       }
 
       const matchId = interaction.options.getInteger('match_id', true);
+
+      await interaction.deferReply({ ephemeral: true });
       const res = await cancelMatch(interaction.client, matchId, interaction.user.tag);
-      return interaction.reply({
-        content: res.success ? `✅ ${res.message}` : `❌ ${res.message}`,
-        ephemeral: true,
+      // cancelMatch already posts a public notice in the match channel — keep this one
+      // terse so the admin doesn't see the same thing announced twice.
+      return interaction.editReply({
+        content: res.success ? `✅ Done.` : `❌ ${res.message}`,
       });
     }
 
