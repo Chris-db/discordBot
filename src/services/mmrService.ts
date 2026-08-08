@@ -94,16 +94,62 @@ export function getDivisionTier(division: string): RankTier {
 export function getPromotionStatus(
   guildId: string,
   division: string,
-  mmr: number
-): { label: string; color: string } | null {
+  mmr: number,
+  previousMmr?: number
+): { label: string; emoji: string; color: string } | null {
   const config = getDivision(guildId, division);
   if (!config) return null;
 
+  const wasAbovePromotion =
+    previousMmr !== undefined && config.promote_at !== null && previousMmr >= config.promote_at;
+  const wasBelowRelegation =
+    previousMmr !== undefined &&
+    config.relegate_below !== null &&
+    previousMmr < config.relegate_below;
+
   if (config.promote_at !== null && mmr >= config.promote_at) {
-    return { label: '↑ PROMOTION ZONE', color: '#ffd700' };
+    // Crossing the line this match is the moment worth calling out; sitting above it
+    // already is just a status.
+    return wasAbovePromotion || previousMmr === undefined
+      ? { label: 'PROMOTION ZONE', emoji: '⬆️', color: '#ffd700' }
+      : { label: 'ENTERED PROMO ZONE', emoji: '⬆️', color: '#ffd700' };
   }
   if (config.relegate_below !== null && mmr < config.relegate_below) {
-    return { label: '↓ RELEGATION ZONE', color: '#ff5252' };
+    return wasBelowRelegation || previousMmr === undefined
+      ? { label: 'RELEGATION ZONE', emoji: '⬇️', color: '#ff5252' }
+      : { label: 'ENTERED DROP ZONE', emoji: '⬇️', color: '#ff5252' };
   }
+  return null;
+}
+
+export interface StreakBadge {
+  /** Emoji-free, for @napi-rs/canvas. */
+  label: string;
+  /** For Discord embeds, which render emoji natively. */
+  emoji: string;
+  color: string;
+}
+
+/**
+ * The streak badge for a player, or null when there is nothing worth shouting about.
+ *
+ * `label` and `emoji` are separate because the canvas has no emoji font -- anything
+ * outside the basic ranges draws as a tofu box, so a "🔥 4 WIN STREAK" pill renders as
+ * "▯ 4 WIN STREAK" and reads as a bug. Cards use `label` and lean on `color`; embeds use
+ * both.
+ *
+ * `streak` is positive for wins and negative for losses. Win streaks get progressively
+ * louder from 3; losing runs are deliberately not called out on a card six people can see.
+ */
+export function getStreakBadge(streak: number): StreakBadge | null {
+  if (streak >= 10) return { label: `${streak} WIN STREAK`, emoji: '💀', color: '#ff1744' };
+  if (streak >= 5) return { label: `${streak} WIN STREAK`, emoji: '🔥🔥', color: '#ff6d00' };
+  if (streak >= 3) return { label: `${streak} WIN STREAK`, emoji: '🔥', color: '#ffab00' };
+  return null;
+}
+
+/** Compact, emoji-free form for the queue panel, where there is room for a few characters. */
+export function getStreakChip(streak: number): string | null {
+  if (streak >= 3) return `${streak} STREAK`;
   return null;
 }

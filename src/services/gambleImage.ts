@@ -143,7 +143,12 @@ export async function generateGambleResultImage(
       ctx.fillText(deltaText, startX + cardW - 20, cardY + 36);
 
       // Standing against the division's promotion / relegation line, not a rank change.
-      const zone = getPromotionStatus(item.player.guild_id, item.player.division, item.newMmr);
+      const zone = getPromotionStatus(
+        item.player.guild_id,
+        item.player.division,
+        item.newMmr,
+        item.newMmr - item.delta
+      );
       if (zone) {
         const pillW = 140;
         const pillH = 22;

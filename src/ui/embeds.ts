@@ -1,6 +1,6 @@
 import { EmbedBuilder, User } from 'discord.js';
 import { Player, Match, getPlayersByIds } from '../database/queries';
-import { getDivisionTier } from '../services/mmrService';
+import { getDivisionTier, getStreakBadge } from '../services/mmrService';
 
 export const RL_COLORS = {
   ORANGE: 0xff5722,
@@ -220,21 +220,16 @@ export function buildMatchResultEmbed(
   const winnerTitle = winner === 'BLUE' ? '🔵 TEAM BLUE WINS!' : '🟠 TEAM ORANGE WINS!';
   const color = winner === 'BLUE' ? RL_COLORS.BLUE : RL_COLORS.ORANGE;
 
-  const blueText = blueTeam
-    .map(
-      item =>
-        `• <@${item.player.discord_id}>: \`${item.newMmr} MMR\` (${item.delta >= 0 ? `+${item.delta}` : item.delta
-        })`
-    )
-    .join('\n');
+  const rosterLine = (item: { player: Player; delta: number; newMmr: number }) => {
+    const streak = getStreakBadge(item.player.streak);
+    const delta = item.delta >= 0 ? `+${item.delta}` : `${item.delta}`;
+    return `• <@${item.player.discord_id}>: \`${item.newMmr} MMR\` (${delta})${
+      streak ? ` ${streak.emoji}${item.player.streak}` : ''
+    }`;
+  };
 
-  const orangeText = orangeTeam
-    .map(
-      item =>
-        `• <@${item.player.discord_id}>: \`${item.newMmr} MMR\` (${item.delta >= 0 ? `+${item.delta}` : item.delta
-        })`
-    )
-    .join('\n');
+  const blueText = blueTeam.map(rosterLine).join('\n');
+  const orangeText = orangeTeam.map(rosterLine).join('\n');
 
   const description = durationStr
     ? `**⏱️ Match Duration:** \`${durationStr}\`\nELO ratings and leaderboards have been automatically updated!`
@@ -247,9 +242,22 @@ export function buildMatchResultEmbed(
     .addFields(
       { name: '🔵 TEAM BLUE RESULTS', value: blueText, inline: true },
       { name: '🟠 TEAM ORANGE RESULTS', value: orangeText, inline: true }
-    )
-    .setFooter({ text: 'Good games! Join the queue for another match.' })
-    .setTimestamp();
+    );
+
+  // Call out the standout runs separately -- a 5-win streak deserves more than a suffix.
+  const notableStreaks = [...blueTeam, ...orangeTeam]
+    .filter(item => item.player.streak >= 3)
+    .sort((a, b) => b.player.streak - a.player.streak)
+    .map(item => {
+      const badge = getStreakBadge(item.player.streak)!;
+      return `${badge.emoji} **${badge.label}** — <@${item.player.discord_id}>`;
+    });
+
+  if (notableStreaks.length > 0) {
+    embed.addFields({ name: '🔥 ON A RUN', value: notableStreaks.join('\n'), inline: false });
+  }
+
+  embed.setFooter({ text: 'Good games! Join the queue for another match.' }).setTimestamp();
 
   return embed;
 }

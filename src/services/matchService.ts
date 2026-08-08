@@ -4,6 +4,7 @@ import {
   getMatch,
   updateMatch,
   getMatchByTextChannel,
+  getPlayer,
   getPlayersByIds,
   updatePlayerAfterMatch,
   mutateMatchReportStatus,
@@ -335,18 +336,17 @@ export async function completeMatch(
 
   const { blueDelta, orangeDelta } = calculateMmrDelta(bluePlayers, orangePlayers, winner);
 
-  // Apply MMR adjustments
-  const blueResults = bluePlayers.map(p => {
-    updatePlayerAfterMatch(match.guild_id, p.discord_id, blueDelta, winner === 'BLUE');
-    const updated = p.mmr + blueDelta;
-    return { player: p, delta: blueDelta, newMmr: Math.max(0, updated) };
-  });
+  // Apply MMR, then re-read the row so the card can show the streak the win just produced.
+  // The delta stays the one actually applied -- recomputing it from post-update ratings is
+  // what made the public feed card disagree with reality (P1-8).
+  const applyTo = (p: Player, delta: number, isWin: boolean) => {
+    updatePlayerAfterMatch(match.guild_id, p.discord_id, delta, isWin);
+    const after = getPlayer(match.guild_id, p.discord_id) || p;
+    return { player: after, delta, newMmr: after.mmr, previousStreak: p.streak };
+  };
 
-  const orangeResults = orangePlayers.map(p => {
-    updatePlayerAfterMatch(match.guild_id, p.discord_id, orangeDelta, winner === 'ORANGE');
-    const updated = p.mmr + orangeDelta;
-    return { player: p, delta: orangeDelta, newMmr: Math.max(0, updated) };
-  });
+  const blueResults = bluePlayers.map(p => applyTo(p, blueDelta, winner === 'BLUE'));
+  const orangeResults = orangePlayers.map(p => applyTo(p, orangeDelta, winner === 'ORANGE'));
 
   const completedAt = new Date().toISOString();
   updateMatch(matchId, {

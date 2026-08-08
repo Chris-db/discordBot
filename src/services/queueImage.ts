@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getDivisionTier } from './mmrService';
+import { getDivisionTier, getStreakChip } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
@@ -136,6 +136,22 @@ export async function generateQueuePanelImage(
       ctx.fillStyle = '#00b0ff';
       ctx.fillText(`${player.mmr} MMR`, cardX + 85, cardY + 84);
 
+      // Hot streak, next to the MMR. Someone on a run is worth knowing about before
+      // teams are picked, and streak was previously only visible in /stats.
+      const chip = getStreakChip(player.streak);
+      if (chip) {
+        const mmrWidth = ctx.measureText(`${player.mmr} MMR`).width;
+        const chipX = cardX + 85 + mmrWidth + 8;
+        ctx.font = 'bold 13px sans-serif';
+        const chipW = ctx.measureText(chip).width + 10;
+
+        if (chipX + chipW < cardX + cardW - 8) {
+          ctx.fillStyle = '#ffab00';
+          ctx.fillRect(chipX, cardY + 71, chipW, 18);
+          ctx.fillStyle = '#000000';
+          ctx.fillText(chip, chipX + 5, cardY + 84);
+        }
+      }
     } else {
       // EMPTY SLOT
       ctx.fillStyle = '#0f172a';

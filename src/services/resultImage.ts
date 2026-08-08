@@ -1,13 +1,16 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getDivisionTier, getPromotionStatus } from './mmrService';
+import { getDivisionTier, getPromotionStatus, getStreakBadge } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
 export interface MatchPlayerResult {
+  /** Post-match row, so `streak` is the streak this result just produced. */
   player: Player;
   delta: number;
   newMmr: number;
+  /** Streak before the match, used to tell a new streak from a continuing one. */
+  previousStreak?: number;
 }
 
 /**
@@ -112,15 +115,38 @@ export async function generateMatchResultImage(
       }
       ctx.restore();
 
-      // Username
+      // Username. Shortened when a streak badge needs to sit beside it.
+      const streak = getStreakBadge(item.player.streak);
       ctx.textAlign = 'left';
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 20px sans-serif';
-      const nameStr = item.player.username.length > 13 ? item.player.username.substring(0, 12) + '…' : item.player.username;
+      const maxNameChars = streak ? 9 : 13;
+      const nameStr =
+        item.player.username.length > maxNameChars
+          ? item.player.username.substring(0, maxNameChars - 1) + '…'
+          : item.player.username;
       ctx.fillText(nameStr, startX + 78, cardY + 34);
+
+      // Streak badge, immediately after the name so it reads as part of it.
+      if (streak) {
+        const nameWidth = ctx.measureText(nameStr).width;
+        const badgeX = startX + 78 + nameWidth + 10;
+        ctx.font = 'bold 13px sans-serif';
+        const badgeW = ctx.measureText(streak.label).width + 14;
+
+        // Only draw it if it fits without running under the delta on the right.
+        if (badgeX + badgeW < startX + cardW - 110) {
+          ctx.fillStyle = streak.color;
+          ctx.fillRect(badgeX, cardY + 19, badgeW, 20);
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'left';
+          ctx.fillText(streak.label, badgeX + 7, cardY + 33);
+        }
+      }
 
       // New MMR & Tier Name
       const tier = getDivisionTier(item.player.division);
+      ctx.textAlign = 'left';
       ctx.font = '600 15px sans-serif';
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
@@ -137,7 +163,12 @@ export async function generateMatchResultImage(
       // change at a season reset, so this is a status, not a rank change -- the card
       // used to announce "PROMOTED TO RANK B!" the moment someone crossed 1200, which
       // is no longer something that happens mid-season.
-      const zone = getPromotionStatus(item.player.guild_id, item.player.division, item.newMmr);
+      const zone = getPromotionStatus(
+        item.player.guild_id,
+        item.player.division,
+        item.newMmr,
+        item.newMmr - item.delta
+      );
       if (zone) {
         const pillW = 140;
         const pillH = 22;
