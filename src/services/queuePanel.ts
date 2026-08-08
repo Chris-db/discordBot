@@ -93,7 +93,7 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     const channel = (await client.channels.fetch(channelId)) as TextChannel;
     if (!channel) return;
 
-    const players = getPlayersByIds(queue.player_ids);
+    const players = getPlayersByIds(queue.guild_id, queue.player_ids);
     const imageBuffer = await generateQueuePanelImage(client, players);
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
 
@@ -180,7 +180,7 @@ export async function handleJoinQueue(
   }
 
   // Check if player is already in an active match
-  const activeMatch = getActiveMatchForPlayer(user.id);
+  const activeMatch = getActiveMatchForPlayer(guildId, user.id);
   if (activeMatch) {
     let channelExists = false;
     if (activeMatch.text_channel_id) {
@@ -203,7 +203,7 @@ export async function handleJoinQueue(
   }
 
   // Ensure player exists in DB
-  getOrCreatePlayer(user.id, user.username);
+  getOrCreatePlayer(guildId, user.id, user.username);
 
   // Atomically add player to queue inside a SQLite transaction
   const txResult = db.transaction(() => {
@@ -287,7 +287,13 @@ export async function handleLeaveQueue(
   channelId: string,
   user: User
 ): Promise<{ success: boolean; message: string }> {
-  const activeMatch = getActiveMatchForPlayer(user.id);
+  // The queue row is the only thing here that knows which guild this channel belongs to.
+  const existingQueue = getQueue(channelId);
+  if (!existingQueue) {
+    return { success: false, message: 'No active queue in this channel.' };
+  }
+
+  const activeMatch = getActiveMatchForPlayer(existingQueue.guild_id, user.id);
   if (activeMatch) {
     return {
       success: false,
@@ -377,8 +383,8 @@ export async function fillQueueWithBots(
   for (const bot of testBots) {
     if (queue.player_ids.length >= 6) break;
     if (!queue.player_ids.includes(bot.id)) {
-      getOrCreatePlayer(bot.id, bot.name);
-      setPlayerMmr(bot.id, bot.mmr);
+      getOrCreatePlayer(queue.guild_id, bot.id, bot.name);
+      setPlayerMmr(queue.guild_id, bot.id, bot.mmr);
       queue.player_ids.push(bot.id);
       queue.player_join_times = queue.player_join_times || {};
       queue.player_join_times[bot.id] = Date.now();
@@ -414,7 +420,7 @@ export async function forcePopQueue(
     return { success: false, message: 'Could not fill queue to 6 players.' };
   }
 
-  const players = getPlayersByIds(queue.player_ids);
+  const players = getPlayersByIds(queue.guild_id, queue.player_ids);
 
   if (!mode) {
     await startReadyCheckPhase(client, channelId, guildId, queue);

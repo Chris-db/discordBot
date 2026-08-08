@@ -44,30 +44,30 @@ describe('Database & Schema Tests', () => {
   });
 
   it('creates and retrieves a player', () => {
-    const p1 = getOrCreatePlayer('discord_123', 'RocketPlayer');
+    const p1 = getOrCreatePlayer('g1', 'discord_123', 'RocketPlayer');
     expect(p1.discord_id).toBe('discord_123');
     expect(p1.username).toBe('RocketPlayer');
     expect(p1.mmr).toBe(1000);
 
-    const fetched = getPlayer('discord_123');
+    const fetched = getPlayer('g1', 'discord_123');
     expect(fetched?.username).toBe('RocketPlayer');
   });
 
   it('updates player stats after a match', () => {
-    getOrCreatePlayer('discord_123', 'RocketPlayer');
-    updatePlayerAfterMatch('discord_123', 20, true);
-    const p1 = getPlayer('discord_123')!;
+    getOrCreatePlayer('g1', 'discord_123', 'RocketPlayer');
+    updatePlayerAfterMatch('g1', 'discord_123', 20, true);
+    const p1 = getPlayer('g1', 'discord_123')!;
     expect(p1.mmr).toBe(1020);
     expect(p1.wins).toBe(1);
     expect(p1.streak).toBe(1);
   });
 
   it('orders leaderboard correctly', () => {
-    getOrCreatePlayer('discord_123', 'PlayerOne');
-    getOrCreatePlayer('discord_456', 'TopPlayer');
-    updatePlayerAfterMatch('discord_456', 500, true);
+    getOrCreatePlayer('g1', 'discord_123', 'PlayerOne');
+    getOrCreatePlayer('g1', 'discord_456', 'TopPlayer');
+    updatePlayerAfterMatch('g1', 'discord_456', 500, true);
 
-    const top = getLeaderboard(5);
+    const top = getLeaderboard('g1', undefined, 5);
     expect(top[0].discord_id).toBe('discord_456');
     expect(top[1].discord_id).toBe('discord_123');
   });
@@ -100,11 +100,11 @@ describe('Database & Schema Tests', () => {
   });
 
   it('handles gamble_status and applyGambleResultToPlayer correctly', () => {
-    const p = getOrCreatePlayer('discord_gamble_1', 'GamblePlayer');
+    const p = getOrCreatePlayer('g1', 'discord_gamble_1', 'GamblePlayer');
     expect(p.mmr).toBe(1000);
 
     // Apply +36 MMR from gamble
-    const updatedP = applyGambleResultToPlayer('discord_gamble_1', 36, 1, -1);
+    const updatedP = applyGambleResultToPlayer('g1', 'discord_gamble_1', 36, 1, -1);
     expect(updatedP.mmr).toBe(1036);
     expect(updatedP.wins).toBe(1);
 
@@ -199,17 +199,17 @@ describe('Database & Schema Tests', () => {
   });
 
   it('computes getPlayerRank correctly using SQL COUNT subquery', () => {
-    getOrCreatePlayer('p_mid', 'Mid');
-    getOrCreatePlayer('p_high', 'High');
-    getOrCreatePlayer('p_low', 'Low');
+    getOrCreatePlayer('g1', 'p_mid', 'Mid');
+    getOrCreatePlayer('g1', 'p_high', 'High');
+    getOrCreatePlayer('g1', 'p_low', 'Low');
 
-    updatePlayerAfterMatch('p_high', 200, true);
-    updatePlayerAfterMatch('p_mid', 50, true);
+    updatePlayerAfterMatch('g1', 'p_high', 200, true);
+    updatePlayerAfterMatch('g1', 'p_mid', 50, true);
 
-    expect(getPlayerRank('p_high')?.rank).toBe(1);
-    expect(getPlayerRank('p_mid')?.rank).toBe(2);
-    expect(getPlayerRank('p_low')?.rank).toBe(3);
-    expect(getPlayerRank('p_high')?.total).toBe(3);
+    expect(getPlayerRank('g1', 'p_high')?.rank).toBe(1);
+    expect(getPlayerRank('g1', 'p_mid')?.rank).toBe(2);
+    expect(getPlayerRank('g1', 'p_low')?.rank).toBe(3);
+    expect(getPlayerRank('g1', 'p_high')?.total).toBe(3);
   });
 
   it('isRlCredentialInUse only checks active matches and ignores historical matches', () => {

@@ -33,13 +33,13 @@ describe('Phase 1 regressions', () => {
 
   describe('getPlayersByIds ordering', () => {
     it('returns players in the order they were requested, not in id order', () => {
-      getOrCreatePlayer('aaa', 'Alpha');
-      getOrCreatePlayer('bbb', 'Bravo');
-      getOrCreatePlayer('ccc', 'Charlie');
+      getOrCreatePlayer('g1', 'aaa', 'Alpha');
+      getOrCreatePlayer('g1', 'bbb', 'Bravo');
+      getOrCreatePlayer('g1', 'ccc', 'Charlie');
 
       // SQLite serves `IN` from the discord_id primary-key index, so the raw row order
       // is aaa,bbb,ccc regardless of what we ask for.
-      expect(getPlayersByIds(['ccc', 'aaa', 'bbb']).map(p => p.discord_id)).toEqual([
+      expect(getPlayersByIds('g1', ['ccc', 'aaa', 'bbb']).map(p => p.discord_id)).toEqual([
         'ccc',
         'aaa',
         'bbb',
@@ -48,17 +48,17 @@ describe('Phase 1 regressions', () => {
 
     it('keeps the captain at index 0 so the crown renders on the right player', () => {
       // 'zzz_cap' sorts last by id but is the captain, i.e. index 0 of the team.
-      getOrCreatePlayer('zzz_cap', 'Captain');
-      getOrCreatePlayer('aaa_pick', 'FirstPick');
-      getOrCreatePlayer('mmm_pick', 'SecondPick');
+      getOrCreatePlayer('g1', 'zzz_cap', 'Captain');
+      getOrCreatePlayer('g1', 'aaa_pick', 'FirstPick');
+      getOrCreatePlayer('g1', 'mmm_pick', 'SecondPick');
 
       const blueTeam = ['zzz_cap', 'aaa_pick', 'mmm_pick'];
-      expect(getPlayersByIds(blueTeam)[0].discord_id).toBe('zzz_cap');
+      expect(getPlayersByIds('g1', blueTeam)[0].discord_id).toBe('zzz_cap');
     });
 
     it('drops ids that have no player row rather than returning holes', () => {
-      getOrCreatePlayer('real', 'Real');
-      const result = getPlayersByIds(['real', 'ghost']);
+      getOrCreatePlayer('g1', 'real', 'Real');
+      const result = getPlayersByIds('g1', ['real', 'ghost']);
       expect(result.map(p => p.discord_id)).toEqual(['real']);
     });
   });

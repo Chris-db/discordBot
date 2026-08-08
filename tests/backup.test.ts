@@ -25,8 +25,8 @@ describe('nightly database backup', () => {
   afterAll(clean);
 
   it('writes a backup that is a real, readable database with the data in it', () => {
-    getOrCreatePlayer('p1', 'Chris');
-    updatePlayerAfterMatch('p1', 250, true);
+    getOrCreatePlayer('g1', 'p1', 'Chris');
+    updatePlayerAfterMatch('g1', 'p1', 250, true);
 
     const file = runBackup();
     expect(file).toBeTruthy();

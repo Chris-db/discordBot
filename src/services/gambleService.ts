@@ -74,8 +74,8 @@ export async function proposeGamble(
 
   updateMatchGambleStatus(matchId, newStatus);
 
-  const bluePlayers = getPlayersByIds(match.blue_team);
-  const orangePlayers = getPlayersByIds(match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
     matchId,
@@ -181,8 +181,8 @@ export async function handleGambleAgree(
   if (!updated) return;
   const status = updated.gamble_status!;
 
-  const bluePlayers = getPlayersByIds(match.blue_team);
-  const orangePlayers = getPlayersByIds(match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
   const elapsedSec = Math.floor((Date.now() - (status.proposedAt || Date.now())) / 1000);
   const remSec = Math.max(1, 60 - elapsedSec);
@@ -252,8 +252,8 @@ export async function handleGambleDecline(
   status.declinedBy = interaction.user.id;
   updateMatchGambleStatus(matchId, status);
 
-  const bluePlayers = getPlayersByIds(match.blue_team);
-  const orangePlayers = getPlayersByIds(match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
     matchId,
@@ -318,8 +318,8 @@ async function startWheelOfFate(
   const blueDelta = status.blueDelta ?? 18;
   const orangeDelta = status.orangeDelta ?? -18;
 
-  const bluePlayers = getPlayersByIds(match.blue_team);
-  const orangePlayers = getPlayersByIds(match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
   const blueResults: GamblePlayerResult[] = [];
   const orangeResults: GamblePlayerResult[] = [];
@@ -358,7 +358,7 @@ async function startWheelOfFate(
       }
     }
 
-    const updatedPlayer = applyGambleResultToPlayer(p.discord_id, mmrChange, winChange, lossChange);
+    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, p.discord_id, mmrChange, winChange, lossChange);
     blueResults.push({
       player: updatedPlayer,
       delta: appliedDelta,
@@ -395,7 +395,7 @@ async function startWheelOfFate(
       }
     }
 
-    const updatedPlayer = applyGambleResultToPlayer(p.discord_id, mmrChange, winChange, lossChange);
+    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, p.discord_id, mmrChange, winChange, lossChange);
     orangeResults.push({
       player: updatedPlayer,
       delta: appliedDelta,

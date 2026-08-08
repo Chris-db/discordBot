@@ -148,7 +148,7 @@ export const banCommand = {
         });
       }
 
-      const activeMatch = getActiveMatchForPlayer(user.id);
+      const activeMatch = getActiveMatchForPlayer(guildId, user.id);
       if (activeMatch) {
         embed.addFields({
           name: '⚠️ Currently In A Match',

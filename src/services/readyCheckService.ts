@@ -198,7 +198,7 @@ export async function startReadyCheckPhase(
   const matchTextChannel = (await guild.channels.fetch(textChannelId).catch(() => null)) as TextChannel;
   let readyMsg: Message | undefined;
   if (matchTextChannel) {
-    const players = getPlayersByIds(matchQueue.player_ids);
+    const players = getPlayersByIds(matchQueue.guild_id, matchQueue.player_ids);
     const readyImg = await generateReadyCheckImage(client, players, [], 60);
     const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
 
@@ -254,7 +254,7 @@ export async function startReadyCheckPhase(
     }
 
     if (elapsed % 6 === 0 && readyMsg) {
-      const players = getPlayersByIds(currentQueue.player_ids);
+      const players = getPlayersByIds(currentQueue.guild_id, currentQueue.player_ids);
       const readyIds = Array.from(vc.members.keys());
       const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, 60 - elapsed));
       const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });

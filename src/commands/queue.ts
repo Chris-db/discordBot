@@ -113,7 +113,7 @@ export const queueCommand = {
         });
       }
 
-      const players = getPlayersByIds(queue.player_ids);
+      const players = getPlayersByIds(queue.guild_id, queue.player_ids);
       const mentions = players.map((p: Player, idx: number) => `**${idx + 1}.** <@${p.discord_id}> (\`${p.mmr} MMR\`)`).join('\n');
       return interaction.reply({
         content: `🚀 **Current Queue (${players.length}/6):**\n\n${mentions}`,
@@ -139,7 +139,7 @@ export const queueCommand = {
         });
       }
 
-      getOrCreatePlayer(user.id, user.username);
+      getOrCreatePlayer(guildId, user.id, user.username);
       queue.player_ids.push(user.id);
       queue.player_join_times = queue.player_join_times || {};
       queue.player_join_times[user.id] = Date.now();

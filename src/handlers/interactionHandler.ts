@@ -69,10 +69,12 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
     if (customId === 'queue_stats' || customId === 'leaderboard_my_rank') {
       await interaction.deferReply({ ephemeral: true });
-      const player = getOrCreatePlayer(user.id, user.username);
-      const rankData = getPlayerRank(player.discord_id);
+      const guildId = interaction.guildId!;
+      const player = getOrCreatePlayer(guildId, user.id, user.username);
+      // Rank is a position within the player's own division, not the whole server.
+      const rankData = getPlayerRank(guildId, player.discord_id);
       const rank = rankData ? rankData.rank : 0;
-      const totalPlayers = getTotalPlayersCount();
+      const totalPlayers = getTotalPlayersCount(guildId, player.division);
 
       const imageBuffer = await generatePlayerProfileImage(
         interaction.client,
@@ -99,8 +101,11 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       await interaction.deferReply({ ephemeral: true });
 
       const page = 1;
-      const totalPlayers = getTotalPlayersCount();
-      const topPlayers = getLeaderboard(10, 0);
+      const guildId = interaction.guildId!;
+      // Each division has its own ladder; show the caller theirs.
+      const division = getOrCreatePlayer(guildId, user.id, user.username).division;
+      const totalPlayers = getTotalPlayersCount(guildId, division);
+      const topPlayers = getLeaderboard(guildId, division, 10, 0);
 
       let topPlayerAvatarUrl: string | undefined;
       if (topPlayers.length > 0) {
@@ -146,7 +151,9 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       customId.startsWith('leaderboard_refresh_')
     ) {
       const currentPage = parseInt(customId.split('_').pop() || '1', 10);
-      const totalPlayers = getTotalPlayersCount();
+      const guildId = interaction.guildId!;
+      const division = getOrCreatePlayer(guildId, user.id, user.username).division;
+      const totalPlayers = getTotalPlayersCount(guildId, division);
       const totalPages = Math.max(1, Math.ceil(totalPlayers / 10));
 
       let newPage = currentPage;
@@ -156,8 +163,8 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
         newPage = Math.min(totalPages, currentPage + 1);
       }
 
-      const topPlayers = getLeaderboard(10, (newPage - 1) * 10);
-      const overallTop = getLeaderboard(1, 0);
+      const topPlayers = getLeaderboard(guildId, division, 10, (newPage - 1) * 10);
+      const overallTop = getLeaderboard(guildId, division, 1, 0);
 
       let topPlayerAvatarUrl: string | undefined;
       if (overallTop.length > 0) {

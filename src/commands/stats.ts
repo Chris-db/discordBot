@@ -32,11 +32,13 @@ export const statsCommand = {
     // deadline on a cold avatar cache, which surfaces as "the application did not respond".
     await interaction.deferReply();
 
+    const guildId = interaction.guildId!;
     const user = interaction.options.getUser('user') || interaction.user;
-    const player = getOrCreatePlayer(user.id, user.username);
-    const rankData = getPlayerRank(player.discord_id);
+    const player = getOrCreatePlayer(guildId, user.id, user.username);
+    // Rank is now a position within the player's own division, not the whole server.
+    const rankData = getPlayerRank(guildId, player.discord_id);
     const rank = rankData ? rankData.rank : 0;
-    const totalPlayers = getTotalPlayersCount();
+    const totalPlayers = getTotalPlayersCount(guildId, player.division);
 
     const imageBuffer = await generatePlayerProfileImage(
       interaction.client,
@@ -57,14 +59,33 @@ export const statsCommand = {
 export const leaderboardCommand = {
   data: new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('Display the server ELO Leaderboard'),
+    .setDescription('Display the ELO Leaderboard for a rank division')
+    .addStringOption(opt =>
+      opt
+        .setName('division')
+        .setDescription('Which division to show (defaults to your own)')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Rank C', value: 'C' },
+          { name: 'Rank B', value: 'B' },
+          { name: 'Rank A', value: 'A' },
+          { name: 'Rank X', value: 'X' },
+          { name: 'Rank S', value: 'S' }
+        )
+    ),
 
   async execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 
+    const guildId = interaction.guildId!;
     const page = 1;
-    const totalPlayers = getTotalPlayersCount();
-    const topPlayers = getLeaderboard(10, 0);
+    // Each division has its own ladder, so an unqualified leaderboard would mix
+    // populations that never play each other. Default to the caller's own division.
+    const division =
+      interaction.options.getString('division') ||
+      getOrCreatePlayer(guildId, interaction.user.id, interaction.user.username).division;
+    const totalPlayers = getTotalPlayersCount(guildId, division);
+    const topPlayers = getLeaderboard(guildId, division, 10, 0);
 
     let topPlayerAvatarUrl: string | undefined;
     if (topPlayers.length > 0) {
@@ -114,8 +135,9 @@ export const setMmrCommand = {
     const user = interaction.options.getUser('user', true);
     const newMmr = interaction.options.getInteger('mmr', true);
 
-    getOrCreatePlayer(user.id, user.username);
-    setPlayerMmr(user.id, newMmr);
+    const guildId = interaction.guildId!;
+    getOrCreatePlayer(guildId, user.id, user.username);
+    setPlayerMmr(guildId, user.id, newMmr);
 
     return interaction.reply({
       content: `✅ Updated <@${user.id}>'s rating to \`${newMmr} MMR\`.`,

@@ -421,8 +421,8 @@ export async function broadcastMatchToFeed(client: Client, matchId: number): Pro
     const feedChan = await findFeedChannel(guild);
     if (!feedChan) return;
 
-    const bluePlayers = getPlayersByIds(match.blue_team);
-    const orangePlayers = getPlayersByIds(match.orange_team);
+    const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+    const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
       matchId,
@@ -459,8 +459,8 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
     const msg = await feedChan.messages.fetch(match.feed_message_id).catch(() => null);
     if (!msg) return;
 
-    const bluePlayers = getPlayersByIds(match.blue_team);
-    const orangePlayers = getPlayersByIds(match.orange_team);
+    const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+    const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
       matchId,

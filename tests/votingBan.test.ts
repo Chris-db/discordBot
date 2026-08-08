@@ -229,5 +229,5 @@ describe('P1 regressions', () => {
 });
 
 function playersInDb(ids: string[]) {
-  for (const id of ids) getOrCreatePlayer(id, `User_${id}`);
+  for (const id of ids) getOrCreatePlayer('g1', id, `User_${id}`);
 }

@@ -327,20 +327,20 @@ export async function completeMatch(
   const match = getMatch(matchId);
   if (!match || match.state !== 'IN_PROGRESS') return;
 
-  const bluePlayers = getPlayersByIds(match.blue_team);
-  const orangePlayers = getPlayersByIds(match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
 
   const { blueDelta, orangeDelta } = calculateMmrDelta(bluePlayers, orangePlayers, winner);
 
   // Apply MMR adjustments
   const blueResults = bluePlayers.map(p => {
-    updatePlayerAfterMatch(p.discord_id, blueDelta, winner === 'BLUE');
+    updatePlayerAfterMatch(match.guild_id, p.discord_id, blueDelta, winner === 'BLUE');
     const updated = p.mmr + blueDelta;
     return { player: p, delta: blueDelta, newMmr: Math.max(0, updated) };
   });
 
   const orangeResults = orangePlayers.map(p => {
-    updatePlayerAfterMatch(p.discord_id, orangeDelta, winner === 'ORANGE');
+    updatePlayerAfterMatch(match.guild_id, p.discord_id, orangeDelta, winner === 'ORANGE');
     const updated = p.mmr + orangeDelta;
     return { player: p, delta: orangeDelta, newMmr: Math.max(0, updated) };
   });
@@ -523,8 +523,8 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
     const msg = await channel.messages.fetch(match.message_id).catch(() => null);
     if (!msg) return;
 
-    const blueTeam = getPlayersByIds(match.blue_team);
-    const orangeTeam = getPlayersByIds(match.orange_team);
+    const blueTeam = getPlayersByIds(match.guild_id, match.blue_team);
+    const orangeTeam = getPlayersByIds(match.guild_id, match.orange_team);
 
     const embed = buildActiveMatchEmbed(
       matchId,
