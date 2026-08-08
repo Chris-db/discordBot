@@ -8,6 +8,9 @@ Last updated: 2026-08-08 (multi-queue session)
 
 ## Read first
 
+- `TESTING.md` — the ordered checklist for the first live session, and what should happen
+  at each step. Nothing here has ever run against Discord.
+
 - `AUDIT.md` — the full codebase audit. Still the source of truth for what's wrong.
 - `feature_plan1.md` — **treat as a menu of ideas, not a spec.** It is stale and partly
   contradicts agreed design (see "Where the plan is wrong" below).
