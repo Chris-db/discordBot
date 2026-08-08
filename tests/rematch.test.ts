@@ -5,6 +5,7 @@ import {
   getMatch,
   updateMatch,
   getMatchesBySeries,
+  getSeriesScore,
   getOrInitQueueRow,
   getQueue,
   getOrCreatePlayer,
@@ -43,6 +44,80 @@ function makeCompletedMatch(overrides: Record<string, unknown> = {}) {
   updateMatch(match.match_id, { state: 'COMPLETED', winner: 'BLUE', completed_at: new Date().toISOString() });
   return getMatch(match.match_id)!;
 }
+
+describe('series score', () => {
+  beforeEach(() => {
+    db.exec('DELETE FROM matches;');
+  });
+
+  /** A completed game in a series, with an explicit winner and position. */
+  function seriesGame(seriesId: string, game: number, winner: 'BLUE' | 'ORANGE') {
+    const m = createMatch({
+      guild_id: G,
+      channel_id: 'queue_chan',
+      team_size: 3,
+      blue_team: BLUE,
+      orange_team: ORANGE,
+      series_id: seriesId,
+      series_game: game,
+    });
+    updateMatch(m.match_id, {
+      state: 'COMPLETED',
+      winner,
+      completed_at: new Date().toISOString(),
+    });
+    return m.match_id;
+  }
+
+  it('counts wins per side across the series', () => {
+    seriesGame('s1', 1, 'BLUE');
+    seriesGame('s1', 2, 'ORANGE');
+    seriesGame('s1', 3, 'BLUE');
+
+    expect(getSeriesScore('s1')).toEqual({ blueWins: 2, orangeWins: 1, games: 3 });
+  });
+
+  it('reports the score as it stood after a given game, not the final one', () => {
+    seriesGame('s1', 1, 'BLUE');
+    seriesGame('s1', 2, 'ORANGE');
+    seriesGame('s1', 3, 'BLUE');
+
+    // This is the whole point for /history: game 1's row must not show 2-1.
+    expect(getSeriesScore('s1', 1)).toEqual({ blueWins: 1, orangeWins: 0, games: 1 });
+    expect(getSeriesScore('s1', 2)).toEqual({ blueWins: 1, orangeWins: 1, games: 2 });
+    expect(getSeriesScore('s1', 3)).toEqual({ blueWins: 2, orangeWins: 1, games: 3 });
+  });
+
+  it('ignores games that were cancelled or are still running', () => {
+    seriesGame('s1', 1, 'BLUE');
+    const live = createMatch({
+      guild_id: G,
+      channel_id: 'queue_chan',
+      team_size: 3,
+      blue_team: BLUE,
+      orange_team: ORANGE,
+      series_id: 's1',
+      series_game: 2,
+    });
+    expect(getSeriesScore('s1')).toEqual({ blueWins: 1, orangeWins: 0, games: 1 });
+
+    updateMatch(live.match_id, { state: 'CANCELLED', completed_at: new Date().toISOString() });
+    expect(getSeriesScore('s1')).toEqual({ blueWins: 1, orangeWins: 0, games: 1 });
+  });
+
+  it('does not bleed between series', () => {
+    seriesGame('s1', 1, 'BLUE');
+    seriesGame('s2', 1, 'ORANGE');
+
+    expect(getSeriesScore('s1')).toEqual({ blueWins: 1, orangeWins: 0, games: 1 });
+    expect(getSeriesScore('s2')).toEqual({ blueWins: 0, orangeWins: 1, games: 1 });
+  });
+
+  it('is empty for a series that has not finished a game', () => {
+    expect(getSeriesScore('nonexistent')).toEqual({ blueWins: 0, orangeWins: 0, games: 0 });
+    expect(summariseSeries('nonexistent')).toBe('');
+  });
+});
 
 describe('rematch', () => {
   beforeEach(() => {

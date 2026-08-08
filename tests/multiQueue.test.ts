@@ -28,6 +28,7 @@ import {
   getAllUniqueMatchups,
   getPickOrder,
   totalPicks,
+  matchupCount,
   createBalancedTeams,
   initializeCaptainsDraft,
   processCaptainPick,
@@ -147,6 +148,20 @@ describe('captains draft pick order', () => {
     expect(() =>
       processCaptainPick(draft, draft.orangeCaptain, draft.remainingPlayers[0])
     ).toThrow(/not your turn/);
+  });
+});
+
+describe('matchupCount', () => {
+  it('agrees with the actual enumeration', () => {
+    for (const teamSize of SUPPORTED_TEAM_SIZES) {
+      expect(matchupCount(teamSize)).toBe(getAllUniqueMatchups(roster(teamSize * 2)).length);
+    }
+  });
+
+  it('returns whole numbers, not floats from the division', () => {
+    for (const teamSize of SUPPORTED_TEAM_SIZES) {
+      expect(Number.isInteger(matchupCount(teamSize))).toBe(true);
+    }
   });
 });
 

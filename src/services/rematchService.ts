@@ -5,7 +5,7 @@ import {
   createMatch,
   getPlayersByIds,
   mutateMatchReportStatus,
-  getMatchesBySeries,
+  getSeriesScore,
   getOrInitQueueRow,
   Match,
 } from '../database/queries';
@@ -180,7 +180,8 @@ export async function startRematch(
     rlPass,
     next.blue_voice_id,
     next.orange_voice_id,
-    next.report_status
+    next.report_status,
+    votesRequiredFor([...next.blue_team, ...next.orange_team])
   );
   embed.setImage('attachment://match_vs.png');
 
@@ -210,11 +211,8 @@ export async function startRematch(
 
 /** "Series so far: Blue 2 — 1 Orange" across every completed game with this series id. */
 export function summariseSeries(seriesId: string): string {
-  const games = getMatchesBySeries(seriesId).filter(m => m.state === 'COMPLETED');
-  if (games.length === 0) return '';
-
-  const blueWins = games.filter(m => m.winner === 'BLUE').length;
-  const orangeWins = games.filter(m => m.winner === 'ORANGE').length;
+  const { blueWins, orangeWins, games } = getSeriesScore(seriesId);
+  if (games === 0) return '';
   return `📊 **Series so far:** 🔵 ${blueWins} — ${orangeWins} 🟠`;
 }
 

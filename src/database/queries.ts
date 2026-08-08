@@ -738,7 +738,9 @@ export function createMatch(data: {
   const res = stmt.run(
     data.guild_id,
     data.channel_id,
-    data.team_size,
+    // Coalesced rather than trusted: an undefined here binds as NULL, and a NULL team_size
+    // would silently vanish from every size-filtered query.
+    data.team_size ?? DEFAULT_TEAM_SIZE,
     data.state || 'IN_PROGRESS',
     JSON.stringify(data.blue_team),
     JSON.stringify(data.orange_team),
@@ -768,6 +770,38 @@ export function getMatchesBySeries(seriesId: string): Match[] {
       .prepare('SELECT * FROM matches WHERE series_id = ? ORDER BY series_game ASC')
       .all(seriesId) as any[]
   ).map(parseMatchRow);
+}
+
+export interface SeriesScore {
+  blueWins: number;
+  orangeWins: number;
+  /** Completed games counted. */
+  games: number;
+}
+
+/**
+ * The series score, optionally as it stood after a particular game.
+ *
+ * Blue and Orange are stable within a series -- a rematch copies the rosters across
+ * unchanged -- so counting winners is enough. `uptoGame` is what makes this usable in
+ * history: each row should show the score *at that point*, not the eventual result.
+ */
+export function getSeriesScore(seriesId: string, uptoGame?: number): SeriesScore {
+  const params: unknown[] = [seriesId];
+  let where = "series_id = ? AND state = 'COMPLETED'";
+  if (uptoGame !== undefined) {
+    where += ' AND COALESCE(series_game, 1) <= ?';
+    params.push(uptoGame);
+  }
+
+  const rows = db
+    .prepare(`SELECT winner, COUNT(*) AS n FROM matches WHERE ${where} GROUP BY winner`)
+    .all(...params) as { winner: string; n: number }[];
+
+  const count = (w: string) => rows.find(r => r.winner === w)?.n ?? 0;
+  const blueWins = count('BLUE');
+  const orangeWins = count('ORANGE');
+  return { blueWins, orangeWins, games: rows.reduce((s, r) => s + r.n, 0) };
 }
 
 export function getMatch(matchId: number): Match | undefined {
@@ -831,8 +865,8 @@ export function getMatchHistory(
   const params: unknown[] = [guildId];
 
   if (teamSize !== undefined) {
-    where.push('team_size = ?');
-    params.push(teamSize);
+    where.push('COALESCE(team_size, ?) = ?');
+    params.push(DEFAULT_TEAM_SIZE, teamSize);
   }
   if (discordId) {
     where.push('(blue_team LIKE ? OR orange_team LIKE ?)');

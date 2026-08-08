@@ -1,6 +1,6 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { Client, User } from 'discord.js';
-import { Match, getPlayersByIds } from '../database/queries';
+import { Match, getPlayersByIds, getSeriesScore } from '../database/queries';
 import { RL_COLORS } from '../ui/embeds';
 import { FONT_STACK } from '../utils/fonts';
 
@@ -13,8 +13,21 @@ export async function generateMatchHistoryImage(
   matches: Match[],
   targetUser?: User
 ): Promise<Buffer> {
+  // Four cards of 75 + 12 from y=100 reach y=436, which the footer at y=424 was already
+  // sitting on top of before the series line made the overlap visible.
+  const cardW = 800;
+  const cardH = 75;
+  const cardGap = 12;
+  const startX = 40;
+  const startY = 100;
+  const maxCards = 4;
+
   const width = 880;
-  const height = 440;
+  const shownCards = Math.min(matches.length, maxCards);
+  const height =
+    matches.length === 0
+      ? 440
+      : startY + shownCards * (cardH + cardGap) + 34;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -40,7 +53,7 @@ export async function generateMatchHistoryImage(
 
   ctx.font = `600 14px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText('RECENT COMPLETED 3v3 GAMES • OFFICIAL RECORD', 40, 75);
+  ctx.fillText('RECENT COMPLETED GAMES • OFFICIAL RECORD', 40, 75);
 
   if (matches.length === 0) {
     ctx.textAlign = 'center';
@@ -53,16 +66,11 @@ export async function generateMatchHistoryImage(
   }
 
   // 3. Render up to 4 match cards
-  const cardW = 800;
-  const cardH = 75;
-  const startX = 40;
-  const startY = 100;
-
-  const displayMatches = matches.slice(0, 4);
+  const displayMatches = matches.slice(0, maxCards);
 
   for (let i = 0; i < displayMatches.length; i++) {
     const match = displayMatches[i];
-    const cardY = startY + i * (cardH + 12);
+    const cardY = startY + i * (cardH + cardGap);
 
     const isBlueWin = match.winner === 'BLUE';
     const winColor = isBlueWin ? '#00b0ff' : '#ff9100';
@@ -92,7 +100,7 @@ export async function generateMatchHistoryImage(
       : 'Recent';
     ctx.font = `13px ${FONT_STACK}`;
     ctx.fillStyle = '#64748b';
-    ctx.fillText(dateStr, startX + 25, cardY + 52);
+    ctx.fillText(`${dateStr}  •  ${match.team_size}v${match.team_size}`, startX + 25, cardY + 52);
 
     // Winner pill
     const pillText = isBlueWin ? '🔵 BLUE WON' : '🟠 ORANGE WON';
@@ -111,6 +119,20 @@ export async function generateMatchHistoryImage(
     ctx.font = `bold 12px ${FONT_STACK}`;
     ctx.fillStyle = winColor;
     ctx.fillText(pillText, pillX + pillW / 2, pillY + 17);
+
+    // Series standing as it stood after this game, so a row from the middle of a series
+    // reads correctly rather than showing the eventual result.
+    if (match.series_id) {
+      const { blueWins, orangeWins } = getSeriesScore(match.series_id, match.series_game ?? 1);
+      ctx.textAlign = 'left';
+      ctx.font = `bold 11px ${FONT_STACK}`;
+      ctx.fillStyle = '#a78bfa';
+      ctx.fillText(
+        `GAME ${match.series_game ?? 1}  •  🔵 ${blueWins}–${orangeWins} 🟠`,
+        pillX,
+        cardY + 66
+      );
+    }
 
     // Rosters
     const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);

@@ -286,6 +286,18 @@ export function totalPicks(teamSize: number): number {
 }
 
 /**
+ * How many unique splits a roster of this size has: C(2n-1, n-1).
+ * 3 at 2v2, 10 at 3v3, 35 at 4v4. Used for the "matchup 3/10 seen" counter.
+ */
+export function matchupCount(teamSize: number): number {
+  let result = 1;
+  for (let i = 0; i < teamSize - 1; i++) {
+    result = (result * (2 * teamSize - 1 - i)) / (i + 1);
+  }
+  return Math.round(result);
+}
+
+/**
  * Validates and executes a pick in a captains draft.
  *
  * The turn order comes from getPickOrder rather than a hardcoded ladder, so 2v2, 3v3 and

@@ -1,5 +1,5 @@
 import { EmbedBuilder, User } from 'discord.js';
-import { Player, Match, getPlayersByIds } from '../database/queries';
+import { Player, Match, getPlayersByIds, getSeriesScore } from '../database/queries';
 import { getDivisionTier, getStreakBadge } from '../services/mmrService';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import { formatTeamSize } from './teamSize';
@@ -114,7 +114,8 @@ export function buildCaptainsVoteEmbed(
   blueCaptain: Player,
   orangeCaptain: Player,
   yesCount: number,
-  noCount: number
+  noCount: number,
+  votesRequired: number
 ): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle('👑 CAPTAIN VERIFICATION VOTE')
@@ -126,7 +127,9 @@ export function buildCaptainsVoteEmbed(
       `✅ **Yes, Proceed:** \`${yesCount} votes\`\n` +
       `🔄 **No, Randomize:** \`${noCount} votes\``
     )
-    .setFooter({ text: '4 votes required to proceed or randomize • Voting closes in 30s' })
+    .setFooter({
+      text: `${votesRequired} votes required to proceed or randomize • Voting closes in 30s`,
+    })
     .setTimestamp();
 }
 
@@ -139,7 +142,9 @@ export function buildTeamsVoteEmbed(
   yesCount: number,
   noCount: number,
   seenCount: number = 1,
-  mode: 'random' | 'balanced' = 'random'
+  mode: 'random' | 'balanced' = 'random',
+  votesRequired: number = 4,
+  totalMatchups: number = 10
 ): EmbedBuilder {
   const isBalanced = mode === 'balanced';
   const rerollLabel = isBalanced ? 'No, Next Split' : 'No, Randomize';
@@ -156,11 +161,13 @@ export function buildTeamsVoteEmbed(
       `${isBalanced ? 'next-closest balanced split' : 'next random matchup'}:\n\n` +
       `🔵 **Team Blue** (avg ${blueMmr}): ${blueTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n` +
       `🟠 **Team Orange** (avg ${orangeMmr}): ${orangeTeam.map(p => `<@${p.discord_id}>`).join(', ')}\n\n` +
-      `🎲 **Matchup ${seenCount}/10 seen** (No duplicate team pairings)\n\n` +
+      `🎲 **Matchup ${seenCount}/${totalMatchups} seen** (No duplicate team pairings)\n\n` +
       `✅ **Yes, Proceed:** \`${yesCount} votes\`\n` +
       `🔄 **${rerollLabel}:** \`${noCount} votes\``
     )
-    .setFooter({ text: '4 votes required to proceed or re-roll • Voting closes in 30s' })
+    .setFooter({
+      text: `${votesRequired} votes required to proceed or re-roll • Voting closes in 30s`,
+    })
     .setTimestamp();
 }
 
@@ -179,13 +186,15 @@ export function buildActiveMatchEmbed(
     blueVotes?: string[];
     orangeVotes?: string[];
     cancelVotes?: string[];
-  }
+  },
+  votesRequired: number = 4
 ): EmbedBuilder {
+  const teamSize = blueTeam.length || DEFAULT_TEAM_SIZE;
   const embed = new EmbedBuilder()
     .setTitle(`🎮 MATCH #${matchId} — PRIVATE LOBBY`)
     .setColor(0x00b0ff)
     .setDescription(
-      `Welcome to your private 3v3 match! Join your team's voice room and use the Rocket League credentials below to enter the lobby.`
+      `Welcome to your private ${formatTeamSize(teamSize)} match! Join your team's voice room and use the Rocket League credentials below to enter the lobby.`
     )
     .addFields({
       name: '🔐 LOBBY CREDENTIALS',
@@ -204,7 +213,7 @@ export function buildActiveMatchEmbed(
   if (hasVotes) {
     embed.addFields({
       name: '📋 REPORT STATUS',
-      value: `\`Blue Win: ${reportStatus.blueVotes?.length || 0}/4  |  Orange Win: ${reportStatus.orangeVotes?.length || 0}/4  |  Cancel: ${reportStatus.cancelVotes?.length || 0}/4\``,
+      value: `\`Blue Win: ${reportStatus.blueVotes?.length || 0}/${votesRequired}  |  Orange Win: ${reportStatus.orangeVotes?.length || 0}/${votesRequired}  |  Cancel: ${reportStatus.cancelVotes?.length || 0}/${votesRequired}\``,
       inline: false,
     });
   }
@@ -456,7 +465,7 @@ export function buildMatchHistoryEmbed(matches: Match[], targetUser?: User): Emb
     .setDescription(
       matches.length === 0
         ? 'No completed matches found in history yet!'
-        : 'Below are the most recently completed 3v3 matches:\n'
+        : 'Below are the most recently completed matches:\n'
     )
     .setFooter({ text: 'Rocket League 6mans • Match History System' })
     .setTimestamp();
@@ -477,9 +486,19 @@ export function buildMatchHistoryEmbed(matches: Match[], targetUser?: User): Emb
           })
         : 'Recent';
 
+      // A rematch series is one row per game, so each row says where the series stood
+      // after it -- otherwise three near-identical rows are indistinguishable.
+      let seriesLine = '';
+      if (m.series_id) {
+        const { blueWins, orangeWins } = getSeriesScore(m.series_id, m.series_game ?? 1);
+        seriesLine = `\n**🔁 Series game ${m.series_game ?? 1}:** 🔵 ${blueWins} — ${orangeWins} 🟠`;
+      }
+
       embed.addFields({
-        name: `🎮 Match #${m.match_id}  •  ${winnerBadge}  (${dateStr})`,
-        value: `**🔵 Blue:** ${blueMentions || 'N/A'}\n**🟠 Orange:** ${orangeMentions || 'N/A'}`,
+        name: `🎮 Match #${m.match_id}  •  ${formatTeamSize(m.team_size)}  •  ${winnerBadge}  (${dateStr})`,
+        value:
+          `**🔵 Blue:** ${blueMentions || 'N/A'}\n**🟠 Orange:** ${orangeMentions || 'N/A'}` +
+          seriesLine,
         inline: false,
       });
     }

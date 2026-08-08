@@ -110,7 +110,8 @@ export async function startNewMatch(
       rlPass,
       blueVoiceId || updated.blue_voice_id,
       orangeVoiceId || updated.orange_voice_id,
-      updated.report_status
+      updated.report_status,
+      votesRequiredFor([...updated.blue_team, ...updated.orange_team])
     );
     embed.setImage('attachment://match_vs.png');
 
@@ -195,7 +196,8 @@ export async function startNewMatch(
     rlPass,
     blueVoiceId,
     orangeVoiceId,
-    match.report_status
+    match.report_status,
+    votesRequiredFor([...match.blue_team, ...match.orange_team])
   );
   embed.setImage('attachment://match_vs.png');
 
@@ -561,7 +563,8 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
       match.rl_pass,
       match.blue_voice_id,
       match.orange_voice_id,
-      match.report_status
+      match.report_status,
+      votesRequiredFor([...match.blue_team, ...match.orange_team])
     );
 
     // The original message carries match_vs.png. Editing with an embed that doesn't

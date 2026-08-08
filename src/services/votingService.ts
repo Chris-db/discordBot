@@ -36,7 +36,7 @@ import {
   processCaptainPick,
 } from './draftService';
 import { votesRequiredFor } from './gameRules';
-import { totalPicks } from './draftService';
+import { totalPicks, matchupCount } from './draftService';
 import { startNewMatch } from './matchService';
 import { generateCaptainsDraftImage } from './draftImage';
 import { generateModeVoteImage } from './voteImage';
@@ -356,7 +356,7 @@ export async function startCaptainsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, 0, 0);
+  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, 0, 0, votesRequiredFor(queue.player_ids));
   const buttons = getCaptainsVoteButtons({ yes: 0, no: 0 });
 
   let sentMsg: Message;
@@ -451,7 +451,7 @@ export async function handleCaptainsVote(
   const blueCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.blueCaptain])[0];
   const orangeCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.orangeCaptain])[0];
 
-  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, yesCount, noCount);
+  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, yesCount, noCount, votesRequiredFor(queue.player_ids));
   const buttons = getCaptainsVoteButtons({ yes: yesCount, no: noCount });
 
   await message.edit({
@@ -561,7 +561,7 @@ export async function startTeamsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, 0, 0, newSeen.length, mode);
+  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, 0, 0, newSeen.length, mode, votesRequiredFor(queue.player_ids), matchupCount(queue.team_size));
   const buttons = getTeamsVoteButtons({ yes: 0, no: 0 }, mode);
 
   let sentMsg: Message;
@@ -658,7 +658,7 @@ export async function handleTeamsVote(
   const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
 
   const mode = queue.team_vote_state.mode || 'random';
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount, mode);
+  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount, mode, votesRequiredFor(queue.player_ids), matchupCount(queue.team_size));
   const buttons = getTeamsVoteButtons({ yes: yesCount, no: noCount }, mode);
 
   await message.edit({
