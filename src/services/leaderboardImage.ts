@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
@@ -72,7 +72,7 @@ export async function generateLeaderboardImage(
     const player = players[idx];
     const overallRank = (page - 1) * 10 + idx + 1;
     const y = headerHeight + idx * rowHeight;
-    const tier = getRankTier(player.mmr);
+    const tier = getDivisionTier(player.division);
 
     // Alternating row background
     if (idx % 2 === 1) {

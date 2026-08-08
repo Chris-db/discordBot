@@ -1,6 +1,6 @@
 import { EmbedBuilder, User } from 'discord.js';
 import { Player, Match, getPlayersByIds } from '../database/queries';
-import { getRankTier } from '../services/mmrService';
+import { getDivisionTier } from '../services/mmrService';
 
 export const RL_COLORS = {
   ORANGE: 0xff5722,
@@ -388,7 +388,7 @@ export function buildMyRankEmbed(
   totalPlayers: number,
   avatarUrl?: string
 ): EmbedBuilder {
-  const tier = getRankTier(player.mmr);
+  const tier = getDivisionTier(player.division);
   const totalGames = player.wins + player.losses;
   const winRate = totalGames > 0 ? ((player.wins / totalGames) * 100).toFixed(1) : '0.0';
   const streakBadge =

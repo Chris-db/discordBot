@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier, getPromotionStatus } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
 export interface MatchPlayerResult {
@@ -120,7 +120,7 @@ export async function generateMatchResultImage(
       ctx.fillText(nameStr, startX + 78, cardY + 34);
 
       // New MMR & Tier Name
-      const tier = getRankTier(item.newMmr);
+      const tier = getDivisionTier(item.player.division);
       ctx.font = '600 15px sans-serif';
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
@@ -133,23 +133,24 @@ export async function generateMatchResultImage(
       ctx.fillStyle = deltaColor;
       ctx.fillText(deltaText, startX + cardW - 20, cardY + 36);
 
-      // Check for Rank Promotion!
-      const oldMmr = item.newMmr - item.delta;
-      const oldTier = getRankTier(oldMmr);
-      if (tier.name !== oldTier.name && item.delta > 0) {
-        // PROMOTION PILL!
+      // Standing against the division's promotion / relegation line. Divisions only
+      // change at a season reset, so this is a status, not a rank change -- the card
+      // used to announce "PROMOTED TO RANK B!" the moment someone crossed 1200, which
+      // is no longer something that happens mid-season.
+      const zone = getPromotionStatus(item.player.guild_id, item.player.division, item.newMmr);
+      if (zone) {
         const pillW = 140;
         const pillH = 22;
         const pillX = startX + cardW - 20 - pillW;
         const pillY = cardY + 46;
 
-        ctx.fillStyle = '#ffd700';
+        ctx.fillStyle = zone.color;
         ctx.fillRect(pillX, pillY, pillW, pillH);
 
         ctx.textAlign = 'center';
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#000000';
-        ctx.fillText(`👑 PROMOTED TO ${tier.name.toUpperCase()}!`, pillX + pillW / 2, pillY + 15);
+        ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
       }
     }
   };

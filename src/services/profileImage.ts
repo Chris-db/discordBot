@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player, getAverageMatchDuration } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
@@ -27,7 +27,7 @@ export async function generatePlayerProfileImage(
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  const tier = getRankTier(player.mmr);
+  const tier = getDivisionTier(player.division);
 
   // Top accent colored bar
   ctx.fillStyle = tier.color;

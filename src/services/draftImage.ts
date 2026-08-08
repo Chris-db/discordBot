@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
 /**
@@ -96,7 +96,7 @@ export async function generateCaptainsDraftImage(
 
     ctx.font = '600 13px sans-serif';
     ctx.fillStyle = '#94a3b8';
-    const tier = getRankTier(player.mmr);
+    const tier = getDivisionTier(player.division);
     ctx.fillText(`${player.mmr} MMR (${tier.name})`, x + 60, y + 46);
 
     if (label) {

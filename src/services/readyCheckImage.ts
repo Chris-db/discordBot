@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
 /**

@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMmrDelta, getRankTier } from '../src/services/mmrService';
+import { calculateMmrDelta, getDivisionTier } from '../src/services/mmrService';
 import { Player } from '../src/database/queries';
 
 const makePlayer = (id: string, mmr: number): Player => ({
+  guild_id: 'g1',
   discord_id: id,
   username: `Player_${id}`,
+  division: 'C',
   mmr,
   wins: 10,
   losses: 5,
   streak: 2,
+  placed: 1,
   created_at: new Date().toISOString(),
 });
 
@@ -33,11 +36,19 @@ describe('MMR Service', () => {
     expect(resUnderdogWin.orangeDelta).toBeLessThan(-20);
   });
 
-  it('assigns correct rank tiers and emojis', () => {
-    expect(getRankTier(1850).name).toBe('Rank S');
-    expect(getRankTier(1650).name).toBe('Rank X');
-    expect(getRankTier(1450).name).toBe('Rank A');
-    expect(getRankTier(1250).name).toBe('Rank B');
-    expect(getRankTier(1050).name).toBe('Rank C');
+  it('badges a player by their stored division, not their MMR', () => {
+    // Rank is stored state now. A player sitting on 1850 MMR in Rank C is still Rank C
+    // until a season reset promotes them -- deriving the badge from MMR would show a
+    // rank they are not actually queuing in.
+    expect(getDivisionTier('S').name).toBe('Rank S');
+    expect(getDivisionTier('X').name).toBe('Rank X');
+    expect(getDivisionTier('A').name).toBe('Rank A');
+    expect(getDivisionTier('B').name).toBe('Rank B');
+    expect(getDivisionTier('C').name).toBe('Rank C');
+  });
+
+  it('falls back to the lowest division for an unknown code', () => {
+    expect(getDivisionTier('').name).toBe('Rank C');
+    expect(getDivisionTier('nonsense').name).toBe('Rank C');
   });
 });

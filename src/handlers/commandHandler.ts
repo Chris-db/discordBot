@@ -8,6 +8,8 @@ import { matchCommand } from '../commands/match';
 import { statsCommand, leaderboardCommand, setMmrCommand, historyCommand } from '../commands/stats';
 import { helpCommand } from '../commands/help';
 import { banCommand } from '../commands/ban';
+import { seasonCommand } from '../commands/season';
+import { divisionCommand } from '../commands/division';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -20,6 +22,8 @@ export const commands = [
   historyCommand,
   helpCommand,
   banCommand,
+  seasonCommand,
+  divisionCommand,
 ];
 
 /**

@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from './mmrService';
+import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 
@@ -70,7 +70,7 @@ export async function generateQueuePanelImage(
 
     if (player) {
       // OCCUPIED SLOT
-      const tier = getRankTier(player.mmr);
+      const tier = getDivisionTier(player.division);
 
       // Card Background
       ctx.fillStyle = '#1e293b';

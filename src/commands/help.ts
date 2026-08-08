@@ -31,10 +31,14 @@ export const helpCommand = {
           name: '💬 PLAYER COMMANDS',
           value:
             '`/queue status` — Check who is waiting in the queue\n' +
-            '`/stats [user]` — View ELO rating, rank tier, wins, losses, and win rate\n' +
-            '`/leaderboard` — View the top players on the server\n' +
+            '`/stats [user]` — View ELO rating, division, wins, losses, and win rate\n' +
+            '`/leaderboard [division]` — Top players in a division (defaults to yours)\n' +
             '`/history [user]` — View completed 6mans match history\n' +
-            '`/match list` — View all active matches',
+            '`/match list` — View all active matches\n' +
+            '`/division list` — See every division and its promotion thresholds\n' +
+            '`/division check [user]` — See a player\'s division and season standing\n' +
+            '`/season info` — Current season, matches played, division sizes\n' +
+            '`/season history` — Past seasons and their champions',
           inline: false,
         },
         {
@@ -53,7 +57,10 @@ export const helpCommand = {
             '`/ban add <user> <duration> [reason]` — Ban a player from queuing\n' +
             '`/ban remove <user>` — Remove an active queue ban\n' +
             '`/ban check <user>` — Check ban status for a player\n' +
-            '`/ban list` — List all active queue bans',
+            '`/ban list` — List all active queue bans\n' +
+            '`/division place <user> <division>` — Place a player into a division\n' +
+            '`/division configure <division>` — Set a division\'s channel, role or thresholds\n' +
+            '`/season end <confirm>` — End the season: promote, relegate, reset MMR',
           inline: false,
         },
         {
@@ -65,14 +72,17 @@ export const helpCommand = {
           inline: false,
         },
         {
-          name: '🏆 ELO RANK TIERS',
+          name: '🏆 RANK DIVISIONS',
           value:
-            '🚀 **Supersonic Legend**: 1600+ MMR\n' +
-            '🔴 **Grand Champion**: 1400 - 1599 MMR\n' +
-            '🟣 **Champion**: 1200 - 1399 MMR\n' +
-            '🔵 **Diamond**: 1000 - 1199 MMR\n' +
-            '⚪ **Platinum**: 800 - 999 MMR\n' +
-            '🟡 **Gold & Below**: < 800 MMR',
+            'You are **placed** into a division by an admin, and you stay there for the ' +
+            'whole season — MMR moves your position inside your division, not between them. ' +
+            'At a season reset you promote or relegate based on where you finished.\n\n' +
+            '👑 **Rank S** — starts at 1900 MMR\n' +
+            '⚔️ **Rank X** — starts at 1700, relegates below 1600\n' +
+            '🟣 **Rank A** — starts at 1500, promotes at 1600, relegates below 1400\n' +
+            '🔵 **Rank B** — starts at 1300, promotes at 1400, relegates below 1200\n' +
+            '🟢 **Rank C** — starts at 1000, promotes at 1200\n\n' +
+            '*Defaults — admins can retune them per division with `/division configure`.*',
           inline: false,
         }
       )

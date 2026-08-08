@@ -4,7 +4,7 @@ import {
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import { Player } from '../database/queries';
-import { getRankTier } from '../services/mmrService';
+import { getDivisionTier } from '../services/mmrService';
 
 /**
  * Builds a Discord Select Menu for Captains to draft a teammate from the remaining player pool.
@@ -21,7 +21,7 @@ export function getCaptainsDraftSelectMenu(
     .setPlaceholder(`${teamLabel}: Choose a teammate (Pick #${pickNumber} of 3)...`)
     .addOptions(
       remainingPlayers.map(player => {
-        const tier = getRankTier(player.mmr);
+        const tier = getDivisionTier(player.division);
         return new StringSelectMenuOptionBuilder()
           .setLabel(`${player.username} (${player.mmr} MMR)`)
           .setDescription(`Rank: ${tier.name} • W/L: ${player.wins}-${player.losses}`)
