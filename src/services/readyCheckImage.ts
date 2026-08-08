@@ -25,10 +25,20 @@ export async function generateReadyCheckImage(
   const margin = 40;
   const capacity = teamSize * 2;
 
-  const width = margin * 2 + teamSize * cardW + (teamSize - 1) * gap;
+  // The status line is centred and long ("ALL 4 PLAYERS MUST JOIN VOICE — TIME
+  // REMAINING: 42s"), so at 2v2 it is wider than the grid and has to set the canvas.
+  const statusMsg = `⏳ ALL ${capacity} PLAYERS MUST JOIN VOICE — TIME REMAINING: ${remainingSeconds}s`;
+  const measure = createCanvas(10, 10).getContext('2d');
+  measure.font = `bold 16px ${FONT_STACK}`;
+  const statusW = measure.measureText(statusMsg).width;
+
+  const gridW = teamSize * cardW + (teamSize - 1) * gap;
+  const width = margin * 2 + Math.max(gridW, statusW);
   const height = 320;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
+
+  const gridLeft = Math.round((width - gridW) / 2);
 
   // 1. Background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -50,10 +60,11 @@ export async function generateReadyCheckImage(
 
   ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = allReady ? '#00e676' : '#ff9100';
-  const statusMsg = allReady
-    ? '✅ ALL PLAYERS READY! LAUNCHING MODE VOTING...'
-    : `⏳ ALL ${capacity} PLAYERS MUST JOIN VOICE — TIME REMAINING: ${remainingSeconds}s`;
-  ctx.fillText(statusMsg, width / 2, 72);
+  ctx.fillText(
+    allReady ? '✅ ALL PLAYERS READY! LAUNCHING MODE VOTING...' : statusMsg,
+    width / 2,
+    72
+  );
 
   // 3. Player grid, teamSize per row, two rows
   const rows = [95, 205];
@@ -62,7 +73,7 @@ export async function generateReadyCheckImage(
     const p = players[i];
     const colIdx = i % teamSize;
     const rowIdx = Math.floor(i / teamSize);
-    const x = margin + colIdx * (cardW + gap);
+    const x = gridLeft + colIdx * (cardW + gap);
     const y = rows[rowIdx];
 
     if (!p) continue;

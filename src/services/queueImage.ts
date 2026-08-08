@@ -27,10 +27,30 @@ export async function generateQueuePanelImage(
   const margin = 40;
   const capacity = teamSize * 2;
 
-  const width = margin * 2 + teamSize * cardW + (teamSize - 1) * gap;
+  const isFull = players.length === capacity;
+  const title = `🚀 ${teamSize}V${teamSize} MATCH QUEUE`;
+  const badgeText = isFull
+    ? `QUEUE FULL  •  ${capacity} / ${capacity} READY!`
+    : `WAITING FOR PLAYERS  •  ${players.length} / ${capacity}`;
+
+  // Measure the header before sizing the canvas: at 2v2 the grid alone is only 620px,
+  // which is narrower than the title and status badge sitting side by side -- they used
+  // to overlap.
+  const measure = createCanvas(10, 10).getContext('2d');
+  measure.font = `bold 26px ${FONT_STACK}`;
+  const titleW = measure.measureText(title).width;
+  measure.font = `bold 14px ${FONT_STACK}`;
+  const badgeW = measure.measureText(badgeText).width + 32;
+
+  const gridW = teamSize * cardW + (teamSize - 1) * gap;
+  const headerW = titleW + 24 + badgeW;
+  const width = margin * 2 + Math.max(gridW, headerW);
   const height = 380;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
+
+  // Centre the grid when the header is what forced the canvas wider.
+  const gridLeft = Math.round((width - gridW) / 2);
 
   // 1. Dark background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -40,7 +60,6 @@ export async function generateQueuePanelImage(
   ctx.fillRect(0, 0, width, height);
 
   // Top accent line (cyan or emerald when full)
-  const isFull = players.length === capacity;
   ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
   ctx.fillRect(0, 0, width, 5);
 
@@ -48,13 +67,10 @@ export async function generateQueuePanelImage(
   ctx.textAlign = 'left';
   ctx.fillStyle = '#f8fafc';
   ctx.font = `bold 26px ${FONT_STACK}`;
-  ctx.fillText(`🚀 ${teamSize}V${teamSize} MATCH QUEUE`, 40, 50);
+  ctx.fillText(title, 40, 50);
 
   // Status Badge on the right
-  const badgeText = isFull
-    ? `QUEUE FULL  •  ${capacity} / ${capacity} READY!`
-    : `WAITING FOR PLAYERS  •  ${players.length} / ${capacity}`;
-  const badgeWidth = isFull ? 240 : 260;
+  const badgeWidth = badgeW;
   const badgeX = width - 40 - badgeWidth;
   const badgeY = 25;
   const badgeH = 34;
@@ -76,7 +92,7 @@ export async function generateQueuePanelImage(
   for (let i = 0; i < capacity; i++) {
     const colIdx = i % teamSize;
     const rowIdx = Math.floor(i / teamSize);
-    const cardX = margin + colIdx * (cardW + gap);
+    const cardX = gridLeft + colIdx * (cardW + gap);
     const cardY = rows[rowIdx];
     const player = players[i];
 
