@@ -7,15 +7,27 @@ import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
 
 /**
- * Generates an 840x380 6-Slot Lobby Queue Panel Canvas Graphic.
- * Displays occupied slots with player avatars, names, and ratings,
- * and empty slots with "WAITING FOR PLAYER".
+ * Generates the Lobby Queue Panel graphic: teamSize columns by 2 rows.
+ *
+ * The grid is one column per player-per-team, so 2v2 is 2x2, 3v3 is 3x2 and 4v4 is 4x2.
+ * At teamSize 3 the arithmetic lands on exactly 840px, which is what the panel has always
+ * been -- the 3v3 card is unchanged by multi-queue.
+ *
+ * Displays occupied slots with player avatars, names, and ratings, and empty slots with
+ * "WAITING FOR PLAYER".
  */
 export async function generateQueuePanelImage(
   client: Client,
-  players: Player[]
+  players: Player[],
+  teamSize: number
 ): Promise<Buffer> {
-  const width = 840;
+  const cardW = 240;
+  const cardH = 115;
+  const gap = 20;
+  const margin = 40;
+  const capacity = teamSize * 2;
+
+  const width = margin * 2 + teamSize * cardW + (teamSize - 1) * gap;
   const height = 380;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -28,7 +40,7 @@ export async function generateQueuePanelImage(
   ctx.fillRect(0, 0, width, height);
 
   // Top accent line (cyan or emerald when full)
-  const isFull = players.length === 6;
+  const isFull = players.length === capacity;
   ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
   ctx.fillRect(0, 0, width, 5);
 
@@ -36,10 +48,12 @@ export async function generateQueuePanelImage(
   ctx.textAlign = 'left';
   ctx.fillStyle = '#f8fafc';
   ctx.font = `bold 26px ${FONT_STACK}`;
-  ctx.fillText('🚀 6MANS MATCH QUEUE', 40, 50);
+  ctx.fillText(`🚀 ${teamSize}V${teamSize} MATCH QUEUE`, 40, 50);
 
   // Status Badge on the right
-  const badgeText = isFull ? 'QUEUE FULL  •  6 / 6 READY!' : `WAITING FOR PLAYERS  •  ${players.length} / 6`;
+  const badgeText = isFull
+    ? `QUEUE FULL  •  ${capacity} / ${capacity} READY!`
+    : `WAITING FOR PLAYERS  •  ${players.length} / ${capacity}`;
   const badgeWidth = isFull ? 240 : 260;
   const badgeX = width - 40 - badgeWidth;
   const badgeY = 25;
@@ -56,16 +70,13 @@ export async function generateQueuePanelImage(
   ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
   ctx.fillText(badgeText, badgeX + badgeWidth / 2, badgeY + 22);
 
-  // 3. 6 Player Slot Cards (2x3 Grid)
-  const cardW = 240;
-  const cardH = 115;
-  const cols = [40, 300, 560];
+  // 3. Player slot cards, teamSize per row, two rows
   const rows = [85, 225];
 
-  for (let i = 0; i < 6; i++) {
-    const colIdx = i % 3;
-    const rowIdx = Math.floor(i / 3);
-    const cardX = cols[colIdx];
+  for (let i = 0; i < capacity; i++) {
+    const colIdx = i % teamSize;
+    const rowIdx = Math.floor(i / teamSize);
+    const cardX = margin + colIdx * (cardW + gap);
     const cardY = rows[rowIdx];
     const player = players[i];
 

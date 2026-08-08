@@ -15,8 +15,11 @@ export async function generateMatchVsImage(
   blueTeam: Player[],
   orangeTeam: Player[]
 ): Promise<Buffer> {
+  // Rows start at y=100 with an 80px pitch, so the canvas grows with the roster: at 4v4
+  // the fourth row would otherwise run off the old fixed 400px.
+  const rosterRows = Math.max(blueTeam.length, orangeTeam.length);
   const width = 960;
-  const height = 400;
+  const height = Math.max(400, 100 + rosterRows * 80 + 36);
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -81,7 +84,7 @@ export async function generateMatchVsImage(
   ctx.fillStyle = '#94a3b8';
   ctx.fillText(`AVG: ${orangeAvg} MMR`, width - 50, 68);
 
-  // 4. Fetch avatars for all 6 players
+  // 4. Fetch avatars for every player in the lobby
   const fetchAvatar = async (p: Player) => {
     return await getCachedAvatarImage(client, p.discord_id, 128);
   };

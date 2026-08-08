@@ -12,15 +12,20 @@ import {
   fillQueueWithBots,
   forcePopQueue,
 } from '../services/queueService';
+import { resolveTeamSize } from '../services/queuePanel';
 import {
   getQueue,
   saveQueue,
   getPlayersByIds,
   getOrCreatePlayer,
+  getDivisionByChannel,
+  getLowestDivision,
+  updateDivision,
   Player,
 } from '../database/queries';
 import { buildQueuePanelEmbed } from '../ui/embeds';
 import { getQueuePanelButtons } from '../ui/buttons';
+import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { autoDeleteReply } from '../utils/autoDelete';
 
 export const queueCommand = {
@@ -31,6 +36,26 @@ export const queueCommand = {
       sub
         .setName('panel')
         .setDescription('Deploy an interactive Queue Panel in this channel (Admin/Mod)')
+        .addIntegerOption(opt =>
+          opt
+            .setName('size')
+            .setDescription('Team size this channel queues at (defaults to its current setting, or 3v3)')
+            .setRequired(false)
+            .addChoices(...TEAM_SIZE_CHOICES)
+        )
+        .addStringOption(opt =>
+          opt
+            .setName('division')
+            .setDescription('Division ladder this channel feeds (defaults to the lowest)')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Rank C', value: 'C' },
+              { name: 'Rank B', value: 'B' },
+              { name: 'Rank A', value: 'A' },
+              { name: 'Rank X', value: 'X' },
+              { name: 'Rank S', value: 'S' }
+            )
+        )
     )
     .addSubcommand(sub =>
       sub
@@ -98,10 +123,54 @@ export const queueCommand = {
 
       await interaction.deferReply({ ephemeral: true });
 
+      const requestedSize = interaction.options.getInteger('size');
+      const requestedDivision = interaction.options.getString('division');
+
+      // Registering the channel is what sets its size: the division row that owns a
+      // channel is the single source of truth for "how big is this queue".
+      if (requestedSize || requestedDivision) {
+        const size = requestedSize ?? resolveTeamSize(guildId, channelId);
+        const division =
+          requestedDivision ||
+          getDivisionByChannel(guildId, channelId)?.division ||
+          getLowestDivision(guildId, size)?.division;
+
+        if (!division) {
+          return interaction.editReply({
+            content: `❌ No divisions are configured for ${formatTeamSize(size)} on this server.`,
+          });
+        }
+
+        const existing = getQueue(channelId);
+        if (existing && existing.team_size !== size) {
+          if (existing.state !== 'WAITING') {
+            return interaction.editReply({
+              content: '❌ This queue has already popped — wait for it to finish before changing its size.',
+            });
+          }
+          if (existing.player_ids.length > 0) {
+            return interaction.editReply({
+              content: `❌ ${existing.player_ids.length} player(s) are already queued here. Run \`/queue clear\` first.`,
+            });
+          }
+        }
+
+        updateDivision(guildId, size, division, { queue_channel_id: channelId });
+
+        // The queue row caches the size, so an existing empty row has to be told.
+        if (existing) {
+          existing.team_size = size;
+          saveQueue(existing);
+        }
+      }
+
       getOrInitQueue(channelId, guildId);
+      const queue = getQueue(channelId)!;
       await refreshQueuePanel(interaction.client, channelId);
 
-      return interaction.editReply({ content: '✅ Interactive Queue Panel deployed!' });
+      return interaction.editReply({
+        content: `✅ **${formatTeamSize(queue.team_size)}** Queue Panel deployed!`,
+      });
     }
 
     if (subcommand === 'status') {
@@ -113,10 +182,10 @@ export const queueCommand = {
         });
       }
 
-      const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+      const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
       const mentions = players.map((p: Player, idx: number) => `**${idx + 1}.** <@${p.discord_id}> (\`${p.mmr} MMR\`)`).join('\n');
       return interaction.reply({
-        content: `🚀 **Current Queue (${players.length}/6):**\n\n${mentions}`,
+        content: `🚀 **Current ${formatTeamSize(queue.team_size)} Queue (${players.length}/${queue.team_size * 2}):**\n\n${mentions}`,
         ephemeral: true,
       });
     }
@@ -139,7 +208,7 @@ export const queueCommand = {
         });
       }
 
-      getOrCreatePlayer(guildId, user.id, user.username);
+      getOrCreatePlayer(guildId, queue.team_size, user.id, user.username);
       queue.player_ids.push(user.id);
       queue.player_join_times = queue.player_join_times || {};
       queue.player_join_times[user.id] = Date.now();
@@ -147,12 +216,13 @@ export const queueCommand = {
 
       await refreshQueuePanel(interaction.client, channelId);
 
+      const capacity = queue.team_size * 2;
       await interaction.reply({
-        content: `✅ Added <@${user.id}> to the queue (${queue.player_ids.length}/6).`,
+        content: `✅ Added <@${user.id}> to the queue (${queue.player_ids.length}/${capacity}).`,
         ephemeral: true,
       });
 
-      if (queue.player_ids.length === 6) {
+      if (queue.player_ids.length === capacity) {
         await startReadyCheckPhase(interaction.client, channelId, guildId, queue);
       }
       return;
@@ -183,7 +253,7 @@ export const queueCommand = {
 
       await refreshQueuePanel(interaction.client, channelId);
       return interaction.reply({
-        content: `✅ Removed <@${user.id}> from the queue (${queue.player_ids.length}/6).`,
+        content: `✅ Removed <@${user.id}> from the queue (${queue.player_ids.length}/${queue.team_size * 2}).`,
         ephemeral: true,
       });
     }

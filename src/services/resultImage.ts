@@ -26,8 +26,11 @@ export async function generateMatchResultImage(
   orangeTeam: MatchPlayerResult[],
   durationStr?: string
 ): Promise<Buffer> {
+  // Cards start at y=150 with a 92px pitch, so the canvas has to grow with the roster:
+  // four a side would run off the old fixed 420px.
+  const rosterRows = Math.max(blueTeam.length, orangeTeam.length);
   const width = 960;
-  const height = 420;
+  const height = 150 + rosterRows * 92 + 10;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -166,6 +169,7 @@ export async function generateMatchResultImage(
       // is no longer something that happens mid-season.
       const zone = getPromotionStatus(
         item.player.guild_id,
+        item.player.team_size,
         item.player.division,
         item.newMmr,
         item.newMmr - item.delta

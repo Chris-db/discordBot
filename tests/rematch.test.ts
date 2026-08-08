@@ -46,9 +46,9 @@ function makeCompletedMatch(overrides: Record<string, unknown> = {}) {
 
 describe('rematch', () => {
   beforeEach(() => {
-    db.exec('DELETE FROM season_snapshots; DELETE FROM players; DELETE FROM matches; DELETE FROM active_queues; DELETE FROM bans; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM matches; DELETE FROM active_queues; DELETE FROM bans; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
     seedGuildDefaults(db, G);
-    for (const id of ROSTER) getOrCreatePlayer(G, id, `User_${id}`);
+    for (const id of ROSTER) getOrCreatePlayer(G, 3, id, `User_${id}`);
   });
 
   describe('voting', () => {
@@ -273,7 +273,7 @@ describe('rematch', () => {
     });
 
     it('does not duplicate a player already waiting', async () => {
-      getOrInitQueueRow('queue_chan', G, ['b1']);
+      getOrInitQueueRow('queue_chan', G, 3, ['b1']);
       const match = makeCompletedMatch();
 
       await handleRequeue(fakeClient, match.match_id, 'b2');

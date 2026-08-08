@@ -56,7 +56,7 @@ export async function checkQueueTimeouts(client: Client): Promise<void> {
           if (channel) {
             const mentions = removedPlayers.map(id => `<@${id}>`).join(', ');
             const notice = await channel.send({
-              content: `⏳ ${mentions} automatically removed from the queue after **${config.queueTimeoutMinutes || 30} minutes** of inactivity (${queue.player_ids.length}/6).`,
+              content: `⏳ ${mentions} automatically removed from the queue after **${config.queueTimeoutMinutes || 30} minutes** of inactivity (${queue.player_ids.length}/${queue.team_size * 2}).`,
             });
             setTimeout(() => notice.delete().catch(() => null), 15_000);
           }

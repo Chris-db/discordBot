@@ -138,6 +138,7 @@ export async function startRematch(
   const next = createMatch({
     guild_id: previous.guild_id,
     channel_id: previous.channel_id,
+    team_size: previous.team_size,
     state: 'IN_PROGRESS',
     blue_team: previous.blue_team,
     orange_team: previous.orange_team,
@@ -165,8 +166,8 @@ export async function startRematch(
     return next;
   }
 
-  const blueTeam = getPlayersByIds(next.guild_id, next.blue_team);
-  const orangeTeam = getPlayersByIds(next.guild_id, next.orange_team);
+  const blueTeam = getPlayersByIds(next.guild_id, next.team_size, next.blue_team);
+  const orangeTeam = getPlayersByIds(next.guild_id, next.team_size, next.orange_team);
 
   const vsBuffer = await generateMatchVsImage(client, next.match_id, blueTeam, orangeTeam);
   const attachment = new AttachmentBuilder(vsBuffer, { name: 'match_vs.png' });
@@ -237,7 +238,7 @@ export async function handleRequeue(
   }
 
   const queueChannelId = match.queue_channel_id || match.channel_id;
-  const added = getOrInitQueueRow(queueChannelId, match.guild_id, roster);
+  const added = getOrInitQueueRow(queueChannelId, match.guild_id, match.team_size, roster);
 
   if (added.length === 0) {
     return { success: false, message: 'Nobody could be added — the queue may have popped already.' };

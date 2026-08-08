@@ -14,6 +14,8 @@ import {
 import db from '../database/db';
 import { endSeason } from '../services/seasonService';
 import { getDivisionTier } from '../services/mmrService';
+import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
+import { formatTeamSize } from '../ui/teamSize';
 import { logger } from '../utils/logger';
 
 export const seasonCommand = {
@@ -61,13 +63,17 @@ export const seasonCommand = {
           .get(guildId, season.started_at) as { n: number }
       ).n;
 
-      const divisions = getDivisions(guildId);
-      const breakdown = divisions
-        .map(d => {
+      // One season spans every size, so the breakdown does too.
+      const breakdown = SUPPORTED_TEAM_SIZES.flatMap(size => {
+        const divisions = getDivisions(guildId, size).filter(
+          d => getTotalPlayersCount(guildId, size, d.division) > 0
+        );
+        return divisions.map(d => {
           const tier = getDivisionTier(d.division);
-          return `${tier.emoji} **${d.display_name}** — ${getTotalPlayersCount(guildId, d.division)} players`;
-        })
-        .join('\n');
+          const count = getTotalPlayersCount(guildId, size, d.division);
+          return `${tier.emoji} **${d.display_name}** ${formatTeamSize(size)} — ${count} players`;
+        });
+      }).join('\n');
 
       const startedUnix = Math.floor(new Date(season.started_at).getTime() / 1000);
       const embed = new EmbedBuilder()
@@ -97,16 +103,21 @@ export const seasonCommand = {
         .setTimestamp();
 
       for (const season of seasons.slice(0, 5)) {
-        // Top of the highest division is the closest thing to an overall champion.
+        // Top of the highest division is the closest thing to an overall champion --
+        // now one per size, since each is a separate ladder.
         const snaps = getSeasonSnapshots(season.season_id);
-        const topByDivision = getDivisions(guildId)
-          .slice()
-          .reverse()
-          .map(d => {
-            const winner = snaps.find(s => s.division === d.division && s.final_rank === 1);
-            if (!winner) return null;
-            return `${getDivisionTier(d.division).emoji} <@${winner.discord_id}> (${winner.final_mmr})`;
-          })
+        const topByDivision = SUPPORTED_TEAM_SIZES.flatMap(size =>
+          getDivisions(guildId, size)
+            .slice()
+            .reverse()
+            .map(d => {
+              const winner = snaps.find(
+                s => s.team_size === size && s.division === d.division && s.final_rank === 1
+              );
+              if (!winner) return null;
+              return `${getDivisionTier(d.division).emoji} ${formatTeamSize(size)} — <@${winner.discord_id}> (${winner.final_mmr})`;
+            })
+        )
           .filter(Boolean)
           .join('\n');
 
@@ -172,18 +183,22 @@ export const seasonCommand = {
         .setColor(0xffd700)
         .setTitle(`🏁 ${result.endedSeason.name} has ended`)
         .setDescription(
-          `**${result.results.length}** players reset • **${result.newSeason.name}** is now live.`
+          `**${result.results.length}** ladder placements reset • **${result.newSeason.name}** is now live.`
         )
         .setTimestamp();
 
-      const championLines = getDivisions(guildId)
-        .slice()
-        .reverse()
-        .map(d => {
-          const champ = result.results.find(r => r.fromDivision === d.division && r.finalRank === 1);
-          if (!champ) return null;
-          return `${getDivisionTier(d.division).emoji} **${d.display_name}:** <@${champ.discord_id}> (${champ.finalMmr})`;
-        })
+      const championLines = SUPPORTED_TEAM_SIZES.flatMap(size =>
+        getDivisions(guildId, size)
+          .slice()
+          .reverse()
+          .map(d => {
+            const champ = result.results.find(
+              r => r.teamSize === size && r.fromDivision === d.division && r.finalRank === 1
+            );
+            if (!champ) return null;
+            return `${getDivisionTier(d.division).emoji} **${d.display_name} ${formatTeamSize(size)}:** <@${champ.discord_id}> (${champ.finalMmr})`;
+          })
+      )
         .filter(Boolean)
         .join('\n');
       if (championLines) {

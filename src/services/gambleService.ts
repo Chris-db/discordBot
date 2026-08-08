@@ -27,7 +27,7 @@ const activeGambleTimers = new Map<number, NodeJS.Timeout>();
 const activeGambleMessages = new Map<number, { channelId: string; messageId: string }>();
 
 /**
- * Initiates the Double or Nothing gamble proposal with a 60-second 6/6 consensus window.
+ * Initiates the Double or Nothing gamble proposal with a 60-second unanimous consensus window.
  */
 export async function proposeGamble(
   client: Client,
@@ -74,8 +74,8 @@ export async function proposeGamble(
 
   updateMatchGambleStatus(matchId, newStatus);
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
     matchId,
@@ -116,7 +116,7 @@ export async function proposeGamble(
             .setColor(RL_COLORS.DARK)
             .setDescription(
               '⏰ **The 60-second Double or Nothing consensus window has expired.**\n' +
-                'Not all 6 players agreed in time. The original match result stands permanently!'
+                'Not everyone agreed in time. The original match result stands permanently!'
             )
             .setFooter({ text: 'Consensus Expired • Match Finalized' });
 
@@ -172,7 +172,7 @@ export async function handleGambleAgree(
   }
 
   // Atomic — six players racing to agree used to drop each other's agreements,
-  // which meant the 6/6 threshold could never be reached.
+  // which meant the unanimous threshold could never be reached.
   const updated = mutateMatchGambleStatus(matchId, s => {
     if (!s.agreedPlayers.includes(interaction.user.id)) {
       s.agreedPlayers.push(interaction.user.id);
@@ -181,8 +181,8 @@ export async function handleGambleAgree(
   if (!updated) return;
   const status = updated.gamble_status!;
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const elapsedSec = Math.floor((Date.now() - (status.proposedAt || Date.now())) / 1000);
   const remSec = Math.max(1, 60 - elapsedSec);
@@ -200,7 +200,7 @@ export async function handleGambleAgree(
     components: [getGambleConsensusButtons(matchId, false)],
   });
 
-  // Check if 6/6 reached
+  // Check if everyone has agreed
   if (status.agreedPlayers.length >= 6) {
     const timer = activeGambleTimers.get(matchId);
     if (timer) {
@@ -252,8 +252,8 @@ export async function handleGambleDecline(
   status.declinedBy = interaction.user.id;
   updateMatchGambleStatus(matchId, status);
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
     matchId,
@@ -292,7 +292,7 @@ async function startWheelOfFate(
   if (!targetMsg) return;
 
   // Step 1: Spinning
-  const step1Embed = buildGambleSpinningEmbed(1, matchId);
+  const step1Embed = buildGambleSpinningEmbed(1, matchId, match.blue_team.length + match.orange_team.length);
   await targetMsg.edit({
     embeds: [step1Embed],
     components: [],
@@ -301,7 +301,7 @@ async function startWheelOfFate(
   await new Promise((res) => setTimeout(res, 2000));
 
   // Step 2: Slowdown
-  const step2Embed = buildGambleSpinningEmbed(2, matchId);
+  const step2Embed = buildGambleSpinningEmbed(2, matchId, match.blue_team.length + match.orange_team.length);
   await targetMsg.edit({
     embeds: [step2Embed],
     components: [],
@@ -318,8 +318,8 @@ async function startWheelOfFate(
   const blueDelta = status.blueDelta ?? 18;
   const orangeDelta = status.orangeDelta ?? -18;
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const blueResults: GamblePlayerResult[] = [];
   const orangeResults: GamblePlayerResult[] = [];
@@ -358,7 +358,7 @@ async function startWheelOfFate(
       }
     }
 
-    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, p.discord_id, mmrChange, winChange, lossChange);
+    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, match.team_size, p.discord_id, mmrChange, winChange, lossChange);
     blueResults.push({
       player: updatedPlayer,
       delta: appliedDelta,
@@ -395,7 +395,7 @@ async function startWheelOfFate(
       }
     }
 
-    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, p.discord_id, mmrChange, winChange, lossChange);
+    const updatedPlayer = applyGambleResultToPlayer(match.guild_id, match.team_size, p.discord_id, mmrChange, winChange, lossChange);
     orangeResults.push({
       player: updatedPlayer,
       delta: appliedDelta,

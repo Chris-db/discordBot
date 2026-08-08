@@ -33,16 +33,19 @@ import { calculateMmrDelta } from './mmrService';
 import { getMatchupKey, createRandomTeams } from './draftService';
 import { generateMatchVsImage } from './matchImage';
 import { generateMatchResultImage } from './resultImage';
-import { REPORT_VOTES_REQUIRED, REMATCH_WINDOW_MS, votesRequiredFor } from './gameRules';
+import { REMATCH_WINDOW_MS, votesRequiredFor } from './gameRules';
 import { rematchMessages, summariseSeries } from './rematchService';
 import { logger } from '../utils/logger';
 
-// REPORT_VOTES_REQUIRED moved to gameRules.ts so rematchService can share it without
-// the two modules importing each other. Re-exported for existing callers.
-export { REPORT_VOTES_REQUIRED } from './gameRules';
+// Vote thresholds live in gameRules.ts so rematchService can share them without the two
+// modules importing each other. Re-exported for existing callers.
+export { majorityOf, votesRequiredFor } from './gameRules';
 
 /**
- * Starts a new 6mans match with 3v3 teams, temporary voice channels, and RL Lobby details.
+ * Starts a new match with temporary voice channels and RL Lobby details.
+ *
+ * Team size is whatever the two rosters are -- 2, 3 or 4 a side -- and it is the ladder
+ * the result will count towards.
  */
 export async function startNewMatch(
   client: Client,
@@ -150,6 +153,7 @@ export async function startNewMatch(
   const match = createMatch({
     guild_id: guildId,
     channel_id: channelId,
+    team_size: blueTeam.length,
     blue_team: blueTeam.map(p => p.discord_id),
     orange_team: orangeTeam.map(p => p.discord_id),
     rl_name: rlName,
@@ -253,10 +257,14 @@ export async function handleMatchReportVote(
   const blueVotesCount = updated.report_status.blueVotes?.length || 0;
   const orangeVotesCount = updated.report_status.orangeVotes?.length || 0;
 
-  if (blueVotesCount >= REPORT_VOTES_REQUIRED) {
+  // A majority of this lobby, whatever size it is -- 3 of 4, 4 of 6, 5 of 8 -- and never
+  // more than the number of humans who could actually click.
+  const required = votesRequiredFor([...updated.blue_team, ...updated.orange_team]);
+
+  if (blueVotesCount >= required) {
     await completeMatch(client, matchId, 'BLUE');
     return { success: true, message: 'Confirmed! Team Blue wins!', completed: true };
-  } else if (orangeVotesCount >= REPORT_VOTES_REQUIRED) {
+  } else if (orangeVotesCount >= required) {
     await completeMatch(client, matchId, 'ORANGE');
     return { success: true, message: 'Confirmed! Team Orange wins!', completed: true };
   }
@@ -265,12 +273,12 @@ export async function handleMatchReportVote(
     success: true,
     message: `Voted for **Team ${reportedWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'} Win** (${
       reportedWinner === 'BLUE' ? blueVotesCount : orangeVotesCount
-    }/${REPORT_VOTES_REQUIRED} votes needed).`,
+    }/${required} votes needed).`,
   };
 }
 
 /**
- * Handles player cancel match votes (requires 4 votes).
+ * Handles player cancel match votes, needing a majority of the lobby.
  */
 export async function handleMatchCancelVote(
   client: Client,
@@ -305,18 +313,19 @@ export async function handleMatchCancelVote(
   await updateActiveMatchEmbed(client, matchId);
 
   const cancelVotesCount = updated.report_status.cancelVotes?.length || 0;
-  if (cancelVotesCount >= REPORT_VOTES_REQUIRED) {
+  const required = votesRequiredFor([...updated.blue_team, ...updated.orange_team]);
+  if (cancelVotesCount >= required) {
     await cancelMatch(client, matchId, `${cancelVotesCount} Player Votes`);
     return {
       success: true,
-      message: `Confirmed! ${cancelVotesCount}/${REPORT_VOTES_REQUIRED} votes reached — Match cancelled.`,
+      message: `Confirmed! ${cancelVotesCount}/${required} votes reached — Match cancelled.`,
       cancelled: true,
     };
   }
 
   return {
     success: true,
-    message: `Voted to **Cancel Match** (${cancelVotesCount}/${REPORT_VOTES_REQUIRED} votes needed).`,
+    message: `Voted to **Cancel Match** (${cancelVotesCount}/${required} votes needed).`,
   };
 }
 
@@ -331,17 +340,19 @@ export async function completeMatch(
   const match = getMatch(matchId);
   if (!match || match.state !== 'IN_PROGRESS') return;
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const { blueDelta, orangeDelta } = calculateMmrDelta(bluePlayers, orangePlayers, winner);
 
   // Apply MMR, then re-read the row so the card can show the streak the win just produced.
   // The delta stays the one actually applied -- recomputing it from post-update ratings is
   // what made the public feed card disagree with reality (P1-8).
+  //
+  // Everything here is scoped to match.team_size: a 3v3 result must not move anyone's 2v2.
   const applyTo = (p: Player, delta: number, isWin: boolean) => {
-    updatePlayerAfterMatch(match.guild_id, p.discord_id, delta, isWin);
-    const after = getPlayer(match.guild_id, p.discord_id) || p;
+    updatePlayerAfterMatch(match.guild_id, match.team_size, p.discord_id, delta, isWin);
+    const after = getPlayer(match.guild_id, match.team_size, p.discord_id) || p;
     return { player: after, delta, newMmr: after.mmr, previousStreak: p.streak };
   };
 
@@ -539,8 +550,8 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
     const msg = await channel.messages.fetch(match.message_id).catch(() => null);
     if (!msg) return;
 
-    const blueTeam = getPlayersByIds(match.guild_id, match.blue_team);
-    const orangeTeam = getPlayersByIds(match.guild_id, match.orange_team);
+    const blueTeam = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+    const orangeTeam = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildActiveMatchEmbed(
       matchId,

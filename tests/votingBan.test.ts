@@ -39,7 +39,7 @@ const sixPlayers = () => [
 
 describe('P1 regressions', () => {
   beforeEach(() => {
-    db.exec('DELETE FROM players; DELETE FROM active_queues; DELETE FROM matches; DELETE FROM bans;');
+    db.exec('DELETE FROM player_ladders; DELETE FROM players; DELETE FROM active_queues; DELETE FROM matches; DELETE FROM bans;');
   });
 
   // ---- P1-11 -------------------------------------------------------------
@@ -229,5 +229,5 @@ describe('P1 regressions', () => {
 });
 
 function playersInDb(ids: string[]) {
-  for (const id of ids) getOrCreatePlayer('g1', id, `User_${id}`);
+  for (const id of ids) getOrCreatePlayer('g1', 3, id, `User_${id}`);
 }

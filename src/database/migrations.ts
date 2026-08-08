@@ -41,6 +41,22 @@ export function tableExists(db: Database, table: string): boolean {
 }
 
 /**
+ * The team sizes the bot can run a queue at, and the one everything played before
+ * multi-queue existed.
+ *
+ * A "ladder" is a (guild_id, team_size) pair: each size has its own MMR, W/L, division
+ * placement and leaderboard, so being Rank A at 3v3 says nothing about your 2v2.
+ */
+export const SUPPORTED_TEAM_SIZES = [2, 3, 4] as const;
+export const DEFAULT_TEAM_SIZE = 3;
+
+export type TeamSize = (typeof SUPPORTED_TEAM_SIZES)[number];
+
+export function isSupportedTeamSize(size: number): size is TeamSize {
+  return (SUPPORTED_TEAM_SIZES as readonly number[]).includes(size);
+}
+
+/**
  * The five rank divisions, in ascending order.
  *
  * Rank is stored state rather than a function of MMR, but the default MMR and the
@@ -299,7 +315,7 @@ const migrations: Migration[] = [
       }
 
       for (const guildId of guildIds) {
-        seedGuildDefaults(db, guildId);
+        seedGuildDefaultsV2(db, guildId);
       }
     },
   },
@@ -314,13 +330,156 @@ const migrations: Migration[] = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_matches_series ON matches(series_id, series_game);');
     },
   },
+  {
+    version: 4,
+    name: 'per-size ladders: split player identity from stats, team_size everywhere',
+    up: db => {
+      // ---- players: identity | player_ladders: one row per size ------------------------
+      //
+      // players mixed identity (username) with ladder stats (mmr, division, W/L). Giving
+      // every size its own stats would have meant three rows per player each carrying its
+      // own copy of the username -- and getOrCreatePlayer refreshes the username on rename
+      // against a single row, so a renamed player would keep the stale name on whichever
+      // sizes they had not played since. Splitting the table makes a rename one update.
+      if (!tableExists(db, 'player_ladders')) {
+        db.exec(`
+          CREATE TABLE player_ladders (
+            guild_id TEXT NOT NULL,
+            discord_id TEXT NOT NULL,
+            team_size INTEGER NOT NULL,
+            division TEXT NOT NULL DEFAULT 'C',
+            mmr INTEGER NOT NULL DEFAULT 1000,
+            wins INTEGER NOT NULL DEFAULT 0,
+            losses INTEGER NOT NULL DEFAULT 0,
+            streak INTEGER NOT NULL DEFAULT 0,
+            placed INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (guild_id, discord_id, team_size)
+          );
+        `);
+
+        // Every game played before this migration was 3v3, so that is the ladder the
+        // existing MMR belongs to. The other sizes start empty and fill in lazily, exactly
+        // as a brand-new player does today.
+        db.prepare(
+          `INSERT INTO player_ladders
+             (guild_id, discord_id, team_size, division, mmr, wins, losses, streak, placed)
+           SELECT guild_id, discord_id, ?, division, mmr, wins, losses, streak, placed
+           FROM players`
+        ).run(DEFAULT_TEAM_SIZE);
+
+        const moved = (
+          db.prepare('SELECT COUNT(*) AS n FROM player_ladders').get() as { n: number }
+        ).n;
+
+        db.exec(`
+          CREATE TABLE players_v3 (
+            guild_id TEXT NOT NULL,
+            discord_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (guild_id, discord_id)
+          );
+
+          INSERT INTO players_v3 (guild_id, discord_id, username, created_at)
+            SELECT guild_id, discord_id, username, created_at FROM players;
+
+          DROP TABLE players;
+          ALTER TABLE players_v3 RENAME TO players;
+
+          CREATE INDEX IF NOT EXISTS idx_player_ladders_leaderboard
+            ON player_ladders(guild_id, team_size, division, mmr DESC);
+        `);
+
+        logger.info(`Migration 4: moved ${moved} player(s) onto the ${DEFAULT_TEAM_SIZE}v${DEFAULT_TEAM_SIZE} ladder.`);
+      }
+
+      // ---- guild_divisions: one ladder configuration per size --------------------------
+      //
+      // queue_channel_id lives here, so widening the key to include team_size is what makes
+      // a queue channel resolve to exactly one (division, size) -- which is both the queue's
+      // size setting and the ladder its results count towards.
+      if (!columnExists(db, 'guild_divisions', 'team_size')) {
+        db.prepare(
+          `CREATE TABLE guild_divisions_v2 (
+            guild_id TEXT NOT NULL,
+            team_size INTEGER NOT NULL,
+            division TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            default_mmr INTEGER NOT NULL,
+            promote_at INTEGER,
+            relegate_below INTEGER,
+            queue_channel_id TEXT,
+            role_id TEXT,
+            sort_order INTEGER NOT NULL,
+            PRIMARY KEY (guild_id, team_size, division)
+          )`
+        ).run();
+
+        db.prepare(
+          `INSERT INTO guild_divisions_v2
+             (guild_id, team_size, division, display_name, default_mmr, promote_at,
+              relegate_below, queue_channel_id, role_id, sort_order)
+           SELECT guild_id, ?, division, display_name, default_mmr, promote_at,
+                  relegate_below, queue_channel_id, role_id, sort_order
+           FROM guild_divisions`
+        ).run(DEFAULT_TEAM_SIZE);
+
+        db.exec(`
+          DROP TABLE guild_divisions;
+          ALTER TABLE guild_divisions_v2 RENAME TO guild_divisions;
+          CREATE INDEX IF NOT EXISTS idx_guild_divisions_channel
+            ON guild_divisions(queue_channel_id);
+        `);
+
+        // Give every guild that already has a ladder the other sizes too, unconfigured.
+        // An admin points a channel at one with /queue panel or /division configure.
+        const guildIds = (
+          db.prepare('SELECT DISTINCT guild_id FROM guild_divisions').all() as { guild_id: string }[]
+        ).map(r => r.guild_id);
+        for (const guildId of guildIds) {
+          for (const size of SUPPORTED_TEAM_SIZES) {
+            if (size === DEFAULT_TEAM_SIZE) continue;
+            seedDivisionLadder(db, guildId, size);
+          }
+        }
+      }
+
+      // ---- team_size on the rows that describe a single game ---------------------------
+      addColumnIfMissing(
+        db,
+        'active_queues',
+        'team_size',
+        `INTEGER NOT NULL DEFAULT ${DEFAULT_TEAM_SIZE}`
+      );
+      addColumnIfMissing(db, 'matches', 'team_size', 'INTEGER');
+      db.prepare('UPDATE matches SET team_size = ? WHERE team_size IS NULL').run(DEFAULT_TEAM_SIZE);
+      addColumnIfMissing(
+        db,
+        'season_snapshots',
+        'team_size',
+        `INTEGER NOT NULL DEFAULT ${DEFAULT_TEAM_SIZE}`
+      );
+
+      // A season snapshot is now ranked within (size, division), not division alone.
+      db.exec(`
+        DROP INDEX IF EXISTS idx_season_snapshots_season;
+        CREATE INDEX IF NOT EXISTS idx_season_snapshots_season
+          ON season_snapshots(season_id, team_size, division, final_rank);
+        CREATE INDEX IF NOT EXISTS idx_matches_guild_size
+          ON matches(guild_id, team_size, state);
+      `);
+    },
+  },
 ];
 
 /**
- * Gives a guild the standard division ladder and an open season. Safe to re-run -- an
- * admin's edits to thresholds or channel ids are left alone.
+ * Migration 2's seeding, frozen at the schema of the day.
+ *
+ * Migration 4 adds team_size to guild_divisions' primary key. A migration has to keep
+ * producing the same result forever, so it cannot call the shared seeder -- that one now
+ * writes a column this table does not have yet at version 2.
  */
-export function seedGuildDefaults(db: Database, guildId: string): void {
+function seedGuildDefaultsV2(db: Database, guildId: string): void {
   const insertDivision = db.prepare(`
     INSERT OR IGNORE INTO guild_divisions
       (guild_id, division, display_name, default_mmr, promote_at, relegate_below, sort_order)
@@ -338,14 +497,51 @@ export function seedGuildDefaults(db: Database, guildId: string): void {
     );
   }
 
+  seedGuildConfigAndSeason(db, guildId);
+}
+
+/** The standard five-division ladder for one (guild, size). Leaves admin edits alone. */
+export function seedDivisionLadder(db: Database, guildId: string, teamSize: number): void {
+  const insertDivision = db.prepare(`
+    INSERT OR IGNORE INTO guild_divisions
+      (guild_id, team_size, division, display_name, default_mmr, promote_at, relegate_below, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const d of DIVISIONS) {
+    insertDivision.run(
+      guildId,
+      teamSize,
+      d.division,
+      d.displayName,
+      d.defaultMmr,
+      d.promoteAt,
+      d.relegateBelow,
+      d.sortOrder
+    );
+  }
+}
+
+function seedGuildConfigAndSeason(db: Database, guildId: string): void {
   db.prepare('INSERT OR IGNORE INTO guild_config (guild_id) VALUES (?)').run(guildId);
 
+  // One season spans every size: ending it resets all three ladders together.
   const activeSeason = db
     .prepare('SELECT season_id FROM seasons WHERE guild_id = ? AND is_active = 1')
     .get(guildId);
   if (!activeSeason) {
     db.prepare('INSERT INTO seasons (guild_id, name) VALUES (?, ?)').run(guildId, 'Season 1');
   }
+}
+
+/**
+ * Gives a guild the standard division ladder at every supported size, plus an open
+ * season. Safe to re-run -- an admin's edits to thresholds or channel ids are left alone.
+ */
+export function seedGuildDefaults(db: Database, guildId: string): void {
+  for (const size of SUPPORTED_TEAM_SIZES) {
+    seedDivisionLadder(db, guildId, size);
+  }
+  seedGuildConfigAndSeason(db, guildId);
 }
 
 /**

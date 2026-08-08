@@ -113,8 +113,8 @@ export async function generateMatchHistoryImage(
     ctx.fillText(pillText, pillX + pillW / 2, pillY + 17);
 
     // Rosters
-    const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-    const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+    const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+    const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const blueNames = bluePlayers.map(p => p.username).join(', ') || 'N/A';
     const orangeNames = orangePlayers.map(p => p.username).join(', ') || 'N/A';

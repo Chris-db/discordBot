@@ -6,8 +6,12 @@ import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
 
 /**
- * Generates an 880x420 Captains Draft Visual Scoreboard.
+ * Generates the Captains Draft Visual Scoreboard.
  * Displays Blue Team on the left, Orange Team on the right, and the Available Draft Pool in the center.
+ *
+ * Height is driven by the tallest of the three columns. The pool is the tall one -- it
+ * starts at 2*teamSize - 2 players, which is 4 even at 3v3, so the old fixed 420px canvas
+ * was already clipping the bottom card on the first pick of every captains draft.
  */
 export async function generateCaptainsDraftImage(
   client: Client,
@@ -17,10 +21,16 @@ export async function generateCaptainsDraftImage(
   orangeTeam: Player[],
   remaining: Player[],
   turn: 'BLUE' | 'ORANGE',
-  pickNumber: number
+  pickNumber: number,
+  teamSize: number
 ): Promise<Buffer> {
+  const rowPitch = 85;
+  const cardH = 70;
+  const gridTop = 130;
+
+  const maxRows = Math.max(teamSize, remaining.length);
   const width = 880;
-  const height = 420;
+  const height = gridTop + maxRows * rowPitch - (rowPitch - cardH) + 20;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -40,7 +50,7 @@ export async function generateCaptainsDraftImage(
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
   ctx.font = `bold 28px ${FONT_STACK}`;
-  ctx.fillText('👑 CAPTAINS 1-2-1 DRAFT IN PROGRESS', width / 2, 45);
+  ctx.fillText(`👑 CAPTAINS ${teamSize}V${teamSize} DRAFT IN PROGRESS`, width / 2, 45);
 
   ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = turnColor;
@@ -115,16 +125,16 @@ export async function generateCaptainsDraftImage(
   ctx.fillText('🔵 TEAM BLUE', 30, 115);
 
   const fullBlue = [blueCaptain, ...blueTeam.filter(p => p.discord_id !== blueCaptain.discord_id)];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < teamSize; i++) {
     const p = fullBlue[i];
-    const cardY = 130 + i * 85;
+    const cardY = gridTop + i * rowPitch;
     if (p) {
-      await drawPlayerCard(p, 30, cardY, 250, 70, '#00b0ff', i === 0 ? '👑 CAPTAIN' : undefined);
+      await drawPlayerCard(p, 30, cardY, 250, cardH, '#00b0ff', i === 0 ? '👑 CAPTAIN' : undefined);
     } else {
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(30, cardY, 250, 70);
+      ctx.fillRect(30, cardY, 250, cardH);
       ctx.strokeStyle = '#334155';
-      ctx.strokeRect(30, cardY, 250, 70);
+      ctx.strokeRect(30, cardY, 250, cardH);
       ctx.textAlign = 'center';
       ctx.font = `600 14px ${FONT_STACK}`;
       ctx.fillStyle = '#475569';
@@ -139,16 +149,16 @@ export async function generateCaptainsDraftImage(
   ctx.fillText('🟠 TEAM ORANGE', 600, 115);
 
   const fullOrange = [orangeCaptain, ...orangeTeam.filter(p => p.discord_id !== orangeCaptain.discord_id)];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < teamSize; i++) {
     const p = fullOrange[i];
-    const cardY = 130 + i * 85;
+    const cardY = gridTop + i * rowPitch;
     if (p) {
-      await drawPlayerCard(p, 600, cardY, 250, 70, '#ff9100', i === 0 ? '👑 CAPTAIN' : undefined);
+      await drawPlayerCard(p, 600, cardY, 250, cardH, '#ff9100', i === 0 ? '👑 CAPTAIN' : undefined);
     } else {
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(600, cardY, 250, 70);
+      ctx.fillRect(600, cardY, 250, cardH);
       ctx.strokeStyle = '#334155';
-      ctx.strokeRect(600, cardY, 250, 70);
+      ctx.strokeRect(600, cardY, 250, cardH);
       ctx.textAlign = 'center';
       ctx.font = `600 14px ${FONT_STACK}`;
       ctx.fillStyle = '#475569';
@@ -164,8 +174,8 @@ export async function generateCaptainsDraftImage(
 
   for (let i = 0; i < remaining.length; i++) {
     const p = remaining[i];
-    const cardY = 130 + i * 85;
-    await drawPlayerCard(p, 305, cardY, 270, 70, '#aa00ff', `AVAILABLE`);
+    const cardY = gridTop + i * rowPitch;
+    await drawPlayerCard(p, 305, cardY, 270, cardH, '#aa00ff', `AVAILABLE`);
   }
 
   return canvas.toBuffer('image/png');

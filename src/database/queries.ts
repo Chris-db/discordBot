@@ -1,10 +1,20 @@
 import db from './db';
 import config from '../config';
+import { DEFAULT_TEAM_SIZE } from './migrations';
 
+/**
+ * A player as seen on one ladder.
+ *
+ * Physically this is `players` (identity) joined to `player_ladders` (per-size stats).
+ * The same person has an independent row per team size: Rank A at 3v3 says nothing about
+ * their 2v2.
+ */
 export interface Player {
   guild_id: string;
   discord_id: string;
   username: string;
+  /** Which ladder these stats belong to: 2, 3 or 4. */
+  team_size: number;
   /** Stored rank division (C|B|A|X|S), not derived from mmr. */
   division: string;
   mmr: number;
@@ -18,6 +28,7 @@ export interface Player {
 
 export interface GuildDivision {
   guild_id: string;
+  team_size: number;
   division: string;
   display_name: string;
   default_mmr: number;
@@ -42,6 +53,7 @@ export interface SeasonSnapshot {
   season_id: number;
   guild_id: string;
   discord_id: string;
+  team_size: number;
   division: string;
   final_mmr: number;
   final_wins: number;
@@ -53,6 +65,11 @@ export interface SeasonSnapshot {
 export interface ActiveQueue {
   channel_id: string;
   guild_id: string;
+  /**
+   * Players per team: 2, 3 or 4. Resolved once when the row is created (from the division
+   * that owns the channel) and then read off the row, never re-derived mid-flow.
+   */
+  team_size: number;
   message_id?: string;
   player_ids: string[];
   player_join_times?: Record<string, number>;
@@ -66,7 +83,10 @@ export interface ActiveQueue {
     orangeTeam: string[];
     remainingPlayers: string[];
     turn: 'BLUE' | 'ORANGE';
-    pickNumber: number; // 1 to 4
+    /** 1-based, counting up to 2*teamSize - 2 picks. */
+    pickNumber: number;
+    /** Carried so the pick order survives a restart without re-deriving it. */
+    teamSize: number;
   };
   captain_vote_state?: {
     blueCaptain: string;
@@ -93,6 +113,8 @@ export interface Match {
   match_id: number;
   guild_id: string;
   channel_id: string;
+  /** Players per team, and therefore which ladder the result counts towards. */
+  team_size: number;
   state: 'READY_CHECK' | 'VOTING' | 'CAPTAINS_VOTE' | 'DRAFTING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   blue_team: string[];
   orange_team: string[];
@@ -166,48 +188,90 @@ export interface GambleStatus {
  * which means a bare discord id no longer identifies a row and callers have to say which
  * server they mean.
  */
-export function getPlayer(guildId: string, discordId: string): Player | undefined {
-  const stmt = db.prepare('SELECT * FROM players WHERE guild_id = ? AND discord_id = ?');
-  return stmt.get(guildId, discordId) as Player | undefined;
+/**
+ * Identity lives in `players`, per-size stats in `player_ladders`. Every read joins them
+ * back into the flat `Player` shape the rest of the bot works with, so callers never see
+ * the split -- they only have to say which ladder they mean.
+ */
+const PLAYER_SELECT = `
+  SELECT p.guild_id, p.discord_id, p.username, p.created_at,
+         l.team_size, l.division, l.mmr, l.wins, l.losses, l.streak, l.placed
+  FROM player_ladders l
+  JOIN players p ON p.guild_id = l.guild_id AND p.discord_id = l.discord_id
+`;
+
+export function getPlayer(
+  guildId: string,
+  teamSize: number,
+  discordId: string
+): Player | undefined {
+  return db
+    .prepare(`${PLAYER_SELECT} WHERE l.guild_id = ? AND l.team_size = ? AND l.discord_id = ?`)
+    .get(guildId, teamSize, discordId) as Player | undefined;
 }
 
-export function getOrCreatePlayer(guildId: string, discordId: string, username: string): Player {
-  let player = getPlayer(guildId, discordId);
-  if (!player) {
-    // New players land in the lowest division unplaced; an admin assigns the real one.
-    const division = getLowestDivision(guildId);
-    const startingMmr = division?.default_mmr ?? config.defaultMmr;
-    db.prepare(
-      `INSERT INTO players (guild_id, discord_id, username, division, mmr, wins, losses, streak, placed)
-       VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0)`
-    ).run(guildId, discordId, username, division?.division ?? 'C', startingMmr);
-    player = getPlayer(guildId, discordId)!;
-  } else if (player.username !== username) {
+export function getOrCreatePlayer(
+  guildId: string,
+  teamSize: number,
+  discordId: string,
+  username: string
+): Player {
+  // The identity row is shared by every size, so a rename fixes all of them at once.
+  const identity = db
+    .prepare('SELECT username FROM players WHERE guild_id = ? AND discord_id = ?')
+    .get(guildId, discordId) as { username: string } | undefined;
+
+  if (!identity) {
+    db.prepare('INSERT INTO players (guild_id, discord_id, username) VALUES (?, ?, ?)').run(
+      guildId,
+      discordId,
+      username
+    );
+  } else if (identity.username !== username) {
     db.prepare('UPDATE players SET username = ? WHERE guild_id = ? AND discord_id = ?').run(
       username,
       guildId,
       discordId
     );
-    player.username = username;
   }
-  return player;
+
+  // Each size is entered separately: a 3v3 regular showing up for their first 2v2 starts
+  // that ladder from scratch rather than importing their 3v3 rating.
+  const existing = getPlayer(guildId, teamSize, discordId);
+  if (existing) return existing;
+
+  // New players land in the lowest division unplaced; an admin assigns the real one.
+  const division = getLowestDivision(guildId, teamSize);
+  const startingMmr = division?.default_mmr ?? config.defaultMmr;
+  db.prepare(
+    `INSERT INTO player_ladders
+       (guild_id, discord_id, team_size, division, mmr, wins, losses, streak, placed)
+     VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0)`
+  ).run(guildId, discordId, teamSize, division?.division ?? 'C', startingMmr);
+
+  return getPlayer(guildId, teamSize, discordId)!;
 }
 
 /**
- * Fetches players by id within a guild, preserving the order of `discordIds`.
+ * Fetches players by id within one guild's ladder, preserving the order of `discordIds`.
  *
  * SQL `IN` gives no ordering guarantee — SQLite serves it from the primary-key
  * index, so rows come back sorted by id. Callers rely on list order being meaningful
  * (queue slot numbers, and the captain being index 0 of a team), so re-order the rows
  * to match the request here rather than at every call site.
  */
-export function getPlayersByIds(guildId: string, discordIds: string[]): Player[] {
+export function getPlayersByIds(
+  guildId: string,
+  teamSize: number,
+  discordIds: string[]
+): Player[] {
   if (discordIds.length === 0) return [];
   const placeholders = discordIds.map(() => '?').join(',');
-  const stmt = db.prepare(
-    `SELECT * FROM players WHERE guild_id = ? AND discord_id IN (${placeholders})`
-  );
-  const rows = stmt.all(guildId, ...discordIds) as Player[];
+  const rows = db
+    .prepare(
+      `${PLAYER_SELECT} WHERE l.guild_id = ? AND l.team_size = ? AND l.discord_id IN (${placeholders})`
+    )
+    .all(guildId, teamSize, ...discordIds) as Player[];
 
   const byId = new Map(rows.map(p => [p.discord_id, p]));
   const ordered: Player[] = [];
@@ -220,11 +284,12 @@ export function getPlayersByIds(guildId: string, discordIds: string[]): Player[]
 
 export function updatePlayerAfterMatch(
   guildId: string,
+  teamSize: number,
   discordId: string,
   mmrDelta: number,
   isWin: boolean
 ): void {
-  const player = getPlayer(guildId, discordId);
+  const player = getPlayer(guildId, teamSize, discordId);
   if (!player) return;
 
   const newMmr = Math.max(0, player.mmr + mmrDelta);
@@ -239,19 +304,23 @@ export function updatePlayerAfterMatch(
   }
 
   db.prepare(
-    'UPDATE players SET mmr = ?, wins = ?, losses = ?, streak = ? WHERE guild_id = ? AND discord_id = ?'
-  ).run(newMmr, newWins, newLosses, newStreak, guildId, discordId);
+    `UPDATE player_ladders SET mmr = ?, wins = ?, losses = ?, streak = ?
+     WHERE guild_id = ? AND team_size = ? AND discord_id = ?`
+  ).run(newMmr, newWins, newLosses, newStreak, guildId, teamSize, discordId);
 }
 
 export function applyGambleResultToPlayer(
   guildId: string,
+  teamSize: number,
   discordId: string,
   mmrChange: number,
   winChange: number,
   lossChange: number
 ): Player {
-  const player = getPlayer(guildId, discordId);
-  if (!player) throw new Error(`Player ${discordId} not found in guild ${guildId}`);
+  const player = getPlayer(guildId, teamSize, discordId);
+  if (!player) {
+    throw new Error(`Player ${discordId} not found on the ${teamSize}v${teamSize} ladder in guild ${guildId}`);
+  }
 
   const newMmr = Math.max(0, player.mmr + mmrChange);
   const newWins = Math.max(0, player.wins + winChange);
@@ -265,47 +334,60 @@ export function applyGambleResultToPlayer(
   }
 
   db.prepare(
-    'UPDATE players SET mmr = ?, wins = ?, losses = ?, streak = ? WHERE guild_id = ? AND discord_id = ?'
-  ).run(newMmr, newWins, newLosses, newStreak, guildId, discordId);
-  return getPlayer(guildId, discordId)!;
+    `UPDATE player_ladders SET mmr = ?, wins = ?, losses = ?, streak = ?
+     WHERE guild_id = ? AND team_size = ? AND discord_id = ?`
+  ).run(newMmr, newWins, newLosses, newStreak, guildId, teamSize, discordId);
+  return getPlayer(guildId, teamSize, discordId)!;
 }
 
-export function setPlayerMmr(guildId: string, discordId: string, newMmr: number): void {
-  db.prepare('UPDATE players SET mmr = ? WHERE guild_id = ? AND discord_id = ?').run(
-    newMmr,
-    guildId,
-    discordId
-  );
+export function setPlayerMmr(
+  guildId: string,
+  teamSize: number,
+  discordId: string,
+  newMmr: number
+): void {
+  db.prepare(
+    'UPDATE player_ladders SET mmr = ? WHERE guild_id = ? AND team_size = ? AND discord_id = ?'
+  ).run(newMmr, guildId, teamSize, discordId);
 }
 
 /** Moves a player between divisions, optionally resetting them to the new division's default. */
 export function setPlayerDivision(
   guildId: string,
+  teamSize: number,
   discordId: string,
   division: string,
   resetMmrToDefault = true
 ): Player | undefined {
-  const target = getDivision(guildId, division);
-  if (!target) throw new Error(`Division ${division} is not configured for guild ${guildId}`);
+  const target = getDivision(guildId, teamSize, division);
+  if (!target) {
+    throw new Error(
+      `Division ${division} is not configured for ${teamSize}v${teamSize} in guild ${guildId}`
+    );
+  }
 
   if (resetMmrToDefault) {
     db.prepare(
-      'UPDATE players SET division = ?, mmr = ?, placed = 1 WHERE guild_id = ? AND discord_id = ?'
-    ).run(division, target.default_mmr, guildId, discordId);
+      `UPDATE player_ladders SET division = ?, mmr = ?, placed = 1
+       WHERE guild_id = ? AND team_size = ? AND discord_id = ?`
+    ).run(division, target.default_mmr, guildId, teamSize, discordId);
   } else {
     db.prepare(
-      'UPDATE players SET division = ?, placed = 1 WHERE guild_id = ? AND discord_id = ?'
-    ).run(division, guildId, discordId);
+      `UPDATE player_ladders SET division = ?, placed = 1
+       WHERE guild_id = ? AND team_size = ? AND discord_id = ?`
+    ).run(division, guildId, teamSize, discordId);
   }
-  return getPlayer(guildId, discordId);
+  return getPlayer(guildId, teamSize, discordId);
 }
 
 /**
- * Leaderboard for one division, or for the whole guild when `division` is omitted.
- * Each division has its own ladder, so the divisionless form is only for admin views.
+ * Leaderboard for one division of one ladder, or the whole ladder when `division` is
+ * omitted. Each division has its own ladder, so the divisionless form is only for admin
+ * views.
  */
 export function getLeaderboard(
   guildId: string,
+  teamSize: number,
   division?: string,
   limit: number = 10,
   offset: number = 0
@@ -313,72 +395,96 @@ export function getLeaderboard(
   if (division) {
     return db
       .prepare(
-        `SELECT * FROM players WHERE guild_id = ? AND division = ?
-         ORDER BY mmr DESC, wins DESC LIMIT ? OFFSET ?`
+        `${PLAYER_SELECT} WHERE l.guild_id = ? AND l.team_size = ? AND l.division = ?
+         ORDER BY l.mmr DESC, l.wins DESC LIMIT ? OFFSET ?`
       )
-      .all(guildId, division, limit, offset) as Player[];
+      .all(guildId, teamSize, division, limit, offset) as Player[];
   }
   return db
     .prepare(
-      'SELECT * FROM players WHERE guild_id = ? ORDER BY mmr DESC, wins DESC LIMIT ? OFFSET ?'
+      `${PLAYER_SELECT} WHERE l.guild_id = ? AND l.team_size = ?
+       ORDER BY l.mmr DESC, l.wins DESC LIMIT ? OFFSET ?`
     )
-    .all(guildId, limit, offset) as Player[];
+    .all(guildId, teamSize, limit, offset) as Player[];
 }
 
-export function getTotalPlayersCount(guildId: string, division?: string): number {
+export function getTotalPlayersCount(
+  guildId: string,
+  teamSize: number,
+  division?: string
+): number {
   const row = division
     ? (db
-        .prepare('SELECT COUNT(*) as count FROM players WHERE guild_id = ? AND division = ?')
-        .get(guildId, division) as { count: number } | undefined)
-    : (db.prepare('SELECT COUNT(*) as count FROM players WHERE guild_id = ?').get(guildId) as
-        | { count: number }
-        | undefined);
+        .prepare(
+          'SELECT COUNT(*) as count FROM player_ladders WHERE guild_id = ? AND team_size = ? AND division = ?'
+        )
+        .get(guildId, teamSize, division) as { count: number } | undefined)
+    : (db
+        .prepare('SELECT COUNT(*) as count FROM player_ladders WHERE guild_id = ? AND team_size = ?')
+        .get(guildId, teamSize) as { count: number } | undefined);
   return row ? row.count : 0;
 }
 
-/** A player's position on their own division's ladder. */
+/** A player's position on their own division's ladder, at one size. */
 export function getPlayerRank(
   guildId: string,
+  teamSize: number,
   discordId: string
 ): { rank: number; total: number; division: string } | undefined {
-  const player = getPlayer(guildId, discordId);
+  const player = getPlayer(guildId, teamSize, discordId);
   if (!player) return undefined;
 
   const rankRow = db
     .prepare(
-      `SELECT COUNT(*) + 1 AS rank FROM players
-       WHERE guild_id = ? AND division = ? AND (mmr > ? OR (mmr = ? AND wins > ?))`
+      `SELECT COUNT(*) + 1 AS rank FROM player_ladders
+       WHERE guild_id = ? AND team_size = ? AND division = ? AND (mmr > ? OR (mmr = ? AND wins > ?))`
     )
-    .get(guildId, player.division, player.mmr, player.mmr, player.wins) as { rank: number };
+    .get(guildId, teamSize, player.division, player.mmr, player.mmr, player.wins) as {
+    rank: number;
+  };
 
   return {
     rank: rankRow.rank,
-    total: getTotalPlayersCount(guildId, player.division),
+    total: getTotalPlayersCount(guildId, teamSize, player.division),
     division: player.division,
   };
 }
 
 // ==================== Division Queries ====================
 
-export function getDivisions(guildId: string): GuildDivision[] {
+export function getDivisions(guildId: string, teamSize: number): GuildDivision[] {
   return db
-    .prepare('SELECT * FROM guild_divisions WHERE guild_id = ? ORDER BY sort_order ASC')
-    .all(guildId) as GuildDivision[];
+    .prepare(
+      'SELECT * FROM guild_divisions WHERE guild_id = ? AND team_size = ? ORDER BY sort_order ASC'
+    )
+    .all(guildId, teamSize) as GuildDivision[];
 }
 
-export function getDivision(guildId: string, division: string): GuildDivision | undefined {
+export function getDivision(
+  guildId: string,
+  teamSize: number,
+  division: string
+): GuildDivision | undefined {
   return db
-    .prepare('SELECT * FROM guild_divisions WHERE guild_id = ? AND division = ?')
-    .get(guildId, division) as GuildDivision | undefined;
+    .prepare('SELECT * FROM guild_divisions WHERE guild_id = ? AND team_size = ? AND division = ?')
+    .get(guildId, teamSize, division) as GuildDivision | undefined;
 }
 
-export function getLowestDivision(guildId: string): GuildDivision | undefined {
+export function getLowestDivision(guildId: string, teamSize: number): GuildDivision | undefined {
   return db
-    .prepare('SELECT * FROM guild_divisions WHERE guild_id = ? ORDER BY sort_order ASC LIMIT 1')
-    .get(guildId) as GuildDivision | undefined;
+    .prepare(
+      'SELECT * FROM guild_divisions WHERE guild_id = ? AND team_size = ? ORDER BY sort_order ASC LIMIT 1'
+    )
+    .get(guildId, teamSize) as GuildDivision | undefined;
 }
 
-/** Resolves which division a queue channel belongs to, if it is a division channel. */
+/**
+ * Resolves which ladder a queue channel belongs to.
+ *
+ * The returned row carries both `division` and `team_size`, which is what makes a channel
+ * the single source of truth for "what size is this queue, and which ladder do its
+ * results count towards". Channels are unique across sizes, so this stays a single lookup.
+ */
 export function getDivisionByChannel(
   guildId: string,
   channelId: string
@@ -388,8 +494,19 @@ export function getDivisionByChannel(
     .get(guildId, channelId) as GuildDivision | undefined;
 }
 
+/** Every queue channel registered in a guild, whatever its size. */
+export function getQueueChannels(guildId: string): GuildDivision[] {
+  return db
+    .prepare(
+      `SELECT * FROM guild_divisions WHERE guild_id = ? AND queue_channel_id IS NOT NULL
+       ORDER BY team_size ASC, sort_order ASC`
+    )
+    .all(guildId) as GuildDivision[];
+}
+
 export function updateDivision(
   guildId: string,
+  teamSize: number,
   division: string,
   updates: Partial<Pick<GuildDivision,
     'display_name' | 'default_mmr' | 'promote_at' | 'relegate_below' | 'queue_channel_id' | 'role_id'
@@ -397,10 +514,22 @@ export function updateDivision(
 ): void {
   const fields = Object.keys(updates);
   if (fields.length === 0) return;
+
+  // A channel can only drive one queue, so claiming it for this ladder releases it from
+  // whichever one held it before -- otherwise getDivisionByChannel would find two rows.
+  if (updates.queue_channel_id) {
+    db.prepare(
+      'UPDATE guild_divisions SET queue_channel_id = NULL WHERE guild_id = ? AND queue_channel_id = ?'
+    ).run(guildId, updates.queue_channel_id);
+  }
+
   const setClause = fields.map(f => `${f} = ?`).join(', ');
-  db.prepare(`UPDATE guild_divisions SET ${setClause} WHERE guild_id = ? AND division = ?`).run(
+  db.prepare(
+    `UPDATE guild_divisions SET ${setClause} WHERE guild_id = ? AND team_size = ? AND division = ?`
+  ).run(
     ...fields.map(f => (updates as Record<string, unknown>)[f] ?? null),
     guildId,
+    teamSize,
     division
   );
 }
@@ -426,17 +555,27 @@ export function createSeason(guildId: string, name: string): Season {
   return db.prepare('SELECT * FROM seasons WHERE season_id = ?').get(info.lastInsertRowid) as Season;
 }
 
-export function getSeasonSnapshots(seasonId: number, division?: string): SeasonSnapshot[] {
+export function getSeasonSnapshots(
+  seasonId: number,
+  teamSize?: number,
+  division?: string
+): SeasonSnapshot[] {
+  const where = ['season_id = ?'];
+  const params: unknown[] = [seasonId];
+  if (teamSize !== undefined) {
+    where.push('team_size = ?');
+    params.push(teamSize);
+  }
   if (division) {
-    return db
-      .prepare(
-        'SELECT * FROM season_snapshots WHERE season_id = ? AND division = ? ORDER BY final_rank ASC'
-      )
-      .all(seasonId, division) as SeasonSnapshot[];
+    where.push('division = ?');
+    params.push(division);
   }
   return db
-    .prepare('SELECT * FROM season_snapshots WHERE season_id = ? ORDER BY division, final_rank ASC')
-    .all(seasonId) as SeasonSnapshot[];
+    .prepare(
+      `SELECT * FROM season_snapshots WHERE ${where.join(' AND ')}
+       ORDER BY team_size ASC, division ASC, final_rank ASC`
+    )
+    .all(...params) as SeasonSnapshot[];
 }
 
 // ==================== Queue Queries ====================
@@ -445,6 +584,7 @@ function parseQueueRow(row: any): ActiveQueue {
   return {
     channel_id: row.channel_id,
     guild_id: row.guild_id,
+    team_size: row.team_size ?? DEFAULT_TEAM_SIZE,
     message_id: row.message_id || undefined,
     player_ids: JSON.parse(row.player_ids),
     player_join_times: row.player_join_times ? JSON.parse(row.player_join_times) : {},
@@ -473,9 +613,10 @@ export function getAllQueues(): ActiveQueue[] {
 
 export function saveQueue(queue: ActiveQueue): void {
   const stmt = db.prepare(`
-    INSERT INTO active_queues (channel_id, guild_id, message_id, player_ids, state, vote_counts, draft_state, ready_check_vc_id, captain_vote_state, team_vote_state, player_join_times)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO active_queues (channel_id, guild_id, team_size, message_id, player_ids, state, vote_counts, draft_state, ready_check_vc_id, captain_vote_state, team_vote_state, player_join_times)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(channel_id) DO UPDATE SET
+      team_size = excluded.team_size,
       message_id = excluded.message_id,
       player_ids = excluded.player_ids,
       state = excluded.state,
@@ -489,6 +630,7 @@ export function saveQueue(queue: ActiveQueue): void {
   stmt.run(
     queue.channel_id,
     queue.guild_id,
+    queue.team_size ?? DEFAULT_TEAM_SIZE,
     queue.message_id || null,
     JSON.stringify(queue.player_ids),
     queue.state,
@@ -512,6 +654,7 @@ export function saveQueue(queue: ActiveQueue): void {
 export function getOrInitQueueRow(
   channelId: string,
   guildId: string,
+  teamSize: number,
   discordIds: string[]
 ): string[] {
   return db.transaction(() => {
@@ -520,6 +663,7 @@ export function getOrInitQueueRow(
       queue = {
         channel_id: channelId,
         guild_id: guildId,
+        team_size: teamSize,
         player_ids: [],
         player_join_times: {},
         state: 'WAITING',
@@ -556,6 +700,7 @@ export function updateQueueMessageId(channelId: string, messageId?: string): voi
 export function createMatch(data: {
   guild_id: string;
   channel_id: string;
+  team_size: number;
   state?: 'READY_CHECK' | 'VOTING' | 'DRAFTING' | 'IN_PROGRESS';
   blue_team: string[];
   orange_team: string[];
@@ -575,12 +720,12 @@ export function createMatch(data: {
 }): Match {
   const stmt = db.prepare(`
     INSERT INTO matches (
-      guild_id, channel_id, state, blue_team, orange_team, rl_name, rl_pass,
+      guild_id, channel_id, team_size, state, blue_team, orange_team, rl_name, rl_pass,
       blue_voice_id, orange_voice_id, message_id, text_channel_id, queue_channel_id,
       feed_channel_id, feed_message_id, winner, report_status, gamble_status, started_at,
       series_id, series_game, division, season_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?, ?, ?, ?, ?)
   `);
   const defaultStartedAt = data.started_at !== undefined ? data.started_at : ((data.state || 'IN_PROGRESS') === 'IN_PROGRESS' ? new Date().toISOString() : null);
 
@@ -593,6 +738,7 @@ export function createMatch(data: {
   const res = stmt.run(
     data.guild_id,
     data.channel_id,
+    data.team_size,
     data.state || 'IN_PROGRESS',
     JSON.stringify(data.blue_team),
     JSON.stringify(data.orange_team),
@@ -674,30 +820,34 @@ export function getAllLiveMatches(): Match[] {
   return (stmt.all() as any[]).map(parseMatchRow);
 }
 
-export function getMatchHistory(guildId: string, limit: number = 5, discordId?: string): Match[] {
-  if (discordId) {
-    const stmt = db.prepare(`
-      SELECT * FROM matches 
-      WHERE guild_id = ? 
-        AND state = 'COMPLETED'
-        AND (blue_team LIKE ? OR orange_team LIKE ?)
-      ORDER BY completed_at DESC, match_id DESC 
-      LIMIT ?
-    `);
-    const pattern = `%"${discordId}"%`;
-    const rows = stmt.all(guildId, pattern, pattern, limit) as any[];
-    return rows.map(parseMatchRow);
-  } else {
-    const stmt = db.prepare(`
-      SELECT * FROM matches 
-      WHERE guild_id = ? 
-        AND state = 'COMPLETED'
-      ORDER BY completed_at DESC, match_id DESC 
-      LIMIT ?
-    `);
-    const rows = stmt.all(guildId, limit) as any[];
-    return rows.map(parseMatchRow);
+/** Completed matches, newest first. `teamSize` omitted means every size. */
+export function getMatchHistory(
+  guildId: string,
+  limit: number = 5,
+  discordId?: string,
+  teamSize?: number
+): Match[] {
+  const where = ["guild_id = ?", "state = 'COMPLETED'"];
+  const params: unknown[] = [guildId];
+
+  if (teamSize !== undefined) {
+    where.push('team_size = ?');
+    params.push(teamSize);
   }
+  if (discordId) {
+    where.push('(blue_team LIKE ? OR orange_team LIKE ?)');
+    const pattern = `%"${discordId}"%`;
+    params.push(pattern, pattern);
+  }
+  params.push(limit);
+
+  const rows = db
+    .prepare(
+      `SELECT * FROM matches WHERE ${where.join(' AND ')}
+       ORDER BY completed_at DESC, match_id DESC LIMIT ?`
+    )
+    .all(...params) as any[];
+  return rows.map(parseMatchRow);
 }
 
 export function cancelAllActiveMatches(guildId: string): number {
@@ -852,6 +1002,7 @@ function parseMatchRow(row: any): Match {
     match_id: row.match_id,
     guild_id: row.guild_id,
     channel_id: row.channel_id,
+    team_size: row.team_size ?? DEFAULT_TEAM_SIZE,
     state: row.state,
     blue_team: JSON.parse(row.blue_team),
     orange_team: JSON.parse(row.orange_team),

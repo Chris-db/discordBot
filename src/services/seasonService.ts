@@ -7,6 +7,7 @@ import {
   getActiveSeason,
   createSeason,
 } from '../database/queries';
+import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { logger } from '../utils/logger';
 
 export type SeasonOutcome = 'PROMOTED' | 'RELEGATED' | 'STAYED';
@@ -14,6 +15,7 @@ export type SeasonOutcome = 'PROMOTED' | 'RELEGATED' | 'STAYED';
 export interface PlayerSeasonResult {
   discord_id: string;
   username: string;
+  teamSize: number;
   fromDivision: string;
   toDivision: string;
   finalMmr: number;
@@ -61,6 +63,9 @@ export function resolveDivisionChange(
  * the old feature sketch described. Divisions each have their own default, so compressing
  * toward one number would collapse the ladder.
  *
+ * One season spans every team size, so this walks all of them: 2v2, 3v3 and 4v4 each have
+ * their own divisions, standings and promotion outcomes, and all reset together.
+ *
  * The whole thing runs in a single transaction: a half-reset ranks table is unrecoverable
  * without going to the nightly backup.
  */
@@ -70,63 +75,74 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
     throw new Error(`No active season for guild ${guildId}.`);
   }
 
-  const ladder = getDivisions(guildId);
-  if (ladder.length === 0) {
+  const laddersBySize = new Map<number, GuildDivision[]>();
+  for (const size of SUPPORTED_TEAM_SIZES) {
+    const ladder = getDivisions(guildId, size);
+    if (ladder.length > 0) laddersBySize.set(size, ladder);
+  }
+  if (laddersBySize.size === 0) {
     throw new Error(`Guild ${guildId} has no divisions configured.`);
   }
-  const defaultMmrFor = new Map(ladder.map(d => [d.division, d.default_mmr]));
 
   return db.transaction(() => {
     const results: PlayerSeasonResult[] = [];
 
     const snapshot = db.prepare(`
       INSERT INTO season_snapshots
-        (season_id, guild_id, discord_id, division, final_mmr, final_wins, final_losses, final_rank, outcome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (season_id, guild_id, discord_id, team_size, division, final_mmr, final_wins, final_losses, final_rank, outcome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const resetPlayer = db.prepare(`
-      UPDATE players SET division = ?, mmr = ?, wins = 0, losses = 0, streak = 0
-      WHERE guild_id = ? AND discord_id = ?
+      UPDATE player_ladders SET division = ?, mmr = ?, wins = 0, losses = 0, streak = 0
+      WHERE guild_id = ? AND team_size = ? AND discord_id = ?
     `);
 
-    for (const division of ladder) {
-      // Rank within the division, which is the ladder players actually competed on.
-      const standings = db
-        .prepare(
-          `SELECT * FROM players WHERE guild_id = ? AND division = ?
-           ORDER BY mmr DESC, wins DESC, discord_id ASC`
-        )
-        .all(guildId, division.division) as Player[];
+    for (const [teamSize, ladder] of laddersBySize) {
+      const defaultMmrFor = new Map(ladder.map(d => [d.division, d.default_mmr]));
 
-      standings.forEach((player, i) => {
-        const finalRank = i + 1;
-        const { toDivision, outcome } = resolveDivisionChange(player, ladder);
-        const newMmr = defaultMmrFor.get(toDivision) ?? player.mmr;
+      for (const division of ladder) {
+        // Rank within (size, division), which is the ladder players actually competed on.
+        const standings = db
+          .prepare(
+            `SELECT l.*, p.username FROM player_ladders l
+             JOIN players p ON p.guild_id = l.guild_id AND p.discord_id = l.discord_id
+             WHERE l.guild_id = ? AND l.team_size = ? AND l.division = ?
+             ORDER BY l.mmr DESC, l.wins DESC, l.discord_id ASC`
+          )
+          .all(guildId, teamSize, division.division) as Player[];
 
-        snapshot.run(
-          active.season_id,
-          guildId,
-          player.discord_id,
-          player.division,
-          player.mmr,
-          player.wins,
-          player.losses,
-          finalRank,
-          outcome
-        );
-        resetPlayer.run(toDivision, newMmr, guildId, player.discord_id);
+        standings.forEach((player, i) => {
+          const finalRank = i + 1;
+          const { toDivision, outcome } = resolveDivisionChange(player, ladder);
+          const newMmr = defaultMmrFor.get(toDivision) ?? player.mmr;
 
-        results.push({
-          discord_id: player.discord_id,
-          username: player.username,
-          fromDivision: player.division,
-          toDivision,
-          finalMmr: player.mmr,
-          newMmr,
-          finalRank,
-          outcome,
+          snapshot.run(
+            active.season_id,
+            guildId,
+            player.discord_id,
+            teamSize,
+            player.division,
+            player.mmr,
+            player.wins,
+            player.losses,
+            finalRank,
+            outcome
+          );
+          resetPlayer.run(toDivision, newMmr, guildId, teamSize, player.discord_id);
+
+          results.push({
+            discord_id: player.discord_id,
+            username: player.username,
+            teamSize,
+            fromDivision: player.division,
+            toDivision,
+            finalMmr: player.mmr,
+            newMmr,
+            finalRank,
+            outcome,
+          });
         });
-      });
+      }
     }
 
     db.prepare(
@@ -137,7 +153,7 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
     const newSeason = createSeason(guildId, nextName);
 
     logger.info(
-      `Guild ${guildId}: ended "${active.name}" (${results.length} players), started "${nextName}". ` +
+      `Guild ${guildId}: ended "${active.name}" (${results.length} ladder placements), started "${nextName}". ` +
         `${results.filter(r => r.outcome === 'PROMOTED').length} promoted, ` +
         `${results.filter(r => r.outcome === 'RELEGATED').length} relegated.`
     );

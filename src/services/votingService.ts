@@ -35,6 +35,8 @@ import {
   randomizeCaptains,
   processCaptainPick,
 } from './draftService';
+import { votesRequiredFor } from './gameRules';
+import { totalPicks } from './draftService';
 import { startNewMatch } from './matchService';
 import { generateCaptainsDraftImage } from './draftImage';
 import { generateModeVoteImage } from './voteImage';
@@ -46,7 +48,7 @@ import { refreshQueuePanel, resetQueueAfterPop } from './queuePanel';
 const activeVoteTimers = new Map<string, NodeJS.Timeout>();
 
 /**
- * Starts the mode voting phase when 6 players are reached.
+ * Starts the mode voting phase once the queue is full.
  */
 export async function startVotingPhase(
   client: Client,
@@ -61,6 +63,7 @@ export async function startVotingPhase(
   const match = existingMatch || createMatch({
     guild_id: guildId,
     channel_id: channelId,
+    team_size: queue.team_size,
     state: 'VOTING',
     blue_team: [...queue.player_ids],
     orange_team: [],
@@ -89,6 +92,7 @@ export async function startVotingPhase(
   const matchQueue: ActiveQueue = {
     channel_id: textChannelId,
     guild_id: guildId,
+    team_size: queue.team_size,
     player_ids: [...queue.player_ids],
     state: 'VOTING',
     ready_check_vc_id: readyCheckVcId || queue.ready_check_vc_id,
@@ -113,13 +117,13 @@ export async function startVotingPhase(
   const matchChan = (await client.channels.fetch(textChannelId)) as TextChannel;
   if (!matchChan) return;
 
-  const players = getPlayersByIds(matchQueue.guild_id, matchQueue.player_ids);
+  const players = getPlayersByIds(matchQueue.guild_id, matchQueue.team_size, matchQueue.player_ids);
   const voteCounts = { captains: 0, balanced: 0, random: 0 };
 
   const voteImg = await generateModeVoteImage(players, voteCounts);
   const attachment = new AttachmentBuilder(voteImg, { name: 'voting_mode.png' });
 
-  const embed = buildModeVoteEmbed(players, voteCounts);
+  const embed = buildModeVoteEmbed(players, voteCounts, votesRequiredFor(players.map(p => p.discord_id)));
   embed.setImage('attachment://voting_mode.png');
   const buttons = getModeVoteButtons(voteCounts);
 
@@ -195,10 +199,10 @@ export async function handleModeVote(
     random: (queue.vote_counts.random || []).length,
   };
 
-  const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+  const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
   const voteImg = await generateModeVoteImage(players, voteCounts);
   const attachment = new AttachmentBuilder(voteImg, { name: 'voting_mode.png' });
-  const embed = buildModeVoteEmbed(players, voteCounts);
+  const embed = buildModeVoteEmbed(players, voteCounts, votesRequiredFor(players.map(p => p.discord_id)));
   embed.setImage('attachment://voting_mode.png');
 
   await message.edit({
@@ -207,8 +211,8 @@ export async function handleModeVote(
     files: [attachment],
   });
 
-  // If 4 votes align on one mode, resolve immediately!
-  if (voteCounts[votedMode] >= 4) {
+  // Once a majority of the lobby agrees on a mode, resolve immediately.
+  if (voteCounts[votedMode] >= votesRequiredFor(queue.player_ids)) {
     const timer = activeVoteTimers.get(channelId);
     if (timer) {
       clearTimeout(timer);
@@ -308,7 +312,7 @@ export async function startCaptainsVotePhase(
   isRandomize: boolean = false,
   messageToEdit?: Message
 ): Promise<void> {
-  const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+  const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
   let blueCaptain: Player;
   let orangeCaptain: Player;
 
@@ -444,8 +448,8 @@ export async function handleCaptainsVote(
   const yesCount = queue.captain_vote_state.yesVotes.length;
   const noCount = queue.captain_vote_state.noVotes.length;
 
-  const blueCaptain = getPlayersByIds(queue.guild_id, [queue.captain_vote_state.blueCaptain])[0];
-  const orangeCaptain = getPlayersByIds(queue.guild_id, [queue.captain_vote_state.orangeCaptain])[0];
+  const blueCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.blueCaptain])[0];
+  const orangeCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.orangeCaptain])[0];
 
   const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, yesCount, noCount);
   const buttons = getCaptainsVoteButtons({ yes: yesCount, no: noCount });
@@ -506,7 +510,7 @@ export async function finalizeCaptainsVote(
 
     const blueCapId = queue.captain_vote_state.blueCaptain;
     const orangeCapId = queue.captain_vote_state.orangeCaptain;
-    const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+    const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
 
     queue.state = 'DRAFTING';
     queue.draft_state = initializeCaptainsDraftWithCaptains(players, blueCapId, orangeCapId);
@@ -530,7 +534,7 @@ export async function startTeamsVotePhase(
   mode: 'random' | 'balanced' = 'random',
   messageToEdit?: Message
 ): Promise<void> {
-  const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+  const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
 
   // seenMatchups carries the re-roll history, so both generators walk to a new matchup
   // rather than repeating one the queue has already rejected.
@@ -650,8 +654,8 @@ export async function handleTeamsVote(
   const noCount = queue.team_vote_state.noVotes.length;
   const seenCount = queue.team_vote_state.seenMatchups?.length || 1;
 
-  const blueTeam = getPlayersByIds(queue.guild_id, queue.team_vote_state.blueTeam);
-  const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_vote_state.orangeTeam);
+  const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.blueTeam);
+  const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
 
   const mode = queue.team_vote_state.mode || 'random';
   const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount, mode);
@@ -725,8 +729,8 @@ export async function finalizeTeamsVote(
       }).catch(() => null);
     }
 
-    const blueTeam = getPlayersByIds(queue.guild_id, queue.team_vote_state.blueTeam);
-    const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_vote_state.orangeTeam);
+    const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.blueTeam);
+    const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
 
     await startNewMatch(client, guildId, channelId, blueTeam, orangeTeam);
     resetQueueAfterPop(client, channelId);
@@ -745,11 +749,14 @@ export async function sendCaptainsDraftCard(
   if (!channel || !queue.draft_state) return;
 
   const draft = queue.draft_state;
-  const blueCaptain = getPlayersByIds(queue.guild_id, [draft.blueCaptain])[0];
-  const orangeCaptain = getPlayersByIds(queue.guild_id, [draft.orangeCaptain])[0];
-  const blueTeam = getPlayersByIds(queue.guild_id, draft.blueTeam);
-  const orangeTeam = getPlayersByIds(queue.guild_id, draft.orangeTeam);
-  const remaining = getPlayersByIds(queue.guild_id, draft.remainingPlayers);
+  const blueCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [draft.blueCaptain])[0];
+  const orangeCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [draft.orangeCaptain])[0];
+  const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, draft.blueTeam);
+  const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, draft.orangeTeam);
+  const remaining = getPlayersByIds(queue.guild_id, queue.team_size, draft.remainingPlayers);
+
+  const teamSize = draft.teamSize ?? queue.team_size;
+  const picks = totalPicks(teamSize);
 
   const draftImg = await generateCaptainsDraftImage(
     client,
@@ -759,7 +766,8 @@ export async function sendCaptainsDraftCard(
     orangeTeam,
     remaining,
     draft.turn,
-    draft.pickNumber
+    draft.pickNumber,
+    teamSize
   );
   const attachment = new AttachmentBuilder(draftImg, { name: 'captains_draft.png' });
 
@@ -770,14 +778,16 @@ export async function sendCaptainsDraftCard(
     orangeTeam,
     remaining,
     draft.turn,
-    draft.pickNumber
+    draft.pickNumber,
+    picks
   );
   embed.setImage('attachment://captains_draft.png');
 
   const selectMenu = getCaptainsDraftSelectMenu(
     remaining,
     draft.pickNumber,
-    draft.turn
+    draft.turn,
+    picks
   );
 
   const sentMsg = await channel.send({
@@ -821,7 +831,7 @@ export async function sendCaptainsDraftCard(
         return; // the pick was made, or the draft moved on
       }
 
-      const stillRemaining = getPlayersByIds(current.guild_id, current.draft_state.remainingPlayers);
+      const stillRemaining = getPlayersByIds(current.guild_id, current.team_size, current.draft_state.remainingPlayers);
       const autoPick = [...stillRemaining].sort((a, b) => b.mmr - a.mmr)[0];
       if (!autoPick) return;
 
@@ -871,10 +881,14 @@ export async function handleCaptainPick(
 
   saveQueue(queue);
 
-  // Check if draft is finished (3v3 completed)
-  if (queue.draft_state.blueTeam.length === 3 && queue.draft_state.orangeTeam.length === 3) {
-    const bluePlayers = getPlayersByIds(queue.guild_id, queue.draft_state.blueTeam);
-    const orangePlayers = getPlayersByIds(queue.guild_id, queue.draft_state.orangeTeam);
+  // Check if the draft is finished -- both sides full at whatever size this lobby is
+  const draftTeamSize = queue.draft_state.teamSize ?? queue.team_size;
+  if (
+    queue.draft_state.blueTeam.length === draftTeamSize &&
+    queue.draft_state.orangeTeam.length === draftTeamSize
+  ) {
+    const bluePlayers = getPlayersByIds(queue.guild_id, queue.team_size, queue.draft_state.blueTeam);
+    const orangePlayers = getPlayersByIds(queue.guild_id, queue.team_size, queue.draft_state.orangeTeam);
 
     await message.edit({
       content: '✅ **CAPTAINS DRAFT COMPLETED!** Launching match...',

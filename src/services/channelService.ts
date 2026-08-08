@@ -114,7 +114,7 @@ export async function createMatchChannels(
   }
 
   // Build permission overrides for text channel (#match-101):
-  // @everyone cannot view, 6 players can view/send messages
+  // @everyone cannot view; only the lobby can view/send messages
   const textOverrides: any[] = [
     {
       id: guild.roles.everyone.id,
@@ -442,8 +442,8 @@ export async function broadcastMatchToFeed(client: Client, matchId: number): Pro
     const feedChan = await findFeedChannel(guild);
     if (!feedChan) return;
 
-    const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-    const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+    const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+    const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
       matchId,
@@ -480,8 +480,8 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
     const msg = await feedChan.messages.fetch(match.feed_message_id).catch(() => null);
     if (!msg) return;
 
-    const bluePlayers = getPlayersByIds(match.guild_id, match.blue_team);
-    const orangePlayers = getPlayersByIds(match.guild_id, match.orange_team);
+    const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
+    const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
       matchId,

@@ -14,7 +14,8 @@ import { FONT_STACK } from '../utils/fonts';
 export async function generateLeaderboardImage(
   client: Client,
   players: Player[],
-  page: number = 1
+  page: number = 1,
+  teamSize?: number
 ): Promise<Buffer> {
   const width = 900;
   const rowHeight = 64;
@@ -42,6 +43,18 @@ export async function generateLeaderboardImage(
   ctx.textAlign = 'left';
   ctx.fillText('POS', 40, 42);
   ctx.fillText('PLAYER', 170, 42);
+
+  // Each size is a separate ladder, so the card has to say which one it is.
+  const ladderLabel = teamSize ?? players[0]?.team_size;
+  if (ladderLabel) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = `bold 15px ${FONT_STACK}`;
+    ctx.fillText(`${ladderLabel}V${ladderLabel}`, width / 2, 42);
+    ctx.fillStyle = '#64748b';
+    ctx.font = `bold 15px ${FONT_STACK}`;
+  }
+
   ctx.textAlign = 'right';
   ctx.fillText('MMR RATING', 860, 42);
 

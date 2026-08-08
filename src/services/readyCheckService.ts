@@ -23,7 +23,7 @@ import { getOrInitQueue, refreshQueuePanel } from './queuePanel';
 import { startVotingPhase } from './votingService';
 
 /**
- * Starts the 60-second AFK Voice Ready Check when 6 players are reached.
+ * Starts the 60-second AFK Voice Ready Check once the queue is full.
  */
 export async function startReadyCheckPhase(
   client: Client,
@@ -31,6 +31,9 @@ export async function startReadyCheckPhase(
   guildId: string,
   queue: ActiveQueue
 ): Promise<void> {
+  const teamSize = queue.team_size;
+  const rosterSize = teamSize * 2;
+
   // If all players are bots, skip ready check and jump directly to voting
   const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
   if (allBots) {
@@ -71,7 +74,7 @@ export async function startReadyCheckPhase(
     return;
   }
 
-  // Build permission overrides: only the 6 players, Admins/Mods, and bot can view/connect
+  // Build permission overrides: only the queued players, Admins/Mods, and bot can view/connect
   const voiceOverrides: any[] = [
     {
       id: guild.roles.everyone.id,
@@ -112,6 +115,7 @@ export async function startReadyCheckPhase(
   const match = createMatch({
     guild_id: guildId,
     channel_id: channelId,
+    team_size: queue.team_size,
     queue_channel_id: channelId,
     state: 'READY_CHECK',
     blue_team: [...queue.player_ids],
@@ -135,7 +139,7 @@ export async function startReadyCheckPhase(
       name: `🔊 Ready Check #${match.match_id}`,
       type: ChannelType.GuildVoice,
       parent: categoryId,
-      userLimit: 6,
+      userLimit: rosterSize,
       permissionOverwrites: voiceOverrides,
     });
   } catch (err) {
@@ -156,6 +160,7 @@ export async function startReadyCheckPhase(
   const matchQueue: ActiveQueue = {
     channel_id: textChannelId,
     guild_id: guildId,
+    team_size: teamSize,
     player_ids: [...queue.player_ids],
     player_join_times: queue.player_join_times ? { ...queue.player_join_times } : undefined,
     state: 'READY_CHECK',
@@ -167,7 +172,7 @@ export async function startReadyCheckPhase(
   // 2. Immediately free up the original rank queue channel so new players can join
   //    concurrently during Ready Check.
   //
-  //    Remove only the 6 players who popped, rather than clearing the row. Clearing it
+  //    Remove only the players who popped, rather than clearing the row. Clearing it
   //    threw away anyone waiting behind them — which happened on every ready-check re-pop
   //    (the caller saves the overflow players, then this ran and wiped them) and any time
   //    a 7th player joined while the ready check was being set up.
@@ -198,22 +203,22 @@ export async function startReadyCheckPhase(
   const matchTextChannel = (await guild.channels.fetch(textChannelId).catch(() => null)) as TextChannel;
   let readyMsg: Message | undefined;
   if (matchTextChannel) {
-    const players = getPlayersByIds(matchQueue.guild_id, matchQueue.player_ids);
-    const readyImg = await generateReadyCheckImage(client, players, [], 60);
+    const players = getPlayersByIds(matchQueue.guild_id, matchQueue.team_size, matchQueue.player_ids);
+    const readyImg = await generateReadyCheckImage(client, players, [], 60, teamSize);
     const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
 
     readyMsg = await matchTextChannel.send({
       content:
-        `🚨 **QUEUE FULL (6/6)! AFK VOICE READY CHECK!**\n` +
+        `🚨 **QUEUE FULL (${rosterSize}/${rosterSize})! AFK VOICE READY CHECK!**\n` +
         `${mentions}\n\n` +
         `⏳ **You have 60 seconds to connect to <#${readyCheckVc.id}>!**\n` +
-        `*All 6 players must join the voice channel to confirm they are ready. Anyone who fails to join within 60s will be removed from the queue.*`,
+        `*All ${rosterSize} players must join the voice channel to confirm they are ready. Anyone who fails to join within 60s will be removed from the queue.*`,
       files: [attachment],
     }).catch(() => undefined);
   }
 
   const popNotice = await queueChannel.send({
-    content: `🔔 **Queue Full (6/6)!** Match **#${match.match_id}** lobby created in <#${textChannelId}>. Please connect to **🔊 Ready Check #${match.match_id}** (<#${readyCheckVc.id}>) within 60 seconds!`,
+    content: `🔔 **Queue Full (${rosterSize}/${rosterSize})!** Match **#${match.match_id}** (${teamSize}v${teamSize}) lobby created in <#${textChannelId}>. Please connect to **🔊 Ready Check #${match.match_id}** (<#${readyCheckVc.id}>) within 60 seconds!`,
   }).catch(() => null);
   setTimeout(() => popNotice?.delete().catch(() => null), 15_000);
 
@@ -254,9 +259,9 @@ export async function startReadyCheckPhase(
     }
 
     if (elapsed % 6 === 0 && readyMsg) {
-      const players = getPlayersByIds(currentQueue.guild_id, currentQueue.player_ids);
+      const players = getPlayersByIds(currentQueue.guild_id, currentQueue.team_size, currentQueue.player_ids);
       const readyIds = Array.from(vc.members.keys());
-      const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, 60 - elapsed));
+      const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, 60 - elapsed), teamSize);
       const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
       await readyMsg.edit({
         files: [attachment],
@@ -306,9 +311,9 @@ export async function startReadyCheckPhase(
         }
       }
 
-      if (combinedIds.length >= 6) {
-        const nextMatchIds = combinedIds.slice(0, 6);
-        const remainingIds = combinedIds.slice(6);
+      if (combinedIds.length >= rosterSize) {
+        const nextMatchIds = combinedIds.slice(0, rosterSize);
+        const remainingIds = combinedIds.slice(rosterSize);
 
         rankQueue.player_ids = remainingIds;
         rankQueue.player_join_times = {};
@@ -321,13 +326,14 @@ export async function startReadyCheckPhase(
         const afkNotice = await queueChannel.send({
           content:
             `❌ **Ready Check Failed in Match #${match.match_id}.**\n` +
-            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue popped again (**6/6**)!`,
+            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue popped again (**${rosterSize}/${rosterSize}**)!`,
         }).catch(() => null);
         setTimeout(() => afkNotice?.delete().catch(() => null), 15_000);
 
         const popQueue: ActiveQueue = {
           channel_id: channelId,
           guild_id: guildId,
+          team_size: teamSize,
           player_ids: nextMatchIds,
           player_join_times: {},
           state: 'WAITING',
@@ -346,7 +352,7 @@ export async function startReadyCheckPhase(
         const afkNotice = await queueChannel.send({
           content:
             `❌ **Ready Check Failed in Match #${match.match_id}.**\n` +
-            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue is now **${rankQueue.player_ids.length}/6**.`,
+            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue is now **${rankQueue.player_ids.length}/${rosterSize}**.`,
         }).catch(() => null);
         setTimeout(() => afkNotice?.delete().catch(() => null), 15_000);
       }

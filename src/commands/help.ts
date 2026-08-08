@@ -15,28 +15,35 @@ export const helpCommand = {
       .setTitle('🚀 ROCKET LEAGUE 6MANS BOT — GUIDE & COMMANDS')
       .setColor(RL_COLORS.ORANGE)
       .setDescription(
-        'Welcome to **Rocket League 6mans**! A competitive 3v3 pick-up game system with automated drafting, lobbies, voice channels, and ELO tracking.'
+        'Welcome to **Rocket League 6mans**! A competitive pick-up game system at **2v2, 3v3 or 4v4**, with automated drafting, lobbies, voice channels, and ELO tracking.'
       )
       .addFields(
         {
           name: '🎮 HOW TO PLAY',
           value:
-            '1. Click **Join Queue** on the interactive Queue Panel.\n' +
-            '2. When 6 players join, vote for **Captains Draft**, **Balanced MMR**, or **Random Teams**.\n' +
+            '1. Click **Join Queue** on the interactive Queue Panel. Each queue channel is a fixed size — the panel says which.\n' +
+            '2. When the queue fills, vote for **Captains Draft**, **Balanced MMR**, or **Random Teams**.\n' +
             '3. The bot generates a private **Rocket League Lobby Name & Password** and creates temporary **Team Blue 🔵** and **Team Orange 🟠** voice channels.\n' +
             '4. After the match, click **Report Blue Win** or **Report Orange Win** to record the score and update ELO ratings.',
+          inline: false,
+        },
+        {
+          name: '📊 SIZES ARE SEPARATE LADDERS',
+          value:
+            'Your 2v2, 3v3 and 4v4 ratings are completely independent — separate MMR, W/L, division and leaderboard. ' +
+            'Winning at 3v3 does nothing to your 2v2 rank. Most commands take an optional `size:` (defaulting to 3v3).',
           inline: false,
         },
         {
           name: '💬 PLAYER COMMANDS',
           value:
             '`/queue status` — Check who is waiting in the queue\n' +
-            '`/stats [user]` — View ELO rating, division, wins, losses, and win rate\n' +
-            '`/leaderboard [division]` — Top players in a division (defaults to yours)\n' +
-            '`/history [user]` — View completed 6mans match history\n' +
+            '`/stats [user] [size]` — View ELO rating, division, wins, losses, and win rate\n' +
+            '`/leaderboard [division] [size]` — Top players in a division (defaults to yours)\n' +
+            '`/history [user] [size]` — View completed match history\n' +
             '`/match list` — View all active matches\n' +
-            '`/division list` — See every division and its promotion thresholds\n' +
-            '`/division check [user]` — See a player\'s division and season standing\n' +
+            '`/division list [size]` — See every division and its promotion thresholds\n' +
+            '`/division check [user] [size]` — See a player\'s division and season standing\n' +
             '`/season info` — Current season, matches played, division sizes\n' +
             '`/season history` — Past seasons and their champions',
           inline: false,
@@ -44,7 +51,7 @@ export const helpCommand = {
         {
           name: '🛠️ ADMIN / MOD COMMANDS',
           value:
-            '`/queue panel` — Deploy the persistent interactive Queue Panel\n' +
+            '`/queue panel [size] [division]` — Deploy the Queue Panel and set this channel\'s size\n' +
             '`/queue add <user>` — Manually add a player to the queue\n' +
             '`/queue remove <user>` — Manually remove a player from the queue\n' +
             '`/queue clear` — Clear the current queue\n' +
@@ -53,13 +60,13 @@ export const helpCommand = {
             '`/match report <id> <winner>` — Force report a match winner\n' +
             '`/match cancel <id>` — Force cancel an active match\n' +
             '`/match cleanup [id]` — Clean up temporary match channels\n' +
-            '`/set-mmr <user> <mmr>` — Adjust a player\'s ELO rating\n' +
+            '`/set-mmr <user> <mmr> [size]` — Adjust a player\'s ELO rating\n' +
             '`/ban add <user> <duration> [reason]` — Ban a player from queuing\n' +
             '`/ban remove <user>` — Remove an active queue ban\n' +
             '`/ban check <user>` — Check ban status for a player\n' +
             '`/ban list` — List all active queue bans\n' +
-            '`/division place <user> <division>` — Place a player into a division\n' +
-            '`/division configure <division>` — Set a division\'s channel, role or thresholds\n' +
+            '`/division place <user> <division> [size]` — Place a player into a division\n' +
+            '`/division configure <division> [size]` — Set a division\'s channel, role or thresholds\n' +
             '`/season end <confirm>` — End the season: promote, relegate, reset MMR',
           inline: false,
         },

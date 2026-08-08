@@ -191,11 +191,15 @@ export function getLeaderboardButtons(page: number, totalPages: number): ActionR
 /**
  * ActionRow for proposing Double or Nothing after match completion (60s timer).
  */
-export function getGambleProposeButton(matchId: number, disabled: boolean = false): ActionRowBuilder<ButtonBuilder> {
+export function getGambleProposeButton(
+  matchId: number,
+  disabled: boolean = false,
+  rosterSize: number = 6
+): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`gamble_propose_${matchId}`)
-      .setLabel('Double or Nothing (6/6 Required)')
+      .setLabel(`Double or Nothing (${rosterSize}/${rosterSize} Required)`)
       .setEmoji('🎰')
       .setStyle(ButtonStyle.Primary)
       .setDisabled(disabled)

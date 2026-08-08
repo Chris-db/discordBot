@@ -93,11 +93,12 @@ export function getDivisionTier(division: string): RankTier {
  */
 export function getPromotionStatus(
   guildId: string,
+  teamSize: number,
   division: string,
   mmr: number,
   previousMmr?: number
 ): { label: string; emoji: string; color: string } | null {
-  const config = getDivision(guildId, division);
+  const config = getDivision(guildId, teamSize, division);
   if (!config) return null;
 
   const wasAbovePromotion =

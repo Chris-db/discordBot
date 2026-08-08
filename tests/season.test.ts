@@ -16,24 +16,39 @@ import { endSeason, resolveDivisionChange, nextSeasonNameAfter } from '../src/se
 
 const G = 'guild_season_test';
 
-/** Inserts a player directly so the test controls division and MMR exactly. */
-function seedPlayer(discordId: string, division: string, mmr: number, wins = 5, losses = 5) {
+/** Identity plus one ladder row. Defaults to 3v3, the size everything used to be. */
+function seedPlayerAt(
+  guildId: string,
+  teamSize: number,
+  discordId: string,
+  division: string,
+  mmr: number,
+  wins = 5,
+  losses = 5
+) {
   db.prepare(
-    `INSERT OR REPLACE INTO players
-       (guild_id, discord_id, username, division, mmr, wins, losses, streak, placed)
+    `INSERT OR REPLACE INTO players (guild_id, discord_id, username) VALUES (?, ?, ?)`
+  ).run(guildId, discordId, `User_${discordId}`);
+  db.prepare(
+    `INSERT OR REPLACE INTO player_ladders
+       (guild_id, discord_id, team_size, division, mmr, wins, losses, streak, placed)
      VALUES (?, ?, ?, ?, ?, ?, ?, 3, 1)`
-  ).run(G, discordId, `User_${discordId}`, division, mmr, wins, losses);
+  ).run(guildId, discordId, teamSize, division, mmr, wins, losses);
+}
+
+function seedPlayer(discordId: string, division: string, mmr: number, wins = 5, losses = 5) {
+  seedPlayerAt(G, 3, discordId, division, mmr, wins, losses);
 }
 
 describe('season resets', () => {
   beforeEach(() => {
     // season_snapshots references seasons, so it has to go first.
-    db.exec('DELETE FROM season_snapshots; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
     seedGuildDefaults(db, G);
   });
 
   describe('resolveDivisionChange', () => {
-    const ladder = () => getDivisions(G);
+    const ladder = () => getDivisions(G, 3);
 
     it('promotes a player who finished at or above the promotion line', () => {
       // Rank B promotes at 1400.
@@ -73,19 +88,19 @@ describe('season resets', () => {
       endSeason(G);
 
       // Divisions have their own defaults: C=1000, B=1300, A=1500.
-      expect(getPlayer(G, 'promoted')!.division).toBe('A');
-      expect(getPlayer(G, 'promoted')!.mmr).toBe(1500);
-      expect(getPlayer(G, 'stayed')!.division).toBe('B');
-      expect(getPlayer(G, 'stayed')!.mmr).toBe(1300);
-      expect(getPlayer(G, 'relegated')!.division).toBe('C');
-      expect(getPlayer(G, 'relegated')!.mmr).toBe(1000);
+      expect(getPlayer(G, 3, 'promoted')!.division).toBe('A');
+      expect(getPlayer(G, 3, 'promoted')!.mmr).toBe(1500);
+      expect(getPlayer(G, 3, 'stayed')!.division).toBe('B');
+      expect(getPlayer(G, 3, 'stayed')!.mmr).toBe(1300);
+      expect(getPlayer(G, 3, 'relegated')!.division).toBe('C');
+      expect(getPlayer(G, 3, 'relegated')!.mmr).toBe(1000);
     });
 
     it('clears win/loss/streak so the new season starts even', () => {
       seedPlayer('p1', 'B', 1300, 40, 2);
       endSeason(G);
 
-      const p = getPlayer(G, 'p1')!;
+      const p = getPlayer(G, 3, 'p1')!;
       expect(p.wins).toBe(0);
       expect(p.losses).toBe(0);
       expect(p.streak).toBe(0);
@@ -97,7 +112,7 @@ describe('season resets', () => {
       seedPlayer('third', 'B', 1210, 10, 20);
 
       const { endedSeason } = endSeason(G);
-      const snaps = getSeasonSnapshots(endedSeason.season_id, 'B');
+      const snaps = getSeasonSnapshots(endedSeason.season_id, 3, 'B');
 
       expect(snaps.map(s => s.discord_id)).toEqual(['first', 'second', 'third']);
       expect(snaps.map(s => s.final_rank)).toEqual([1, 2, 3]);
@@ -113,8 +128,8 @@ describe('season resets', () => {
       const { endedSeason } = endSeason(G);
 
       // Both are #1 -- of their own division, not of the server.
-      expect(getSeasonSnapshots(endedSeason.season_id, 'A')[0].final_rank).toBe(1);
-      expect(getSeasonSnapshots(endedSeason.season_id, 'B')[0].final_rank).toBe(1);
+      expect(getSeasonSnapshots(endedSeason.season_id, 3, 'A')[0].final_rank).toBe(1);
+      expect(getSeasonSnapshots(endedSeason.season_id, 3, 'B')[0].final_rank).toBe(1);
     });
 
     it('closes the old season and opens the next', () => {
@@ -136,15 +151,12 @@ describe('season resets', () => {
 
     it('does not touch another guild', () => {
       seedGuildDefaults(db, 'other_guild');
-      db.prepare(
-        `INSERT INTO players (guild_id, discord_id, username, division, mmr, wins, losses, streak, placed)
-         VALUES ('other_guild', 'outsider', 'Outsider', 'B', 1390, 12, 1, 0, 1)`
-      ).run();
+      seedPlayerAt('other_guild', 3, 'outsider', 'B', 1390, 12, 1);
       seedPlayer('insider', 'B', 1390);
 
       endSeason(G);
 
-      const outsider = getPlayer('other_guild', 'outsider')!;
+      const outsider = getPlayer('other_guild', 3, 'outsider')!;
       expect(outsider.mmr).toBe(1390);
       expect(outsider.wins).toBe(12);
       expect(getActiveSeason('other_guild')!.name).toBe('Season 1');
@@ -171,62 +183,60 @@ describe('season resets', () => {
 describe('guild-scoped players and divisions', () => {
   beforeEach(() => {
     // season_snapshots references seasons, so it has to go first.
-    db.exec('DELETE FROM season_snapshots; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
     seedGuildDefaults(db, G);
     seedGuildDefaults(db, 'guild_b');
   });
 
   it('keeps the same discord id independent across guilds', () => {
-    getOrCreatePlayer(G, 'shared', 'Shared');
-    getOrCreatePlayer('guild_b', 'shared', 'Shared');
+    getOrCreatePlayer(G, 3, 'shared', 'Shared');
+    getOrCreatePlayer('guild_b', 3, 'shared', 'Shared');
 
-    setPlayerDivision(G, 'shared', 'A');
+    setPlayerDivision(G, 3, 'shared', 'A');
 
-    expect(getPlayer(G, 'shared')!.division).toBe('A');
-    expect(getPlayer(G, 'shared')!.mmr).toBe(1500);
-    expect(getPlayer('guild_b', 'shared')!.division).toBe('C');
-    expect(getPlayer('guild_b', 'shared')!.mmr).toBe(1000);
+    expect(getPlayer(G, 3, 'shared')!.division).toBe('A');
+    expect(getPlayer(G, 3, 'shared')!.mmr).toBe(1500);
+    expect(getPlayer('guild_b', 3, 'shared')!.division).toBe('C');
+    expect(getPlayer('guild_b', 3, 'shared')!.mmr).toBe(1000);
   });
 
   it('starts new players unplaced in the lowest division', () => {
-    const p = getOrCreatePlayer(G, 'rookie', 'Rookie');
+    const p = getOrCreatePlayer(G, 3, 'rookie', 'Rookie');
     expect(p.division).toBe('C');
     expect(p.placed).toBe(0);
     expect(p.mmr).toBe(1000);
   });
 
   it('marks a player placed once an admin assigns a division', () => {
-    getOrCreatePlayer(G, 'rookie', 'Rookie');
-    const placed = setPlayerDivision(G, 'rookie', 'X')!;
+    getOrCreatePlayer(G, 3, 'rookie', 'Rookie');
+    const placed = setPlayerDivision(G, 3, 'rookie', 'X')!;
     expect(placed.placed).toBe(1);
     expect(placed.division).toBe('X');
     expect(placed.mmr).toBe(1700);
   });
 
   it('can move a player without resetting their MMR', () => {
-    getOrCreatePlayer(G, 'keep', 'Keep');
-    setPlayerDivision(G, 'keep', 'B', false);
-    expect(getPlayer(G, 'keep')!.division).toBe('B');
-    expect(getPlayer(G, 'keep')!.mmr).toBe(1000);
+    getOrCreatePlayer(G, 3, 'keep', 'Keep');
+    setPlayerDivision(G, 3, 'keep', 'B', false);
+    expect(getPlayer(G, 3, 'keep')!.division).toBe('B');
+    expect(getPlayer(G, 3, 'keep')!.mmr).toBe(1000);
   });
 
   it('rejects a division the guild does not have', () => {
-    getOrCreatePlayer(G, 'p1', 'P1');
-    expect(() => setPlayerDivision(G, 'p1', 'Z')).toThrow(/not configured/);
+    getOrCreatePlayer(G, 3, 'p1', 'P1');
+    expect(() => setPlayerDivision(G, 3, 'p1', 'Z')).toThrow(/not configured/);
   });
 
   it('scopes leaderboards and ranks to one division', () => {
-    db.prepare(
-      `INSERT INTO players (guild_id, discord_id, username, division, mmr, wins, losses, streak, placed)
-       VALUES (?, 'a1', 'A1', 'A', 1600, 0, 0, 0, 1), (?, 'a2', 'A2', 'A', 1500, 0, 0, 0, 1),
-              (?, 'b1', 'B1', 'B', 1390, 0, 0, 0, 1)`
-    ).run(G, G, G);
+    seedPlayerAt(G, 3, 'a1', 'A', 1600, 0, 0);
+    seedPlayerAt(G, 3, 'a2', 'A', 1500, 0, 0);
+    seedPlayerAt(G, 3, 'b1', 'B', 1390, 0, 0);
 
-    const aBoard = getLeaderboard(G, 'A');
+    const aBoard = getLeaderboard(G, 3, 'A');
     expect(aBoard.map(p => p.discord_id)).toEqual(['a1', 'a2']);
 
     // b1 has the lowest MMR overall but tops their own division.
-    expect(getPlayerRank(G, 'b1')).toEqual({ rank: 1, total: 1, division: 'B' });
-    expect(getPlayerRank(G, 'a2')).toEqual({ rank: 2, total: 2, division: 'A' });
+    expect(getPlayerRank(G, 3, 'b1')).toEqual({ rank: 1, total: 1, division: 'B' });
+    expect(getPlayerRank(G, 3, 'a2')).toEqual({ rank: 2, total: 2, division: 'A' });
   });
 });

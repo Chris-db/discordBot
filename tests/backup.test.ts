@@ -19,14 +19,14 @@ const stamp = (d: Date) =>
 describe('nightly database backup', () => {
   beforeEach(() => {
     clean();
-    db.exec('DELETE FROM players;');
+    db.exec('DELETE FROM player_ladders; DELETE FROM players;');
   });
 
   afterAll(clean);
 
   it('writes a backup that is a real, readable database with the data in it', () => {
-    getOrCreatePlayer('g1', 'p1', 'Chris');
-    updatePlayerAfterMatch('g1', 'p1', 250, true);
+    getOrCreatePlayer('g1', 3, 'p1', 'Chris');
+    updatePlayerAfterMatch('g1', 3, 'p1', 250, true);
 
     const file = runBackup();
     expect(file).toBeTruthy();
@@ -35,7 +35,13 @@ describe('nightly database backup', () => {
     // Open the snapshot independently — a file existing proves nothing about its contents.
     const snapshot = new Database(file!, { readonly: true });
     try {
-      const row = snapshot.prepare('SELECT * FROM players WHERE discord_id = ?').get('p1') as any;
+      const row = snapshot
+        .prepare(
+          `SELECT p.username, l.mmr, l.wins FROM player_ladders l
+           JOIN players p ON p.guild_id = l.guild_id AND p.discord_id = l.discord_id
+           WHERE l.discord_id = ? AND l.team_size = 3`
+        )
+        .get('p1') as any;
       expect(row.username).toBe('Chris');
       expect(row.mmr).toBe(1250);
       expect(row.wins).toBe(1);

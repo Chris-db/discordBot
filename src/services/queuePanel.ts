@@ -19,8 +19,10 @@ import {
   getMatchByTextChannel,
   getActiveBan,
   getAllQueues,
+  getDivisionByChannel,
   ActiveQueue,
 } from '../database/queries';
+import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import db from '../database/db';
 import config from '../config';
 import { createMatchChannels } from './channelService';
@@ -41,7 +43,33 @@ const panelMoveTimers = new Map<string, NodeJS.Timeout>();
 const activePanelRefreshes = new Map<string, Promise<void>>();
 
 /**
+ * The team size a channel queues at.
+ *
+ * A queue channel is registered against exactly one (division, size) pair, so the division
+ * row that owns the channel is the single source of truth. A channel nobody has registered
+ * -- a scratch channel someone ran `/queue panel` in -- falls back to 3v3.
+ */
+export function resolveTeamSize(guildId: string, channelId: string): number {
+  return getDivisionByChannel(guildId, channelId)?.team_size ?? DEFAULT_TEAM_SIZE;
+}
+
+/**
+ * The ladder a button pressed in this channel should read from.
+ *
+ * Prefers the live queue row, which is what the panel above the button is actually
+ * showing, and falls back to the channel's registration for buttons pressed somewhere
+ * without a queue (a /leaderboard reply in general chat, say).
+ */
+export function channelTeamSize(guildId: string, channelId: string): number {
+  return getQueue(channelId)?.team_size ?? resolveTeamSize(guildId, channelId);
+}
+
+/**
  * Gets or initializes a queue for a given channel.
+ *
+ * The size is resolved once, here, and then read off the row for the rest of the queue's
+ * life. Re-resolving mid-flow would let an admin repointing a channel change the size of a
+ * lobby that is already mid ready-check.
  */
 export function getOrInitQueue(channelId: string, guildId: string): ActiveQueue {
   let queue = getQueue(channelId);
@@ -49,6 +77,7 @@ export function getOrInitQueue(channelId: string, guildId: string): ActiveQueue 
     queue = {
       channel_id: channelId,
       guild_id: guildId,
+      team_size: resolveTeamSize(guildId, channelId),
       player_ids: [],
       player_join_times: {},
       state: 'WAITING',
@@ -93,11 +122,11 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     const channel = (await client.channels.fetch(channelId)) as TextChannel;
     if (!channel) return;
 
-    const players = getPlayersByIds(queue.guild_id, queue.player_ids);
-    const imageBuffer = await generateQueuePanelImage(client, players);
+    const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
+    const imageBuffer = await generateQueuePanelImage(client, players, queue.team_size);
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
 
-    const embed = buildQueuePanelEmbed(players);
+    const embed = buildQueuePanelEmbed(players, queue.team_size);
     embed.setImage('attachment://queue_panel.png');
     const components = [getQueuePanelButtons()];
 
@@ -202,8 +231,10 @@ export async function handleJoinQueue(
     }
   }
 
-  // Ensure player exists in DB
-  getOrCreatePlayer(guildId, user.id, user.username);
+  // Ensure the player has a row on this channel's ladder. Their first 2v2 starts fresh
+  // rather than inheriting their 3v3 rating.
+  const teamSize = resolveTeamSize(guildId, channelId);
+  getOrCreatePlayer(guildId, teamSize, user.id, user.username);
 
   // Atomically add player to queue inside a SQLite transaction
   const txResult = db.transaction(() => {
@@ -218,7 +249,12 @@ export async function handleJoinQueue(
     queue.player_join_times = queue.player_join_times || {};
     queue.player_join_times[user.id] = Date.now();
     saveQueue(queue);
-    return { success: true, message: 'Joined the queue! 🚀', newCount: queue.player_ids.length };
+    return {
+      success: true,
+      message: 'Joined the queue! 🚀',
+      newCount: queue.player_ids.length,
+      capacity: queue.team_size * 2,
+    };
   })();
 
   if (!txResult.success) {
@@ -227,10 +263,14 @@ export async function handleJoinQueue(
 
   await refreshQueuePanel(client, channelId);
 
-  // If queue hits 6, start AFK voice ready check!
-  if (txResult.newCount === 6) {
+  // Queue full -- start the AFK voice ready check.
+  if (txResult.newCount === txResult.capacity) {
     const latestQueue = getQueue(channelId);
-    if (latestQueue && latestQueue.state === 'WAITING' && latestQueue.player_ids.length === 6) {
+    if (
+      latestQueue &&
+      latestQueue.state === 'WAITING' &&
+      latestQueue.player_ids.length === latestQueue.team_size * 2
+    ) {
       await startReadyCheckPhase(client, channelId, guildId, latestQueue);
     }
   }
@@ -371,6 +411,7 @@ export async function fillQueueWithBots(
     return { success: false, message: 'Queue has already popped!' };
   }
 
+  // Eight of them, so a 4v4 queue can be filled as easily as a 2v2 one.
   const testBots = [
     { id: 'test_bot_1', name: 'Squishy (Bot)', mmr: 1250 },
     { id: 'test_bot_2', name: 'GarrettG (Bot)', mmr: 1350 },
@@ -378,13 +419,17 @@ export async function fillQueueWithBots(
     { id: 'test_bot_4', name: 'MonkeyMoon (Bot)', mmr: 1400 },
     { id: 'test_bot_5', name: 'Vatira (Bot)', mmr: 1050 },
     { id: 'test_bot_6', name: 'Scrub Killa (Bot)', mmr: 1150 },
+    { id: 'test_bot_7', name: 'Firstkiller (Bot)', mmr: 1300 },
+    { id: 'test_bot_8', name: 'Zen (Bot)', mmr: 1200 },
   ];
 
+  const capacity = queue.team_size * 2;
+
   for (const bot of testBots) {
-    if (queue.player_ids.length >= 6) break;
+    if (queue.player_ids.length >= capacity) break;
     if (!queue.player_ids.includes(bot.id)) {
-      getOrCreatePlayer(queue.guild_id, bot.id, bot.name);
-      setPlayerMmr(queue.guild_id, bot.id, bot.mmr);
+      getOrCreatePlayer(queue.guild_id, queue.team_size, bot.id, bot.name);
+      setPlayerMmr(queue.guild_id, queue.team_size, bot.id, bot.mmr);
       queue.player_ids.push(bot.id);
       queue.player_join_times = queue.player_join_times || {};
       queue.player_join_times[bot.id] = Date.now();
@@ -394,13 +439,13 @@ export async function fillQueueWithBots(
   saveQueue(queue);
   await refreshQueuePanel(client, channelId);
 
-  if (queue.player_ids.length === 6 && !skipVoting) {
+  if (queue.player_ids.length === capacity && !skipVoting) {
     await startReadyCheckPhase(client, channelId, guildId, queue);
   }
 
   return {
     success: true,
-    message: `🤖 Filled queue with simulated bot players (${queue.player_ids.length}/6)!`,
+    message: `🤖 Filled queue with simulated bot players (${queue.player_ids.length}/${capacity})!`,
   };
 }
 
@@ -416,11 +461,12 @@ export async function forcePopQueue(
   await fillQueueWithBots(client, channelId, guildId, true);
 
   const queue = getQueue(channelId);
-  if (!queue || queue.player_ids.length !== 6) {
-    return { success: false, message: 'Could not fill queue to 6 players.' };
+  const capacity = (queue?.team_size ?? DEFAULT_TEAM_SIZE) * 2;
+  if (!queue || queue.player_ids.length !== capacity) {
+    return { success: false, message: `Could not fill queue to ${capacity} players.` };
   }
 
-  const players = getPlayersByIds(queue.guild_id, queue.player_ids);
+  const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
 
   if (!mode) {
     await startReadyCheckPhase(client, channelId, guildId, queue);
@@ -431,6 +477,7 @@ export async function forcePopQueue(
   const match = createMatch({
     guild_id: guildId,
     channel_id: channelId,
+    team_size: queue.team_size,
     state: mode === 'captains' ? 'DRAFTING' : 'IN_PROGRESS',
     blue_team: [...queue.player_ids],
     orange_team: [],
@@ -468,6 +515,7 @@ export async function forcePopQueue(
     const matchQueue: ActiveQueue = {
       channel_id: textChannelId,
       guild_id: guildId,
+      team_size: queue.team_size,
       player_ids: [...players.map(p => p.discord_id)],
       state: 'DRAFTING',
       vote_counts: { captains: [], balanced: [], random: [] },

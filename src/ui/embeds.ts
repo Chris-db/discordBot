@@ -1,6 +1,8 @@
 import { EmbedBuilder, User } from 'discord.js';
 import { Player, Match, getPlayersByIds } from '../database/queries';
 import { getDivisionTier, getStreakBadge } from '../services/mmrService';
+import { DEFAULT_TEAM_SIZE } from '../database/migrations';
+import { formatTeamSize } from './teamSize';
 
 export const RL_COLORS = {
   ORANGE: 0xff5722,
@@ -15,15 +17,16 @@ export const RL_COLORS = {
 /**
  * Builds the persistent Queue Panel Embed.
  */
-export function buildQueuePanelEmbed(players: Player[]): EmbedBuilder {
+export function buildQueuePanelEmbed(players: Player[], teamSize: number): EmbedBuilder {
   const count = players.length;
+  const capacity = teamSize * 2;
   const embed = new EmbedBuilder()
-    .setTitle('🚀 ROCKET LEAGUE 6MANS QUEUE')
-    .setColor(count === 6 ? RL_COLORS.GREEN : RL_COLORS.ORANGE)
+    .setTitle(`🚀 ROCKET LEAGUE ${formatTeamSize(teamSize).toUpperCase()} QUEUE`)
+    .setColor(count === capacity ? RL_COLORS.GREEN : RL_COLORS.ORANGE)
     .setDescription(
       count === 0
         ? 'The queue is currently empty. Click **Join Queue** below to start!'
-        : `**Current Queue (${count}/6):**\n\n` +
+        : `**Current Queue (${count}/${capacity}):**\n\n` +
         players
           .map((p, idx) => {
             return `**${idx + 1}.** <@${p.discord_id}> — \`${p.mmr} MMR\``;
@@ -31,7 +34,7 @@ export function buildQueuePanelEmbed(players: Player[]): EmbedBuilder {
           .join('\n')
     )
     .setFooter({
-      text: 'Rocket League 6mans',
+      text: `Rocket League ${formatTeamSize(teamSize)}`,
     })
     .setTimestamp();
 
@@ -39,11 +42,12 @@ export function buildQueuePanelEmbed(players: Player[]): EmbedBuilder {
 }
 
 /**
- * Builds the Mode Voting Embed when 6/6 players is reached.
+ * Builds the Mode Voting Embed once the queue is full.
  */
 export function buildModeVoteEmbed(
   players: Player[],
-  voteCounts: { captains: number; balanced: number; random: number }
+  voteCounts: { captains: number; balanced: number; random: number },
+  votesRequired: number
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setTitle('🗳️ VOTE: TEAM SELECTION MODE')
@@ -53,7 +57,7 @@ export function buildModeVoteEmbed(
       `⚖️ **Balanced MMR:** \`${voteCounts.balanced} votes\`\n` +
       `🎲 **Random Teams:** \`${voteCounts.random} votes\``
     )
-    .setFooter({ text: 'Voting closes in 30s or when 4 votes align' })
+    .setFooter({ text: `Voting closes in 30s or when ${votesRequired} votes align` })
     .setTimestamp();
 
   return embed;
@@ -69,15 +73,16 @@ export function buildCaptainsDraftEmbed(
   orangeTeam: Player[],
   remaining: Player[],
   turn: 'BLUE' | 'ORANGE',
-  pickNumber: number
+  pickNumber: number,
+  totalPicks: number
 ): EmbedBuilder {
   const currentCaptain = turn === 'BLUE' ? blueCaptain : orangeCaptain;
   const embed = new EmbedBuilder()
-    .setTitle('👑 CAPTAINS 1-2-1 DRAFT')
+    .setTitle('👑 CAPTAINS DRAFT')
     .setColor(RL_COLORS.PURPLE)
     .setDescription(
       `**Turn:** ${turn === 'BLUE' ? '🔵 Blue' : '🟠 Orange'} (<@${currentCaptain.discord_id}>)\n` +
-      `**Pick:** #${pickNumber} of 3`
+      `**Pick:** #${pickNumber} of ${totalPicks}`
     )
     .addFields(
       {
@@ -346,13 +351,14 @@ export function buildLeaderboardEmbed(
   page: number = 1,
   totalPlayers: number = players.length,
   topPlayerAvatarUrl?: string,
-  hasImage: boolean = true
+  hasImage: boolean = true,
+  teamSize: number = players[0]?.team_size ?? DEFAULT_TEAM_SIZE
 ): EmbedBuilder {
   const totalPages = Math.max(1, Math.ceil(totalPlayers / 10));
   const startIdx = (page - 1) * 10;
 
   const embed = new EmbedBuilder()
-    .setTitle('🏆 ROCKET LEAGUE 6MANS — SERVER ELO LEADERBOARD')
+    .setTitle(`🏆 ${formatTeamSize(teamSize)} — SERVER ELO LEADERBOARD`)
     .setColor(RL_COLORS.GOLD)
     .setDescription(
       players.length === 0
@@ -373,7 +379,9 @@ export function buildLeaderboardEmbed(
           })
           .join('\n')
     )
-    .setFooter({ text: `Page ${page} of ${totalPages} • Total Players: ${totalPlayers}` })
+    .setFooter({
+      text: `${formatTeamSize(teamSize)} • Page ${page} of ${totalPages} • Total Players: ${totalPlayers}`,
+    })
     .setTimestamp();
 
   if (topPlayerAvatarUrl) {
@@ -482,7 +490,7 @@ export function buildMatchHistoryEmbed(matches: Match[], targetUser?: User): Emb
 }
 
 /**
- * Builds the Double or Nothing Consensus Embed (6/6 Required).
+ * Builds the Double or Nothing Consensus Embed (unanimous agreement required).
  */
 export function buildGambleConsensusEmbed(
   matchId: number,
@@ -493,13 +501,14 @@ export function buildGambleConsensusEmbed(
   declinedBy?: string
 ): EmbedBuilder {
   const agreedCount = agreedIds.length;
+  const rosterSize = blueTeam.length + orangeTeam.length;
   const embed = new EmbedBuilder()
     .setTitle(`🎰 DOUBLE OR NOTHING: WHEEL OF FATE (Match #${matchId})`)
     .setColor(declinedBy ? RL_COLORS.RED : RL_COLORS.GOLD)
     .setDescription(
       declinedBy
         ? `❌ <@${declinedBy}> declined the gamble. Original match results stand!`
-        : `All 6 players must agree within **${timeRemainingSec}s** to spin the Wheel of Fate!\n\n` +
+        : `All ${rosterSize} players must agree within **${timeRemainingSec}s** to spin the Wheel of Fate!\n\n` +
           `**⚖️ The Stakes:**\n` +
           `• **If Losing Team wins the Wheel (50%):** 🛡️ **INVERTED!** Match outcome is flipped (\`+MMR\` for Losers, \`-MMR\` for Winners).\n` +
           `• **If Winning Team wins the Wheel (50%):** 🔥 **DOUBLED!** MMR gains & losses are doubled (\`+2x MMR\` / \`-2x MMR\`).`
@@ -514,12 +523,22 @@ export function buildGambleConsensusEmbed(
       .join('\n');
 
   embed.addFields(
-    { name: `🔵 Team Blue (${blueTeam.filter(p => agreedIds.includes(p.discord_id)).length}/3 Agreed)`, value: formatTeam(blueTeam), inline: true },
-    { name: `🟠 Team Orange (${orangeTeam.filter(p => agreedIds.includes(p.discord_id)).length}/3 Agreed)`, value: formatTeam(orangeTeam), inline: true }
+    {
+      name: `🔵 Team Blue (${blueTeam.filter(p => agreedIds.includes(p.discord_id)).length}/${blueTeam.length} Agreed)`,
+      value: formatTeam(blueTeam),
+      inline: true,
+    },
+    {
+      name: `🟠 Team Orange (${orangeTeam.filter(p => agreedIds.includes(p.discord_id)).length}/${orangeTeam.length} Agreed)`,
+      value: formatTeam(orangeTeam),
+      inline: true,
+    }
   );
 
   if (!declinedBy) {
-    embed.setFooter({ text: `Consensus: ${agreedCount} / 6 Players Agreed • ${timeRemainingSec}s Remaining` });
+    embed.setFooter({
+      text: `Consensus: ${agreedCount} / ${rosterSize} Players Agreed • ${timeRemainingSec}s Remaining`,
+    });
   }
 
   return embed;
@@ -528,7 +547,11 @@ export function buildGambleConsensusEmbed(
 /**
  * Builds the Spinning Wheel of Fate Embed (animated ticker).
  */
-export function buildGambleSpinningEmbed(step: 1 | 2, matchId: number): EmbedBuilder {
+export function buildGambleSpinningEmbed(
+  step: 1 | 2,
+  matchId: number,
+  rosterSize: number
+): EmbedBuilder {
   const ticker =
     step === 1
       ? `░░░ 🌀 **[🔵 BLUE]** — **[🟠 ORANGE]** — **[🔵 BLUE]** — **[🟠 ORANGE]** 🌀 ░░░`
@@ -542,7 +565,9 @@ export function buildGambleSpinningEmbed(step: 1 | 2, matchId: number): EmbedBui
   return new EmbedBuilder()
     .setTitle(title)
     .setColor(RL_COLORS.GOLD)
-    .setDescription(`**6/6 Agreed!** The Fate of Match #${matchId} is being decided!\n\n${ticker}`)
+    .setDescription(
+      `**${rosterSize}/${rosterSize} Agreed!** The Fate of Match #${matchId} is being decided!\n\n${ticker}`
+    )
     .setFooter({ text: 'Rocket League 6mans • High-Stakes Wheel of Fate' })
     .setTimestamp();
 }

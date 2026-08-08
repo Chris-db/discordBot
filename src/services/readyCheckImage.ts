@@ -6,16 +6,26 @@ import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
 
 /**
- * Generates an 840x320 AFK Voice Ready Check Canvas Graphic.
- * Displays all 6 queued players with a live status indicator showing who is in voice vs who is missing.
+ * Generates the AFK Voice Ready Check graphic: teamSize columns by 2 rows, matching the
+ * queue panel's layout so the two cards read as the same lobby.
+ *
+ * Displays every queued player with a live status indicator showing who is in voice and
+ * who is missing.
  */
 export async function generateReadyCheckImage(
   client: Client,
   players: Player[],
   readyPlayerIds: string[],
-  remainingSeconds: number
+  remainingSeconds: number,
+  teamSize: number
 ): Promise<Buffer> {
-  const width = 840;
+  const cardW = 240;
+  const cardH = 95;
+  const gap = 20;
+  const margin = 40;
+  const capacity = teamSize * 2;
+
+  const width = margin * 2 + teamSize * cardW + (teamSize - 1) * gap;
   const height = 320;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -36,26 +46,23 @@ export async function generateReadyCheckImage(
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
   ctx.font = `bold 28px ${FONT_STACK}`;
-  ctx.fillText('🔊 AFK VOICE READY CHECK (6 / 6)', width / 2, 45);
+  ctx.fillText(`🔊 AFK VOICE READY CHECK (${capacity} / ${capacity})`, width / 2, 45);
 
   ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = allReady ? '#00e676' : '#ff9100';
   const statusMsg = allReady
     ? '✅ ALL PLAYERS READY! LAUNCHING MODE VOTING...'
-    : `⏳ ALL 6 PLAYERS MUST JOIN VOICE — TIME REMAINING: ${remainingSeconds}s`;
+    : `⏳ ALL ${capacity} PLAYERS MUST JOIN VOICE — TIME REMAINING: ${remainingSeconds}s`;
   ctx.fillText(statusMsg, width / 2, 72);
 
-  // 3. 6 Player Grid (2x3)
-  const cardW = 240;
-  const cardH = 95;
-  const cols = [40, 300, 560];
+  // 3. Player grid, teamSize per row, two rows
   const rows = [95, 205];
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < capacity; i++) {
     const p = players[i];
-    const colIdx = i % 3;
-    const rowIdx = Math.floor(i / 3);
-    const x = cols[colIdx];
+    const colIdx = i % teamSize;
+    const rowIdx = Math.floor(i / teamSize);
+    const x = margin + colIdx * (cardW + gap);
     const y = rows[rowIdx];
 
     if (!p) continue;

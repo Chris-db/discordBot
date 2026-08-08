@@ -26,20 +26,20 @@ const fakeClient = {
 
 describe('Phase 1 regressions', () => {
   beforeEach(() => {
-    db.exec('DELETE FROM players; DELETE FROM active_queues; DELETE FROM matches; DELETE FROM bans;');
+    db.exec('DELETE FROM player_ladders; DELETE FROM players; DELETE FROM active_queues; DELETE FROM matches; DELETE FROM bans;');
   });
 
   // ---- P0-1 --------------------------------------------------------------
 
   describe('getPlayersByIds ordering', () => {
     it('returns players in the order they were requested, not in id order', () => {
-      getOrCreatePlayer('g1', 'aaa', 'Alpha');
-      getOrCreatePlayer('g1', 'bbb', 'Bravo');
-      getOrCreatePlayer('g1', 'ccc', 'Charlie');
+      getOrCreatePlayer('g1', 3, 'aaa', 'Alpha');
+      getOrCreatePlayer('g1', 3, 'bbb', 'Bravo');
+      getOrCreatePlayer('g1', 3, 'ccc', 'Charlie');
 
       // SQLite serves `IN` from the discord_id primary-key index, so the raw row order
       // is aaa,bbb,ccc regardless of what we ask for.
-      expect(getPlayersByIds('g1', ['ccc', 'aaa', 'bbb']).map(p => p.discord_id)).toEqual([
+      expect(getPlayersByIds('g1', 3, ['ccc', 'aaa', 'bbb']).map(p => p.discord_id)).toEqual([
         'ccc',
         'aaa',
         'bbb',
@@ -48,17 +48,17 @@ describe('Phase 1 regressions', () => {
 
     it('keeps the captain at index 0 so the crown renders on the right player', () => {
       // 'zzz_cap' sorts last by id but is the captain, i.e. index 0 of the team.
-      getOrCreatePlayer('g1', 'zzz_cap', 'Captain');
-      getOrCreatePlayer('g1', 'aaa_pick', 'FirstPick');
-      getOrCreatePlayer('g1', 'mmm_pick', 'SecondPick');
+      getOrCreatePlayer('g1', 3, 'zzz_cap', 'Captain');
+      getOrCreatePlayer('g1', 3, 'aaa_pick', 'FirstPick');
+      getOrCreatePlayer('g1', 3, 'mmm_pick', 'SecondPick');
 
       const blueTeam = ['zzz_cap', 'aaa_pick', 'mmm_pick'];
-      expect(getPlayersByIds('g1', blueTeam)[0].discord_id).toBe('zzz_cap');
+      expect(getPlayersByIds('g1', 3, blueTeam)[0].discord_id).toBe('zzz_cap');
     });
 
     it('drops ids that have no player row rather than returning holes', () => {
-      getOrCreatePlayer('g1', 'real', 'Real');
-      const result = getPlayersByIds('g1', ['real', 'ghost']);
+      getOrCreatePlayer('g1', 3, 'real', 'Real');
+      const result = getPlayersByIds('g1', 3, ['real', 'ghost']);
       expect(result.map(p => p.discord_id)).toEqual(['real']);
     });
   });

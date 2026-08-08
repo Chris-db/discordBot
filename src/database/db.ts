@@ -17,4 +17,11 @@ const db: Database.Database = new Database(config.dbPath, {
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Without a busy timeout, a write that lands while the nightly backup holds the file
+// throws SQLITE_BUSY immediately instead of waiting -- which would surface as a match
+// report simply failing. NORMAL is the standard companion to WAL: still crash-safe,
+// and it stops fsyncing on every single commit.
+db.pragma('busy_timeout = 5000');
+db.pragma('synchronous = NORMAL');
+
 export default db;

@@ -12,13 +12,14 @@ import { getDivisionTier } from '../services/mmrService';
 export function getCaptainsDraftSelectMenu(
   remainingPlayers: Player[],
   pickNumber: number,
-  turn: 'BLUE' | 'ORANGE'
+  turn: 'BLUE' | 'ORANGE',
+  totalPicks: number
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const teamLabel = turn === 'BLUE' ? '🔵 Blue Captain' : '🟠 Orange Captain';
 
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId('draft_select_player')
-    .setPlaceholder(`${teamLabel}: Choose a teammate (Pick #${pickNumber} of 3)...`)
+    .setPlaceholder(`${teamLabel}: Choose a teammate (Pick #${pickNumber} of ${totalPicks})...`)
     .addOptions(
       remainingPlayers.map(player => {
         const tier = getDivisionTier(player.division);

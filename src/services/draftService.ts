@@ -7,8 +7,21 @@ export interface DraftResult {
 }
 
 /**
- * Computes a unique canonical string key for a 3v3 matchup of 6 players,
- * invariant to which team is Blue vs. Orange.
+ * The team size implied by a roster, validated.
+ *
+ * Everything in here works at 2v2, 3v3 or 4v4; what it cannot do is split an odd or
+ * undersized roster, so that is the only thing worth rejecting.
+ */
+export function teamSizeForRoster(players: Player[], what = 'This'): number {
+  if (players.length < 4 || players.length % 2 !== 0) {
+    throw new Error(`${what} requires an even roster of at least 4 players, got ${players.length}.`);
+  }
+  return players.length / 2;
+}
+
+/**
+ * Computes a unique canonical string key for a matchup, invariant to which team is Blue
+ * vs. Orange.
  */
 export function getMatchupKey(blueTeam: Player[], orangeTeam: Player[]): string {
   const allPlayers = [...blueTeam, ...orangeTeam];
@@ -25,12 +38,14 @@ export function getMatchupKey(blueTeam: Player[], orangeTeam: Player[]): string 
 }
 
 /**
- * Returns all 10 unique 3v3 team combinations for 6 players.
+ * Every unique way to split the roster into two teams.
+ *
+ * Pinning the lowest-id player to teamA is what makes each split appear once rather than
+ * twice: it removes the Blue/Orange mirror. That leaves C(2n-1, n-1) matchups -- 3 at
+ * 2v2, 10 at 3v3, 35 at 4v4.
  */
 export function getAllUniqueMatchups(players: Player[]): DraftResult[] {
-  if (players.length !== 6) {
-    throw new Error('Requires exactly 6 players.');
-  }
+  const teamSize = teamSizeForRoster(players);
 
   const sorted = [...players].sort((a, b) => a.discord_id.localeCompare(b.discord_id));
   const refPlayer = sorted[0];
@@ -38,20 +53,58 @@ export function getAllUniqueMatchups(players: Player[]): DraftResult[] {
 
   const results: DraftResult[] = [];
 
-  for (let i = 0; i < others.length; i++) {
-    for (let j = i + 1; j < others.length; j++) {
-      const teamA = [refPlayer, others[i], others[j]];
-      const teamB = others.filter((_, idx) => idx !== i && idx !== j);
-      const key = getMatchupKey(teamA, teamB);
+  // Choose the teamSize-1 team-mates that join the reference player.
+  const choose = (start: number, picked: number[]) => {
+    if (picked.length === teamSize - 1) {
+      const inTeamA = new Set(picked);
+      const teamA = [refPlayer, ...picked.map(i => others[i])];
+      const teamB = others.filter((_, idx) => !inTeamA.has(idx));
       results.push({
         blueTeam: teamA,
         orangeTeam: teamB,
-        matchupKey: key,
+        matchupKey: getMatchupKey(teamA, teamB),
       });
+      return;
     }
-  }
+    // Stop early once too few candidates remain to complete the team.
+    for (let i = start; i < others.length - (teamSize - 2 - picked.length); i++) {
+      picked.push(i);
+      choose(i + 1, picked);
+      picked.pop();
+    }
+  };
+  choose(0, []);
 
   return results;
+}
+
+/**
+ * The order captains pick in, as a serpentine starting with Blue.
+ *
+ * Blue picks first, then the turn snakes so neither captain gets consecutive first picks:
+ *   2v2 -> B                  (1 pick, then the last player is auto-assigned)
+ *   3v3 -> B, O, O            (the classic 1-2-1)
+ *   4v4 -> B, O, O, B, B      (then the last is auto-assigned to Orange)
+ *
+ * The final player is never picked -- there is no choice left to make -- so the order
+ * returned covers 2*teamSize - 3 picks and the caller auto-assigns the remainder.
+ */
+export function getPickOrder(teamSize: number): ('BLUE' | 'ORANGE')[] {
+  const picksToMake = 2 * teamSize - 3;
+  const order: ('BLUE' | 'ORANGE')[] = [];
+
+  // Serpentine: 1 then 2,2,2... alternating, which is B | OO | BB | OO | ...
+  let turn: 'BLUE' | 'ORANGE' = 'BLUE';
+  let run = 1;
+  while (order.length < picksToMake) {
+    for (let i = 0; i < run && order.length < picksToMake; i++) {
+      order.push(turn);
+    }
+    turn = turn === 'BLUE' ? 'ORANGE' : 'BLUE';
+    run = 2;
+  }
+
+  return order;
 }
 
 /**
@@ -64,7 +117,7 @@ export function getMatchupMmrDiff(matchup: DraftResult): number {
 }
 
 /**
- * Returns all 10 unique matchups ordered from most to least balanced.
+ * Every unique matchup ordered from most to least balanced.
  */
 export function rankMatchupsByBalance(players: Player[]): DraftResult[] {
   return getAllUniqueMatchups(players).sort(
@@ -73,19 +126,17 @@ export function rankMatchupsByBalance(players: Player[]): DraftResult[] {
 }
 
 /**
- * Splits 6 players into two teams of 3 to minimize average MMR difference.
+ * Splits the roster into two even teams to minimize average MMR difference.
  *
  * Balanced mode has only one optimal answer, so a re-roll needs somewhere to go: passing
  * the matchups already shown walks down the ranking to the next-closest split rather than
  * handing back the same teams (or silently falling back to a random pairing).
  */
 export function createBalancedTeams(players: Player[], seenMatchups: string[] = []): DraftResult {
-  if (players.length !== 6) {
-    throw new Error('Balanced teams requires exactly 6 players.');
-  }
+  teamSizeForRoster(players, 'Balanced teams');
 
   const ranked = rankMatchupsByBalance(players);
-  // Once all 10 have been shown, start again from the most balanced split.
+  // Once every matchup has been shown, start again from the most balanced split.
   const chosen = ranked.find(m => !seenMatchups.includes(m.matchupKey!)) || ranked[0];
 
   // getAllUniqueMatchups always puts the lowest discord_id on teamA, which would otherwise
@@ -100,18 +151,16 @@ export function createBalancedTeams(players: Player[], seenMatchups: string[] = 
 }
 
 /**
- * Shuffles 6 players randomly into two teams of 3 without repeating any previously seen matchup
- * until all 10 possible unique matchups have been exhausted.
+ * Shuffles the roster randomly into two even teams without repeating any previously seen
+ * matchup until every unique matchup has been exhausted.
  */
 export function createRandomTeams(players: Player[], seenMatchups: string[] = []): DraftResult {
-  if (players.length !== 6) {
-    throw new Error('Random teams requires exactly 6 players.');
-  }
+  teamSizeForRoster(players, 'Random teams');
 
   const allMatchups = getAllUniqueMatchups(players);
   let available = allMatchups.filter(m => !seenMatchups.includes(m.matchupKey!));
 
-  // If all 10 matchups have already been shown, reset the pool to all 10
+  // Every matchup has already been shown -- start the cycle again.
   if (available.length === 0) {
     available = allMatchups;
   }
@@ -131,16 +180,14 @@ export function createRandomTeams(players: Player[], seenMatchups: string[] = []
 }
 
 /**
- * Initializes a Captains 1-2-1 Draft state with specific captains.
+ * Initializes a serpentine captains draft with specific captains.
  */
 export function initializeCaptainsDraftWithCaptains(
   players: Player[],
   blueCaptainId: string,
   orangeCaptainId: string
 ) {
-  if (players.length !== 6) {
-    throw new Error('Captains draft requires exactly 6 players.');
-  }
+  const teamSize = teamSizeForRoster(players, 'Captains draft');
 
   const remaining = players
     .map(p => p.discord_id)
@@ -154,17 +201,16 @@ export function initializeCaptainsDraftWithCaptains(
     remainingPlayers: remaining,
     turn: 'BLUE' as const,
     pickNumber: 1,
+    teamSize,
   };
 }
 
 /**
- * Initializes a Captains 1-2-1 Draft state.
+ * Initializes a serpentine captains draft.
  * Top 2 MMR players become Blue Captain and Orange Captain.
  */
 export function initializeCaptainsDraft(players: Player[]) {
-  if (players.length !== 6) {
-    throw new Error('Captains draft requires exactly 6 players.');
-  }
+  teamSizeForRoster(players, 'Captains draft');
 
   const sorted = [...players].sort((a, b) => b.mmr - a.mmr);
   return initializeCaptainsDraftWithCaptains(players, sorted[0].discord_id, sorted[1].discord_id);
@@ -178,7 +224,7 @@ export function getCaptainPairKey(id1: string, id2: string): string {
 }
 
 /**
- * Randomizes two distinct captains from the 6 players without repeating seen captain pairs.
+ * Randomizes two distinct captains from the roster without repeating seen captain pairs.
  */
 export function randomizeCaptains(
   players: Player[],
@@ -223,22 +269,37 @@ export function randomizeCaptains(
   };
 }
 
+export interface CaptainsDraftState {
+  blueCaptain: string;
+  orangeCaptain: string;
+  blueTeam: string[];
+  orangeTeam: string[];
+  remainingPlayers: string[];
+  turn: 'BLUE' | 'ORANGE';
+  pickNumber: number;
+  teamSize: number;
+}
+
+/** How many picks a draft of this size involves, excluding the auto-assigned last player. */
+export function totalPicks(teamSize: number): number {
+  return 2 * teamSize - 3;
+}
+
 /**
- * Validates and executes a pick in Captains 1-2-1 Draft.
+ * Validates and executes a pick in a captains draft.
+ *
+ * The turn order comes from getPickOrder rather than a hardcoded ladder, so 2v2, 3v3 and
+ * 4v4 all work. Once one pick remains there is no choice left to make, so the final player
+ * is auto-assigned to whichever team is short.
  */
 export function processCaptainPick(
-  draftState: {
-    blueCaptain: string;
-    orangeCaptain: string;
-    blueTeam: string[];
-    orangeTeam: string[];
-    remainingPlayers: string[];
-    turn: 'BLUE' | 'ORANGE';
-    pickNumber: number;
-  },
+  draftState: CaptainsDraftState,
   pickerId: string,
   selectedPlayerId: string
-) {
+): CaptainsDraftState {
+  const teamSize = draftState.teamSize ?? (draftState.blueTeam.length +
+    draftState.orangeTeam.length + draftState.remainingPlayers.length) / 2;
+
   // Check if it's the picker's turn
   const expectedCaptain =
     draftState.turn === 'BLUE' ? draftState.blueCaptain : draftState.orangeCaptain;
@@ -264,19 +325,20 @@ export function processCaptainPick(
 
   draftState.pickNumber += 1;
 
-  // Determine next turn (1-2-1 draft order)
-  // Pick 1: Blue -> next is Orange (Pick 2)
-  // Pick 2: Orange -> next is Orange (Pick 3)
-  // Pick 3: Orange -> next is Blue auto-pick (Pick 4)
-  if (draftState.pickNumber === 2) {
-    draftState.turn = 'ORANGE';
-  } else if (draftState.pickNumber === 3) {
-    draftState.turn = 'ORANGE';
-  } else if (draftState.pickNumber === 4) {
-    // Auto-assign the last player to Blue Team
+  const order = getPickOrder(teamSize);
+  const nextTurn = order[draftState.pickNumber - 1];
+
+  if (nextTurn) {
+    draftState.turn = nextTurn;
+  } else {
+    // Every choice has been made -- the last player goes wherever there is a seat.
     const lastPlayerId = draftState.remainingPlayers[0];
     if (lastPlayerId) {
-      draftState.blueTeam.push(lastPlayerId);
+      if (draftState.blueTeam.length < teamSize) {
+        draftState.blueTeam.push(lastPlayerId);
+      } else {
+        draftState.orangeTeam.push(lastPlayerId);
+      }
       draftState.remainingPlayers = [];
     }
   }

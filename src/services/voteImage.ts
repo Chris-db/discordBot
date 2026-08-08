@@ -103,7 +103,7 @@ export async function generateModeVoteImage(
     ctx.fillText(`${votes} / 4 VOTES`, x + cardW / 2, cardY + 163);
   };
 
-  drawModeCard('CAPTAINS DRAFT', '👑', '1-2-1 Captains Snake Draft', voteCounts.captains, 40, '#ffd700');
+  drawModeCard('CAPTAINS DRAFT', '👑', 'Captains Snake Draft', voteCounts.captains, 40, '#ffd700');
   drawModeCard('BALANCED MMR', '⚖️', 'Fair auto-balanced teams', voteCounts.balanced, 300, '#00b0ff');
   drawModeCard('RANDOM TEAMS', '🎲', 'Completely randomized 3v3', voteCounts.random, 560, '#00e676');
 
