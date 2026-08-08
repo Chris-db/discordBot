@@ -15,8 +15,14 @@ import {
   recoverStuckQueues,
 } from './services/queueService';
 import { startBackupSchedule } from './services/backupService';
+// Registers the bundled fonts before anything can draw a card. The image modules import
+// this too, so it is belt and braces -- but it means a missing font file is reported at
+// boot rather than the first time someone completes a match.
+import { registerFonts } from './utils/fonts';
 import { logger } from './utils/logger';
 import db from './database/db';
+
+registerFonts();
 
 // Initialize SQLite database schema
 initializeDatabase();

@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { Player } from '../database/queries';
 import { getDivisionTier, getPromotionStatus } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 export interface GamblePlayerResult {
   player: Player;
@@ -48,14 +49,14 @@ export async function generateGambleResultImage(
   // 2. Main Title & Subtitle
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 34px sans-serif';
+  ctx.font = `bold 34px ${FONT_STACK}`;
   const titleText =
     resultType === 'INVERTED'
       ? '💥  WHEEL OF FATE: RESULT INVERTED!  💥'
       : '🔥  WHEEL OF FATE: RESULT DOUBLED!  🔥';
   ctx.fillText(titleText, width / 2, 55);
 
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = resultType === 'INVERTED' ? '#facc15' : '#ff6e40';
   const subText =
     resultType === 'INVERTED'
@@ -73,7 +74,7 @@ export async function generateGambleResultImage(
   ) => {
     // Header
     ctx.textAlign = 'left';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = `bold 22px ${FONT_STACK}`;
     ctx.fillStyle = teamColor;
     ctx.fillText(`${teamName} ${isWinner ? '👑 WHEEL WINNER' : ''}`, startX, 130);
 
@@ -115,7 +116,7 @@ export async function generateGambleResultImage(
         ctx.fillStyle = '#334155';
         ctx.fillRect(avatarX - avatarRadius, avatarY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px sans-serif';
+        ctx.font = `bold 18px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(item.player.username.charAt(0).toUpperCase() || '?', avatarX, avatarY + 6);
       }
@@ -124,13 +125,13 @@ export async function generateGambleResultImage(
       // Username
       ctx.textAlign = 'left';
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = `bold 20px ${FONT_STACK}`;
       const nameStr = item.player.username.length > 13 ? item.player.username.substring(0, 12) + '…' : item.player.username;
       ctx.fillText(nameStr, startX + 78, cardY + 34);
 
       // New MMR & Tier Name
       const tier = getDivisionTier(item.player.division);
-      ctx.font = '600 15px sans-serif';
+      ctx.font = `600 15px ${FONT_STACK}`;
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
 
@@ -138,7 +139,7 @@ export async function generateGambleResultImage(
       const deltaText = item.delta >= 0 ? `+${item.delta} MMR` : `${item.delta} MMR`;
       const deltaColor = item.delta >= 0 ? '#00e676' : '#ff1744';
       ctx.textAlign = 'right';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = deltaColor;
       ctx.fillText(deltaText, startX + cardW - 20, cardY + 36);
 
@@ -159,7 +160,7 @@ export async function generateGambleResultImage(
         ctx.fillRect(pillX, pillY, pillW, pillH);
 
         ctx.textAlign = 'center';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = `bold 11px ${FONT_STACK}`;
         ctx.fillStyle = '#000000';
         ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
       }

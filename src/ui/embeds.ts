@@ -250,7 +250,7 @@ export function buildMatchResultEmbed(
     .sort((a, b) => b.player.streak - a.player.streak)
     .map(item => {
       const badge = getStreakBadge(item.player.streak)!;
-      return `${badge.emoji} **${badge.label}** — <@${item.player.discord_id}>`;
+      return `**${badge.full}** — <@${item.player.discord_id}>`;
     });
 
   if (notableStreaks.length > 0) {

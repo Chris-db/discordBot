@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates an esports broadcast "VS" Match Card graphic for 3v3 lobbies.
@@ -48,15 +49,15 @@ export async function generateMatchVsImage(
   ctx.stroke();
 
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 36px sans-serif';
+  ctx.font = `bold 36px ${FONT_STACK}`;
   ctx.textAlign = 'center';
   ctx.fillText('VS', width / 2, 172);
 
   ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillText(`MATCH #${matchId}`, width / 2, 230);
   ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px sans-serif';
+  ctx.font = `bold 13px ${FONT_STACK}`;
   ctx.fillText('ROCKET LEAGUE 6MANS', width / 2, 252);
   ctx.restore();
 
@@ -65,18 +66,18 @@ export async function generateMatchVsImage(
   const orangeAvg = Math.round(orangeTeam.reduce((sum, p) => sum + p.mmr, 0) / (orangeTeam.length || 1));
 
   ctx.textAlign = 'left';
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = `bold 22px ${FONT_STACK}`;
   ctx.fillStyle = '#38bdf8';
   ctx.fillText('🔵  TEAM BLUE', 50, 45);
-  ctx.font = '16px sans-serif';
+  ctx.font = `16px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   ctx.fillText(`AVG: ${blueAvg} MMR`, 50, 68);
 
   ctx.textAlign = 'right';
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = `bold 22px ${FONT_STACK}`;
   ctx.fillStyle = '#fb923c';
   ctx.fillText('TEAM ORANGE  🟠', width - 50, 45);
-  ctx.font = '16px sans-serif';
+  ctx.font = `16px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   ctx.fillText(`AVG: ${orangeAvg} MMR`, width - 50, 68);
 
@@ -124,7 +125,7 @@ export async function generateMatchVsImage(
       ctx.fillStyle = '#334155';
       ctx.fillRect(avatarX, avatarY, radius * 2, radius * 2);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(player.username.charAt(0).toUpperCase() || '?', avatarX + radius, avatarY + radius + 6);
     }
@@ -137,28 +138,28 @@ export async function generateMatchVsImage(
     ctx.stroke();
 
     // Name & MMR
-    ctx.font = 'bold 19px sans-serif';
+    ctx.font = `bold 19px ${FONT_STACK}`;
     ctx.fillStyle = '#f8fafc';
     if (align === 'left') {
       ctx.textAlign = 'left';
       ctx.fillText(player.username, avatarX + 55, avatarY + 20);
-      ctx.font = '600 15px sans-serif';
+      ctx.font = `600 15px ${FONT_STACK}`;
       ctx.fillStyle = tier.color;
       ctx.fillText(`${tier.emoji} ${tier.name}`, avatarX + 55, avatarY + 41);
 
       ctx.textAlign = 'right';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = '#38bdf8';
       ctx.fillText(`${player.mmr} MMR`, cardX + 355, avatarY + 28);
     } else {
       ctx.textAlign = 'right';
       ctx.fillText(player.username, avatarX - 15, avatarY + 20);
-      ctx.font = '600 15px sans-serif';
+      ctx.font = `600 15px ${FONT_STACK}`;
       ctx.fillStyle = tier.color;
       ctx.fillText(`${tier.name} ${tier.emoji}`, avatarX - 15, avatarY + 41);
 
       ctx.textAlign = 'left';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = '#fb923c';
       ctx.fillText(`${player.mmr} MMR`, cardX + 15, avatarY + 28);
     }

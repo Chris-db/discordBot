@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates an 880x420 Captains Draft Visual Scoreboard.
@@ -38,10 +39,10 @@ export async function generateCaptainsDraftImage(
   // 2. Title & Turn Header
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 28px sans-serif';
+  ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText('👑 CAPTAINS 1-2-1 DRAFT IN PROGRESS', width / 2, 45);
 
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = turnColor;
   const captainName = turn === 'BLUE' ? blueCaptain.username : orangeCaptain.username;
   ctx.fillText(`CURRENT TURN: ${turn === 'BLUE' ? '🔵 BLUE' : '🟠 ORANGE'} CAPTAIN (${captainName})  •  PICK #${pickNumber}`, width / 2, 75);
@@ -82,7 +83,7 @@ export async function generateCaptainsDraftImage(
       ctx.fillStyle = '#334155';
       ctx.fillRect(ax - radius, ay - radius, radius * 2, radius * 2);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px sans-serif';
+      ctx.font = `bold 14px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(player.username.charAt(0).toUpperCase() || '?', ax, ay + 5);
     }
@@ -90,18 +91,18 @@ export async function generateCaptainsDraftImage(
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = `bold 16px ${FONT_STACK}`;
     const shortName = player.username.length > 10 ? player.username.substring(0, 9) + '…' : player.username;
     ctx.fillText(shortName, x + 60, y + 26);
 
-    ctx.font = '600 13px sans-serif';
+    ctx.font = `600 13px ${FONT_STACK}`;
     ctx.fillStyle = '#94a3b8';
     const tier = getDivisionTier(player.division);
     ctx.fillText(`${player.mmr} MMR (${tier.name})`, x + 60, y + 46);
 
     if (label) {
       ctx.textAlign = 'right';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${FONT_STACK}`;
       ctx.fillStyle = borderColor;
       ctx.fillText(label, x + w - 10, y + 20);
     }
@@ -109,7 +110,7 @@ export async function generateCaptainsDraftImage(
 
   // 4. Left Column: Blue Team (x=30, w=250)
   ctx.textAlign = 'left';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = `bold 18px ${FONT_STACK}`;
   ctx.fillStyle = '#00b0ff';
   ctx.fillText('🔵 TEAM BLUE', 30, 115);
 
@@ -125,7 +126,7 @@ export async function generateCaptainsDraftImage(
       ctx.strokeStyle = '#334155';
       ctx.strokeRect(30, cardY, 250, 70);
       ctx.textAlign = 'center';
-      ctx.font = '600 14px sans-serif';
+      ctx.font = `600 14px ${FONT_STACK}`;
       ctx.fillStyle = '#475569';
       ctx.fillText('[ EMPTY SLOT ]', 30 + 125, cardY + 40);
     }
@@ -133,7 +134,7 @@ export async function generateCaptainsDraftImage(
 
   // 5. Right Column: Orange Team (x=600, w=250)
   ctx.textAlign = 'left';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = `bold 18px ${FONT_STACK}`;
   ctx.fillStyle = '#ff9100';
   ctx.fillText('🟠 TEAM ORANGE', 600, 115);
 
@@ -149,7 +150,7 @@ export async function generateCaptainsDraftImage(
       ctx.strokeStyle = '#334155';
       ctx.strokeRect(600, cardY, 250, 70);
       ctx.textAlign = 'center';
-      ctx.font = '600 14px sans-serif';
+      ctx.font = `600 14px ${FONT_STACK}`;
       ctx.fillStyle = '#475569';
       ctx.fillText('[ EMPTY SLOT ]', 600 + 125, cardY + 40);
     }
@@ -157,7 +158,7 @@ export async function generateCaptainsDraftImage(
 
   // 6. Center Column: Available Pool (x=305, w=270)
   ctx.textAlign = 'center';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = `bold 18px ${FONT_STACK}`;
   ctx.fillStyle = '#f8fafc';
   ctx.fillText('📋 AVAILABLE DRAFT POOL', 440, 115);
 

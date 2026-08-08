@@ -13,6 +13,12 @@ describe('streak badges', () => {
     expect(getStreakBadge(2)).toBeNull();
   });
 
+  it('carries an emoji for anywhere with room to draw it', () => {
+    expect(getStreakBadge(4)!.full).toBe('🔥 4 WIN STREAK');
+    expect(getStreakBadge(6)!.full).toBe('🔥🔥 6 WIN STREAK');
+    expect(getStreakBadge(11)!.full).toBe('💀 11 WIN STREAK');
+  });
+
   it('gets louder as the run gets longer', () => {
     expect(getStreakBadge(3)!.label).toBe('3 WIN STREAK');
     expect(getStreakBadge(4)!.label).toBe('4 WIN STREAK');
@@ -30,8 +36,8 @@ describe('streak badges', () => {
 
   it('has a compact form for the queue panel', () => {
     expect(getStreakChip(2)).toBeNull();
-    expect(getStreakChip(3)).toBe('3 STREAK');
-    expect(getStreakChip(12)).toBe('12 STREAK');
+    expect(getStreakChip(3)).toBe('🔥 3');
+    expect(getStreakChip(12)).toBe('🔥 12');
     expect(getStreakChip(-4)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { Client, User } from 'discord.js';
 import { Match, getPlayersByIds } from '../database/queries';
 import { RL_COLORS } from '../ui/embeds';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates an 880x420 Match History Canvas Graphic.
@@ -31,22 +32,22 @@ export async function generateMatchHistoryImage(
   // 2. Header
   ctx.textAlign = 'left';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 26px sans-serif';
+  ctx.font = `bold 26px ${FONT_STACK}`;
   const titleText = targetUser
     ? `📜 ${targetUser.username.toUpperCase()}'S MATCH HISTORY`
     : '📜 SERVER 6MANS MATCH HISTORY';
   ctx.fillText(titleText, 40, 50);
 
-  ctx.font = '600 14px sans-serif';
+  ctx.font = `600 14px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   ctx.fillText('RECENT COMPLETED 3v3 GAMES • OFFICIAL RECORD', 40, 75);
 
   if (matches.length === 0) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = `bold 22px ${FONT_STACK}`;
     ctx.fillText('No completed matches found yet!', width / 2, height / 2);
-    ctx.font = '16px sans-serif';
+    ctx.font = `16px ${FONT_STACK}`;
     ctx.fillText('Play and report matches for them to appear here.', width / 2, height / 2 + 30);
     return canvas.toBuffer('image/png');
   }
@@ -80,7 +81,7 @@ export async function generateMatchHistoryImage(
     // Match ID & Date
     ctx.textAlign = 'left';
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = `bold 18px ${FONT_STACK}`;
     ctx.fillText(`MATCH #${match.match_id}`, startX + 25, cardY + 30);
 
     const dateStr = match.completed_at
@@ -89,7 +90,7 @@ export async function generateMatchHistoryImage(
           day: 'numeric',
         })
       : 'Recent';
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_STACK}`;
     ctx.fillStyle = '#64748b';
     ctx.fillText(dateStr, startX + 25, cardY + 52);
 
@@ -107,7 +108,7 @@ export async function generateMatchHistoryImage(
     ctx.strokeRect(pillX, pillY, pillW, pillH);
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = `bold 12px ${FONT_STACK}`;
     ctx.fillStyle = winColor;
     ctx.fillText(pillText, pillX + pillW / 2, pillY + 17);
 
@@ -119,18 +120,18 @@ export async function generateMatchHistoryImage(
     const orangeNames = orangePlayers.map(p => p.username).join(', ') || 'N/A';
 
     ctx.textAlign = 'left';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = `bold 13px ${FONT_STACK}`;
     ctx.fillStyle = '#00b0ff';
     ctx.fillText(`🔵 Blue:`, startX + 290, cardY + 30);
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_STACK}`;
     ctx.fillStyle = '#cbd5e1';
     const shortBlue = blueNames.length > 28 ? blueNames.substring(0, 26) + '…' : blueNames;
     ctx.fillText(shortBlue, startX + 345, cardY + 30);
 
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = `bold 13px ${FONT_STACK}`;
     ctx.fillStyle = '#ff9100';
     ctx.fillText(`🟠 Orange:`, startX + 290, cardY + 54);
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_STACK}`;
     ctx.fillStyle = '#cbd5e1';
     const shortOrange = orangeNames.length > 28 ? orangeNames.substring(0, 26) + '…' : orangeNames;
     ctx.fillText(shortOrange, startX + 360, cardY + 54);
@@ -145,12 +146,12 @@ export async function generateMatchHistoryImage(
       const resColor = isWin ? '#00e676' : '#ff1744';
 
       ctx.textAlign = 'right';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = `bold 20px ${FONT_STACK}`;
       ctx.fillStyle = resColor;
       ctx.fillText(resText, startX + cardW - 25, cardY + 44);
     } else {
       ctx.textAlign = 'right';
-      ctx.font = 'bold 16px sans-serif';
+      ctx.font = `bold 16px ${FONT_STACK}`;
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(isBlueWin ? '🔵 +15 MMR' : '🟠 +15 MMR', startX + cardW - 25, cardY + 44);
     }
@@ -159,7 +160,7 @@ export async function generateMatchHistoryImage(
   // Footer text
   ctx.textAlign = 'center';
   ctx.fillStyle = '#475569';
-  ctx.font = '12px sans-serif';
+  ctx.font = `12px ${FONT_STACK}`;
   ctx.fillText('Rocket League 6mans • Match History System', width / 2, height - 16);
 
   return canvas.toBuffer('image/png');

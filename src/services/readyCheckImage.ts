@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates an 840x320 AFK Voice Ready Check Canvas Graphic.
@@ -34,10 +35,10 @@ export async function generateReadyCheckImage(
   // 2. Header
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 28px sans-serif';
+  ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText('🔊 AFK VOICE READY CHECK (6 / 6)', width / 2, 45);
 
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = `bold 16px ${FONT_STACK}`;
   ctx.fillStyle = allReady ? '#00e676' : '#ff9100';
   const statusMsg = allReady
     ? '✅ ALL PLAYERS READY! LAUNCHING MODE VOTING...'
@@ -94,7 +95,7 @@ export async function generateReadyCheckImage(
       ctx.fillStyle = '#334155';
       ctx.fillRect(ax - radius, ay - radius, radius * 2, radius * 2);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px sans-serif';
+      ctx.font = `bold 16px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(p.username.charAt(0).toUpperCase() || '?', ax, ay + 6);
     }
@@ -110,12 +111,12 @@ export async function generateReadyCheckImage(
     // Username
     ctx.textAlign = 'left';
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = `bold 18px ${FONT_STACK}`;
     const shortName = p.username.length > 11 ? p.username.substring(0, 10) + '…' : p.username;
     ctx.fillText(shortName, x + 74, y + 36);
 
     // Status Pill
-    ctx.font = 'bold 14px sans-serif';
+    ctx.font = `bold 14px ${FONT_STACK}`;
     ctx.fillStyle = colorHex;
     ctx.fillText(isReady ? '✅ READY (IN VOICE)' : '⏳ WAITING...', x + 74, y + 65);
   }

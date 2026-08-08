@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier, getStreakChip } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates an 840x380 6-Slot Lobby Queue Panel Canvas Graphic.
@@ -34,7 +35,7 @@ export async function generateQueuePanelImage(
   // 2. Title & Status Header
   ctx.textAlign = 'left';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 26px sans-serif';
+  ctx.font = `bold 26px ${FONT_STACK}`;
   ctx.fillText('🚀 6MANS MATCH QUEUE', 40, 50);
 
   // Status Badge on the right
@@ -51,7 +52,7 @@ export async function generateQueuePanelImage(
   ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeH);
 
   ctx.textAlign = 'center';
-  ctx.font = 'bold 14px sans-serif';
+  ctx.font = `bold 14px ${FONT_STACK}`;
   ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
   ctx.fillText(badgeText, badgeX + badgeWidth / 2, badgeY + 22);
 
@@ -86,7 +87,7 @@ export async function generateQueuePanelImage(
       // Slot Number
       ctx.textAlign = 'right';
       ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${FONT_STACK}`;
       ctx.fillText(`#${i + 1}`, cardX + cardW - 12, cardY + 24);
 
       // Player Avatar (Circle)
@@ -111,7 +112,7 @@ export async function generateQueuePanelImage(
         ctx.fillStyle = '#334155';
         ctx.fillRect(avatarCenterX - avatarRadius, avatarCenterY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = `bold 20px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(player.username.charAt(0).toUpperCase() || '?', avatarCenterX, avatarCenterY + 7);
       }
@@ -127,12 +128,12 @@ export async function generateQueuePanelImage(
       // Username
       ctx.textAlign = 'left';
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       const shortName = player.username.length > 11 ? player.username.substring(0, 10) + '…' : player.username;
       ctx.fillText(shortName, cardX + 85, cardY + 54);
 
       // MMR & Rating
-      ctx.font = 'bold 16px sans-serif';
+      ctx.font = `bold 16px ${FONT_STACK}`;
       ctx.fillStyle = '#00b0ff';
       ctx.fillText(`${player.mmr} MMR`, cardX + 85, cardY + 84);
 
@@ -142,7 +143,7 @@ export async function generateQueuePanelImage(
       if (chip) {
         const mmrWidth = ctx.measureText(`${player.mmr} MMR`).width;
         const chipX = cardX + 85 + mmrWidth + 8;
-        ctx.font = 'bold 13px sans-serif';
+        ctx.font = `bold 13px ${FONT_STACK}`;
         const chipW = ctx.measureText(chip).width + 10;
 
         if (chipX + chipW < cardX + cardW - 8) {
@@ -165,17 +166,17 @@ export async function generateQueuePanelImage(
       // Slot Number
       ctx.textAlign = 'right';
       ctx.fillStyle = '#475569';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${FONT_STACK}`;
       ctx.fillText(`#${i + 1}`, cardX + cardW - 12, cardY + 24);
 
       // Empty icon & text
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.font = 'bold 28px sans-serif';
+      ctx.font = `bold 28px ${FONT_STACK}`;
       ctx.fillText('+', cardX + cardW / 2, cardY + 55);
 
       ctx.fillStyle = '#475569';
-      ctx.font = 'bold 14px sans-serif';
+      ctx.font = `bold 14px ${FONT_STACK}`;
       ctx.fillText('WAITING FOR PLAYER', cardX + cardW / 2, cardY + 85);
     }
   }
@@ -183,7 +184,7 @@ export async function generateQueuePanelImage(
   // Footer text
   ctx.textAlign = 'center';
   ctx.fillStyle = '#475569';
-  ctx.font = '12px sans-serif';
+  ctx.font = `12px ${FONT_STACK}`;
   ctx.fillText('Click Join Queue below to claim your spot in the lobby', width / 2, height - 16);
 
   return canvas.toBuffer('image/png');

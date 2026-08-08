@@ -123,33 +123,36 @@ export function getPromotionStatus(
 }
 
 export interface StreakBadge {
-  /** Emoji-free, for @napi-rs/canvas. */
+  /** Text without the emoji, for tight spaces. */
   label: string;
-  /** For Discord embeds, which render emoji natively. */
   emoji: string;
   color: string;
+  /** Emoji + text, for anywhere with room. Canvas renders this correctly now that the
+   *  colour emoji font is bundled -- see utils/fonts.ts. */
+  full: string;
 }
 
 /**
  * The streak badge for a player, or null when there is nothing worth shouting about.
  *
- * `label` and `emoji` are separate because the canvas has no emoji font -- anything
- * outside the basic ranges draws as a tofu box, so a "🔥 4 WIN STREAK" pill renders as
- * "▯ 4 WIN STREAK" and reads as a bug. Cards use `label` and lean on `color`; embeds use
- * both.
- *
  * `streak` is positive for wins and negative for losses. Win streaks get progressively
  * louder from 3; losing runs are deliberately not called out on a card six people can see.
  */
 export function getStreakBadge(streak: number): StreakBadge | null {
-  if (streak >= 10) return { label: `${streak} WIN STREAK`, emoji: '💀', color: '#ff1744' };
-  if (streak >= 5) return { label: `${streak} WIN STREAK`, emoji: '🔥🔥', color: '#ff6d00' };
-  if (streak >= 3) return { label: `${streak} WIN STREAK`, emoji: '🔥', color: '#ffab00' };
+  const badge = (emoji: string, color: string): StreakBadge => ({
+    label: `${streak} WIN STREAK`,
+    emoji,
+    color,
+    full: `${emoji} ${streak} WIN STREAK`,
+  });
+  if (streak >= 10) return badge('💀', '#ff1744');
+  if (streak >= 5) return badge('🔥🔥', '#ff6d00');
+  if (streak >= 3) return badge('🔥', '#ffab00');
   return null;
 }
 
-/** Compact, emoji-free form for the queue panel, where there is room for a few characters. */
+/** Compact form for the queue panel, where there is room for a few characters. */
 export function getStreakChip(streak: number): string | null {
-  if (streak >= 3) return `${streak} STREAK`;
+  if (streak >= 3) return `🔥 ${streak}`;
   return null;
 }

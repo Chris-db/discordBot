@@ -4,6 +4,7 @@ import { Player, getAverageMatchDuration } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates a custom Player Profile Banner graphic with Rank Tier badge,
@@ -54,7 +55,7 @@ export async function generatePlayerProfileImage(
     ctx.fillStyle = '#334155';
     ctx.fillRect(avatarX, avatarY, radius * 2, radius * 2);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px sans-serif';
+    ctx.font = `bold 36px ${FONT_STACK}`;
     ctx.textAlign = 'center';
     ctx.fillText(player.username.charAt(0).toUpperCase() || '?', avatarX + radius, avatarY + radius + 14);
   }
@@ -70,7 +71,7 @@ export async function generatePlayerProfileImage(
   // Username & Rank Badge
   ctx.textAlign = 'left';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 32px sans-serif';
+  ctx.font = `bold 32px ${FONT_STACK}`;
   ctx.fillText(player.username, 160, 65);
 
   // Rank Tier Pill
@@ -80,13 +81,13 @@ export async function generatePlayerProfileImage(
   ctx.lineWidth = 2;
   ctx.strokeRect(160, 80, 220, 36);
 
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = `bold 18px ${FONT_STACK}`;
   ctx.fillStyle = tier.color;
   ctx.fillText(`${tier.emoji}  ${tier.name}`, 175, 104);
 
   // Server Position
   const rankText = rank > 0 ? `#${rank} of ${totalPlayers} players` : 'Unranked';
-  ctx.font = '600 18px sans-serif';
+  ctx.font = `600 18px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   ctx.fillText(`SERVER STANDING: ${rankText}`, 410, 104);
 
@@ -126,7 +127,7 @@ export async function generatePlayerProfileImage(
   const barHeight = 22;
 
   ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 15px sans-serif';
+  ctx.font = `bold 15px ${FONT_STACK}`;
   ctx.textAlign = 'left';
   ctx.fillText(`MMR PROGRESS (${player.mmr} / ${nextTarget})`, barX, barY - 10);
   ctx.textAlign = 'right';
@@ -157,15 +158,15 @@ export async function generatePlayerProfileImage(
     ctx.strokeRect(Number(x), cardY, cardW, cardH);
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = `bold 13px ${FONT_STACK}`;
     ctx.fillStyle = '#94a3b8';
     ctx.fillText(title, Number(x) + cardW / 2, cardY + 30);
 
-    ctx.font = 'bold 26px sans-serif';
+    ctx.font = `bold 26px ${FONT_STACK}`;
     ctx.fillStyle = color;
     ctx.fillText(value, Number(x) + cardW / 2, cardY + 70);
 
-    ctx.font = '600 12px sans-serif';
+    ctx.font = `600 12px ${FONT_STACK}`;
     ctx.fillStyle = '#64748b';
     ctx.fillText(sub, Number(x) + cardW / 2, cardY + 95);
   };

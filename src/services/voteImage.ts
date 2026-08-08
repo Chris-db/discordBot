@@ -1,5 +1,6 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { Player } from '../database/queries';
+import { FONT_STACK } from '../utils/fonts';
 
 export interface VoteCounts {
   captains: number;
@@ -34,10 +35,10 @@ export async function generateModeVoteImage(
   // 2. Title & Subtitle
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 28px sans-serif';
+  ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText('🗳️ VOTE: TEAM SELECTION MODE', width / 2, 45);
 
-  ctx.font = '600 15px sans-serif';
+  ctx.font = `600 15px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   ctx.fillText('4 matching votes will immediately launch the mode  •  Voting closes in 30s', width / 2, 72);
 
@@ -68,17 +69,17 @@ export async function generateModeVoteImage(
     // Mode Icon
     ctx.textAlign = 'center';
     ctx.fillStyle = colorHex;
-    ctx.font = 'bold 36px sans-serif';
+    ctx.font = `bold 36px ${FONT_STACK}`;
     ctx.fillText(icon, x + cardW / 2, cardY + 48);
 
     // Title
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = `bold 18px ${FONT_STACK}`;
     ctx.fillText(title, x + cardW / 2, cardY + 80);
 
     // Description
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_STACK}`;
     ctx.fillText(desc, x + cardW / 2, cardY + 105);
 
     // Vote Progress Bar toward 4 votes
@@ -97,7 +98,7 @@ export async function generateModeVoteImage(
     }
 
     // Vote count badge text
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = `bold 16px ${FONT_STACK}`;
     ctx.fillStyle = votes > 0 ? colorHex : '#64748b';
     ctx.fillText(`${votes} / 4 VOTES`, x + cardW / 2, cardY + 163);
   };

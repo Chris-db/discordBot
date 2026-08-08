@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { Player } from '../database/queries';
 import { getDivisionTier, getPromotionStatus, getStreakBadge } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 export interface MatchPlayerResult {
   /** Post-match row, so `streak` is the streak this result just produced. */
@@ -45,11 +46,11 @@ export async function generateMatchResultImage(
   // 2. Victory Header
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 34px sans-serif';
+  ctx.font = `bold 34px ${FONT_STACK}`;
   const winTitle = winner === 'BLUE' ? '🔵  BLUE TEAM VICTORIOUS!  🔵' : '🟠  ORANGE TEAM VICTORIOUS!  🟠';
   ctx.fillText(winTitle, width / 2, 55);
 
-  ctx.font = '600 16px sans-serif';
+  ctx.font = `600 16px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   const subtitle = durationStr
     ? `MATCH #${matchId}  •  OFFICIAL 6MANS RESULT  •  ⏱️ ${durationStr}`
@@ -66,7 +67,7 @@ export async function generateMatchResultImage(
   ) => {
     // Header
     ctx.textAlign = 'left';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = `bold 22px ${FONT_STACK}`;
     ctx.fillStyle = teamColor;
     ctx.fillText(`${teamName} ${isWinner ? '👑 WINNER' : ''}`, startX, 130);
 
@@ -109,7 +110,7 @@ export async function generateMatchResultImage(
         ctx.fillStyle = '#334155';
         ctx.fillRect(avatarX - avatarRadius, avatarY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px sans-serif';
+        ctx.font = `bold 18px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(item.player.username.charAt(0).toUpperCase() || '?', avatarX, avatarY + 6);
       }
@@ -119,7 +120,7 @@ export async function generateMatchResultImage(
       const streak = getStreakBadge(item.player.streak);
       ctx.textAlign = 'left';
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = `bold 20px ${FONT_STACK}`;
       const maxNameChars = streak ? 9 : 13;
       const nameStr =
         item.player.username.length > maxNameChars
@@ -131,8 +132,8 @@ export async function generateMatchResultImage(
       if (streak) {
         const nameWidth = ctx.measureText(nameStr).width;
         const badgeX = startX + 78 + nameWidth + 10;
-        ctx.font = 'bold 13px sans-serif';
-        const badgeW = ctx.measureText(streak.label).width + 14;
+        ctx.font = `bold 13px ${FONT_STACK}`;
+        const badgeW = ctx.measureText(streak.full).width + 14;
 
         // Only draw it if it fits without running under the delta on the right.
         if (badgeX + badgeW < startX + cardW - 110) {
@@ -140,14 +141,14 @@ export async function generateMatchResultImage(
           ctx.fillRect(badgeX, cardY + 19, badgeW, 20);
           ctx.fillStyle = '#000000';
           ctx.textAlign = 'left';
-          ctx.fillText(streak.label, badgeX + 7, cardY + 33);
+          ctx.fillText(streak.full, badgeX + 7, cardY + 33);
         }
       }
 
       // New MMR & Tier Name
       const tier = getDivisionTier(item.player.division);
       ctx.textAlign = 'left';
-      ctx.font = '600 15px sans-serif';
+      ctx.font = `600 15px ${FONT_STACK}`;
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
 
@@ -155,7 +156,7 @@ export async function generateMatchResultImage(
       const deltaText = item.delta >= 0 ? `+${item.delta} MMR` : `${item.delta} MMR`;
       const deltaColor = item.delta >= 0 ? '#00e676' : '#ff1744';
       ctx.textAlign = 'right';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = deltaColor;
       ctx.fillText(deltaText, startX + cardW - 20, cardY + 36);
 
@@ -179,7 +180,7 @@ export async function generateMatchResultImage(
         ctx.fillRect(pillX, pillY, pillW, pillH);
 
         ctx.textAlign = 'center';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = `bold 11px ${FONT_STACK}`;
         ctx.fillStyle = '#000000';
         ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
       }

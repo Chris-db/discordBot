@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
+import { FONT_STACK } from '../utils/fonts';
 
 /**
  * Generates a stunning Canvas leaderboard image graphic with one row per player:
@@ -36,7 +37,7 @@ export async function generateLeaderboardImage(
   ctx.fillRect(0, 0, width, 4);
 
   // 2. Table Header
-  ctx.font = 'bold 15px sans-serif';
+  ctx.font = `bold 15px ${FONT_STACK}`;
   ctx.fillStyle = '#64748b'; // slate-500
   ctx.textAlign = 'left';
   ctx.fillText('POS', 40, 42);
@@ -53,7 +54,7 @@ export async function generateLeaderboardImage(
   ctx.stroke();
 
   if (players.length === 0) {
-    ctx.font = 'bold 20px sans-serif';
+    ctx.font = `bold 20px ${FONT_STACK}`;
     ctx.fillStyle = '#94a3b8';
     ctx.textAlign = 'center';
     ctx.fillText('No players found on the leaderboard yet.', width / 2, height / 2 + 10);
@@ -86,7 +87,7 @@ export async function generateLeaderboardImage(
 
     // A. POSITION (Left, X=40)
     ctx.textAlign = 'left';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = `bold 22px ${FONT_STACK}`;
     if (overallRank === 1) {
       ctx.fillStyle = '#fbbf24'; // Gold
     } else if (overallRank === 2) {
@@ -117,7 +118,7 @@ export async function generateLeaderboardImage(
       ctx.fillStyle = '#334155';
       ctx.fillRect(avatarX, avatarY, radius * 2, radius * 2);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(
         player.username.charAt(0).toUpperCase() || '?',
@@ -136,13 +137,13 @@ export async function generateLeaderboardImage(
 
     // C. NAME (X=170)
     ctx.textAlign = 'left';
-    ctx.font = overallRank <= 3 ? 'bold 22px sans-serif' : '600 20px sans-serif';
+    ctx.font = overallRank <= 3 ? `bold 22px ${FONT_STACK}` : `600 20px ${FONT_STACK}`;
     ctx.fillStyle = '#f8fafc'; // Crisp white
     ctx.fillText(player.username, 170, y + 40);
 
     // D. MMR RATING (Far Right, X=860)
     ctx.textAlign = 'right';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = `bold 22px ${FONT_STACK}`;
     ctx.fillStyle = '#38bdf8'; // Sky-400 cyan
     ctx.fillText(`${player.mmr} MMR`, 860, y + 40);
 
