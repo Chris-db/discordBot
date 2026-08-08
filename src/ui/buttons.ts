@@ -203,6 +203,39 @@ export function getGambleProposeButton(matchId: number, disabled: boolean = fals
 }
 
 /**
+ * ActionRow shown on the result card: run the same teams back, or send everyone to the
+ * back of the queue. Without these the channel just dies after 90 seconds and all six
+ * players have to re-queue from scratch.
+ */
+export function getPostMatchButtons(
+  matchId: number,
+  rematchVotes: number,
+  votesRequired: number,
+  disabled: boolean = false
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`rematch_yes_${matchId}`)
+      .setLabel(`Rematch (${rematchVotes}/${votesRequired})`)
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`rematch_no_${matchId}`)
+      .setLabel('No Thanks')
+      .setEmoji('👋')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`requeue_${matchId}`)
+      .setLabel('Back to Queue')
+      .setEmoji('🚪')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled)
+  );
+}
+
+/**
  * ActionRow for voting on Double or Nothing (Agree / Decline).
  */
 export function getGambleConsensusButtons(matchId: number, disabled: boolean = false): ActionRowBuilder<ButtonBuilder> {

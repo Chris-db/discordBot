@@ -114,8 +114,20 @@ export interface Match {
     cancelVotes?: string[];
     rerollVotes?: string[];
     seenMatchups?: string[];
+    /** Post-match "run it back" vote. Lives here so it reuses the transactional mutator. */
+    rematchVotes?: string[];
+    rematchDeclines?: string[];
+    /** Set once a rematch has been launched, so the buttons cannot fire twice. */
+    rematchResolved?: boolean;
   };
   gamble_status?: GambleStatus;
+  /** Groups the matches of a rematch series; null for a one-off. */
+  series_id?: string;
+  /** 1-based position within the series. */
+  series_game?: number;
+  /** The division ladder this match counted towards. */
+  division?: string;
+  season_id?: number;
   created_at: string;
   completed_at?: string;
   started_at?: string;
@@ -489,6 +501,48 @@ export function saveQueue(queue: ActiveQueue): void {
   );
 }
 
+/**
+ * Adds several players to a queue in one transaction, creating the row if needed.
+ *
+ * Used by the post-match Requeue button, which puts a whole lobby back at once. Doing it
+ * as six separate joins would race with itself and with anyone else clicking Join.
+ * Returns the ids actually added -- players already queued, banned, or arriving after the
+ * queue popped are skipped rather than failing the whole batch.
+ */
+export function getOrInitQueueRow(
+  channelId: string,
+  guildId: string,
+  discordIds: string[]
+): string[] {
+  return db.transaction(() => {
+    let queue = getQueue(channelId);
+    if (!queue) {
+      queue = {
+        channel_id: channelId,
+        guild_id: guildId,
+        player_ids: [],
+        player_join_times: {},
+        state: 'WAITING',
+        vote_counts: {},
+      };
+    }
+    if (queue.state !== 'WAITING') return [];
+
+    const added: string[] = [];
+    queue.player_join_times = queue.player_join_times || {};
+    for (const id of discordIds) {
+      if (queue.player_ids.includes(id)) continue;
+      if (getActiveBan(guildId, id)) continue;
+      queue.player_ids.push(id);
+      queue.player_join_times[id] = Date.now();
+      added.push(id);
+    }
+
+    if (added.length > 0) saveQueue(queue);
+    return added;
+  })();
+}
+
 export function deleteQueue(channelId: string): void {
   db.prepare('DELETE FROM active_queues WHERE channel_id = ?').run(channelId);
 }
@@ -515,16 +569,27 @@ export function createMatch(data: {
   feed_channel_id?: string;
   feed_message_id?: string;
   started_at?: string;
+  series_id?: string;
+  series_game?: number;
+  division?: string;
 }): Match {
   const stmt = db.prepare(`
     INSERT INTO matches (
       guild_id, channel_id, state, blue_team, orange_team, rl_name, rl_pass,
       blue_voice_id, orange_voice_id, message_id, text_channel_id, queue_channel_id,
-      feed_channel_id, feed_message_id, winner, report_status, gamble_status, started_at
+      feed_channel_id, feed_message_id, winner, report_status, gamble_status, started_at,
+      series_id, series_game, division, season_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?, ?, ?, ?, ?)
   `);
   const defaultStartedAt = data.started_at !== undefined ? data.started_at : ((data.state || 'IN_PROGRESS') === 'IN_PROGRESS' ? new Date().toISOString() : null);
+
+  // Stamp the match with the season it was played in and the division ladder it counted
+  // towards, so history and per-season stats can filter on them later.
+  const season = getActiveSeason(data.guild_id);
+  const division =
+    data.division || getDivisionByChannel(data.guild_id, data.channel_id)?.division || null;
+
   const res = stmt.run(
     data.guild_id,
     data.channel_id,
@@ -540,10 +605,23 @@ export function createMatch(data: {
     data.queue_channel_id || null,
     data.feed_channel_id || null,
     data.feed_message_id || null,
-    defaultStartedAt
+    defaultStartedAt,
+    data.series_id || null,
+    data.series_game ?? null,
+    division,
+    season?.season_id ?? null
   );
 
   return getMatch(Number(res.lastInsertRowid))!;
+}
+
+/** Every game in a rematch series, oldest first. */
+export function getMatchesBySeries(seriesId: string): Match[] {
+  return (
+    db
+      .prepare('SELECT * FROM matches WHERE series_id = ? ORDER BY series_game ASC')
+      .all(seriesId) as any[]
+  ).map(parseMatchRow);
 }
 
 export function getMatch(matchId: number): Match | undefined {
@@ -637,13 +715,7 @@ export function updateMatch(
   updates: {
     state?: 'READY_CHECK' | 'VOTING' | 'DRAFTING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
     winner?: 'BLUE' | 'ORANGE' | 'NONE';
-    report_status?: {
-      blueVotes?: string[];
-      orangeVotes?: string[];
-      cancelVotes?: string[];
-      rerollVotes?: string[];
-      seenMatchups?: string[];
-    };
+    report_status?: Match['report_status'];
     gamble_status?: GambleStatus;
     message_id?: string;
     completed_at?: string;
@@ -659,73 +731,46 @@ export function updateMatch(
     rl_name?: string;
     rl_pass?: string;
     started_at?: string;
+    series_id?: string;
+    series_game?: number;
+    division?: string;
+    season_id?: number;
   }
 ): Match {
   const current = getMatch(matchId);
   if (!current) throw new Error(`Match ${matchId} not found`);
 
-  const newState = updates.state || current.state;
-  const newWinner = updates.winner || current.winner;
-  const newReport = updates.report_status ? JSON.stringify(updates.report_status) : JSON.stringify(current.report_status);
-  const newGamble = updates.gamble_status ? JSON.stringify(updates.gamble_status) : JSON.stringify(current.gamble_status || { state: 'NONE', agreedPlayers: [] });
-  const newMessageId = updates.message_id !== undefined ? updates.message_id : current.message_id;
-  const newCompletedAt = updates.completed_at || current.completed_at || null;
-  const newStartedAt = updates.started_at !== undefined ? updates.started_at : (current.started_at || (newState === 'IN_PROGRESS' && current.state !== 'IN_PROGRESS' ? new Date().toISOString() : null));
-  const newTextChan = updates.text_channel_id !== undefined ? updates.text_channel_id : current.text_channel_id;
-  const newQueueChan = updates.queue_channel_id !== undefined ? updates.queue_channel_id : current.queue_channel_id;
-  const newFeedChan = updates.feed_channel_id !== undefined ? updates.feed_channel_id : current.feed_channel_id;
-  const newFeedMsg = updates.feed_message_id !== undefined ? updates.feed_message_id : current.feed_message_id;
-  const newBlueVoice = updates.blue_voice_id !== undefined ? updates.blue_voice_id : current.blue_voice_id;
-  const newOrangeVoice = updates.orange_voice_id !== undefined ? updates.orange_voice_id : current.orange_voice_id;
-  const newReadyVc = updates.ready_check_vc_id !== undefined ? updates.ready_check_vc_id : current.ready_check_vc_id;
-  const newBlueTeam = updates.blue_team ? JSON.stringify(updates.blue_team) : JSON.stringify(current.blue_team);
-  const newOrangeTeam = updates.orange_team ? JSON.stringify(updates.orange_team) : JSON.stringify(current.orange_team);
-  const newRlName = updates.rl_name !== undefined ? updates.rl_name : current.rl_name;
-  const newRlPass = updates.rl_pass !== undefined ? updates.rl_pass : current.rl_pass;
+  // The SET clause is built from the keys actually present. This used to write all 17
+  // columns on every call, with the undefined-vs-null coalescing spelled out per column --
+  // which meant every new column was one more place to forget, silently blanking it.
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  const set = (column: string, value: unknown) => {
+    sets.push(`${column} = ?`);
+    values.push(value);
+  };
 
-  const stmt = db.prepare(`
-    UPDATE matches SET
-      state = ?,
-      winner = ?,
-      report_status = ?,
-      gamble_status = ?,
-      message_id = ?,
-      completed_at = ?,
-      text_channel_id = ?,
-      queue_channel_id = ?,
-      feed_channel_id = ?,
-      feed_message_id = ?,
-      blue_voice_id = ?,
-      orange_voice_id = ?,
-      ready_check_vc_id = ?,
-      blue_team = ?,
-      orange_team = ?,
-      rl_name = ?,
-      rl_pass = ?,
-      started_at = ?
-    WHERE match_id = ?
-  `);
-  stmt.run(
-    newState,
-    newWinner,
-    newReport,
-    newGamble,
-    newMessageId,
-    newCompletedAt,
-    newTextChan || null,
-    newQueueChan || null,
-    newFeedChan || null,
-    newFeedMsg || null,
-    newBlueVoice || null,
-    newOrangeVoice || null,
-    newReadyVc || null,
-    newBlueTeam,
-    newOrangeTeam,
-    newRlName,
-    newRlPass,
-    newStartedAt,
-    matchId
-  );
+  const JSON_COLUMNS = ['report_status', 'gamble_status', 'blue_team', 'orange_team'];
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
+    set(key, JSON_COLUMNS.includes(key) ? JSON.stringify(value) : value === '' ? null : value);
+  }
+
+  // started_at is stamped the first time a match reaches IN_PROGRESS, unless the caller
+  // set it explicitly. Match duration depends on it being written exactly once.
+  if (
+    updates.started_at === undefined &&
+    updates.state === 'IN_PROGRESS' &&
+    current.state !== 'IN_PROGRESS' &&
+    !current.started_at
+  ) {
+    set('started_at', new Date().toISOString());
+  }
+
+  if (sets.length === 0) return current;
+
+  values.push(matchId);
+  db.prepare(`UPDATE matches SET ${sets.join(', ')} WHERE match_id = ?`).run(...(values as any[]));
   return getMatch(matchId)!;
 }
 
@@ -823,6 +868,10 @@ function parseMatchRow(row: any): Match {
     winner: row.winner,
     report_status: JSON.parse(row.report_status || '{}'),
     gamble_status: !row.gamble_status || row.gamble_status === '{}' ? { state: 'NONE', agreedPlayers: [] } : JSON.parse(row.gamble_status),
+    series_id: row.series_id || undefined,
+    series_game: row.series_game ?? undefined,
+    division: row.division || undefined,
+    season_id: row.season_id ?? undefined,
     created_at: row.created_at,
     completed_at: row.completed_at || undefined,
     started_at: row.started_at || undefined,

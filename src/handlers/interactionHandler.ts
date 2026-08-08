@@ -4,6 +4,7 @@ import {
   StringSelectMenuInteraction,
   PermissionFlagsBits,
   AttachmentBuilder,
+  Message,
 } from 'discord.js';
 import {
   handleJoinQueue,
@@ -24,6 +25,7 @@ import {
   handleGambleAgree,
   handleGambleDecline,
 } from '../services/gambleService';
+import { handleRematchVote, handleRequeue } from '../services/rematchService';
 import {
   getOrCreatePlayer,
   getLeaderboard,
@@ -344,6 +346,40 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId.startsWith('gamble_decline_')) {
       const matchId = parseInt(customId.split('_').pop()!, 10);
       await handleGambleDecline(interaction.client, interaction, matchId);
+      return;
+    }
+
+    // 6. Post-match actions: run it back, or go back to the queue.
+    if (customId.startsWith('rematch_yes_') || customId.startsWith('rematch_no_')) {
+      const matchId = parseInt(customId.split('_').pop()!, 10);
+      if (Number.isNaN(matchId)) {
+        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        return;
+      }
+      autoDeleteReply(interaction, 6000);
+      await interaction.deferReply({ ephemeral: true });
+      const res = await handleRematchVote(
+        interaction.client,
+        matchId,
+        user.id,
+        customId.startsWith('rematch_yes_') ? 'yes' : 'no',
+        interaction.message as Message
+      );
+      await interaction.editReply({ content: res.message });
+      return;
+    }
+
+    if (customId.startsWith('requeue_')) {
+      const matchId = parseInt(customId.split('_').pop()!, 10);
+      if (Number.isNaN(matchId)) {
+        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        return;
+      }
+      autoDeleteReply(interaction, 6000);
+      // Re-adding six players and re-rendering the queue panel can outrun the 3s window.
+      await interaction.deferReply({ ephemeral: true });
+      const res = await handleRequeue(interaction.client, matchId, user.id);
+      await interaction.editReply({ content: res.message });
       return;
     }
   } catch (error: any) {

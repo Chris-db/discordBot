@@ -390,10 +390,31 @@ export async function deleteMatchChannels(client: Client, matchId: number): Prom
  * Schedules automatic deletion of match text & voice channels after a 30-second delay
  * so players can read final scores and say GG.
  */
+/**
+ * Pending teardowns, keyed by match id.
+ *
+ * The timer used to be a bare setTimeout with no handle, so nothing could stop a teardown
+ * once it was scheduled -- which makes a rematch impossible, since the channels the
+ * rematch runs in are the ones being deleted.
+ */
+const pendingChannelDeletions = new Map<number, NodeJS.Timeout>();
+
 export function scheduleMatchChannelDeletion(client: Client, matchId: number, delayMs = 30000): void {
-  setTimeout(() => {
+  cancelMatchChannelDeletion(matchId);
+  const timer = setTimeout(() => {
+    pendingChannelDeletions.delete(matchId);
     deleteMatchChannels(client, matchId);
   }, delayMs);
+  pendingChannelDeletions.set(matchId, timer);
+}
+
+/** Stops a scheduled teardown. Returns true if one was actually pending. */
+export function cancelMatchChannelDeletion(matchId: number): boolean {
+  const timer = pendingChannelDeletions.get(matchId);
+  if (!timer) return false;
+  clearTimeout(timer);
+  pendingChannelDeletions.delete(matchId);
+  return true;
 }
 
 /**

@@ -303,6 +303,17 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    name: 'rematch series tracking',
+    up: db => {
+      // A rematch is a new match row sharing a series id with the one before it, so match
+      // history stays one-row-per-game. series_game is the position within the series.
+      addColumnIfMissing(db, 'matches', 'series_id', 'TEXT');
+      addColumnIfMissing(db, 'matches', 'series_game', 'INTEGER');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_matches_series ON matches(series_id, series_game);');
+    },
+  },
 ];
 
 /**

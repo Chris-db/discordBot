@@ -21,7 +21,7 @@ import {
   buildActiveMatchEmbed,
   buildMatchResultEmbed,
 } from '../ui/embeds';
-import { getMatchActionButtons, getGambleProposeButton } from '../ui/buttons';
+import { getMatchActionButtons, getGambleProposeButton, getPostMatchButtons } from '../ui/buttons';
 import { generateRlCredentials } from '../utils/rlCredentials';
 import {
   createMatchVoiceChannels,
@@ -32,10 +32,13 @@ import { calculateMmrDelta } from './mmrService';
 import { getMatchupKey, createRandomTeams } from './draftService';
 import { generateMatchVsImage } from './matchImage';
 import { generateMatchResultImage } from './resultImage';
+import { REPORT_VOTES_REQUIRED, REMATCH_WINDOW_MS, votesRequiredFor } from './gameRules';
+import { rematchMessages, summariseSeries } from './rematchService';
 import { logger } from '../utils/logger';
 
-/** Votes needed to settle a result or cancel — a majority of the 6 players. */
-export const REPORT_VOTES_REQUIRED = 4;
+// REPORT_VOTES_REQUIRED moved to gameRules.ts so rematchService can share it without
+// the two modules importing each other. Re-exported for existing callers.
+export { REPORT_VOTES_REQUIRED } from './gameRules';
 
 /**
  * Starts a new 6mans match with 3v3 teams, temporary voice channels, and RL Lobby details.
@@ -386,12 +389,24 @@ export async function completeMatch(
     const resultEmbed = buildMatchResultEmbed(matchId, winner, blueResults, orangeResults, durationStr);
     resultEmbed.setImage('attachment://match_result.png');
 
-    await channel.send({
-      content: `🏆 **MATCH #${matchId} COMPLETED!** This private channel and voice rooms will auto-delete in 90 seconds. GG!`,
+    const rematchRequired = votesRequiredFor([...match.blue_team, ...match.orange_team]);
+
+    const seriesLine = match.series_id ? `\n${summariseSeries(match.series_id)}` : '';
+    const resultMsg = await channel.send({
+      content:
+        `🏆 **MATCH #${matchId} COMPLETED!** GG!${seriesLine}\n` +
+        `Run it back with **Rematch**, or head **Back to Queue** — otherwise this channel ` +
+        `closes in ${Math.round(REMATCH_WINDOW_MS / 1000)} seconds.`,
       embeds: [resultEmbed],
       files: [attachment],
-      components: [getGambleProposeButton(matchId, false)],
+      components: [
+        getPostMatchButtons(matchId, 0, rematchRequired),
+        getGambleProposeButton(matchId, false),
+      ],
     });
+
+    // The vote handlers edit this message to keep the counter live.
+    rematchMessages.set(matchId, resultMsg);
 
     if (match.message_id) {
       const originalMsg = await channel.messages.fetch(match.message_id).catch(() => null);
@@ -400,7 +415,8 @@ export async function completeMatch(
   }
 
   if (match.text_channel_id) {
-    scheduleMatchChannelDeletion(client, matchId, 90_000);
+    // The teardown is cancellable now, so a rematch can call it off.
+    scheduleMatchChannelDeletion(client, matchId, REMATCH_WINDOW_MS);
   } else {
     const guild = await client.guilds.fetch(match.guild_id).catch(() => null);
     if (guild) {
