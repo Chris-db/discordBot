@@ -3,6 +3,7 @@ import { Client, User } from 'discord.js';
 import { Match, getPlayersByIds, getSeriesScore } from '../database/queries';
 import { RL_COLORS } from '../ui/embeds';
 import { FONT_STACK } from '../utils/fonts';
+import { formatMatchDuration } from '../utils/duration';
 
 /**
  * Generates an 880x420 Match History Canvas Graphic.
@@ -172,10 +173,17 @@ export async function generateMatchHistoryImage(
       ctx.fillStyle = resColor;
       ctx.fillText(resText, startX + cardW - 25, cardY + 44);
     } else {
-      ctx.textAlign = 'right';
-      ctx.font = `bold 16px ${FONT_STACK}`;
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(isBlueWin ? '🔵 +15 MMR' : '🟠 +15 MMR', startX + cardW - 25, cardY + 44);
+      // Deliberately not an MMR delta. completeMatch does stash the base deltas on the row
+      // (gamble_status.blueDelta/orangeDelta), but a resolved Wheel of Fate doubles or
+      // inverts what players actually received without updating them, so that number would
+      // be wrong for exactly the matches people remember. Duration is always true.
+      const durationStr = formatMatchDuration(match.started_at, match.completed_at);
+      if (durationStr) {
+        ctx.textAlign = 'right';
+        ctx.font = `bold 16px ${FONT_STACK}`;
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(`⏱️ ${durationStr}`, startX + cardW - 25, cardY + 44);
+      }
     }
   }
 

@@ -16,6 +16,7 @@ import { endSeason } from '../services/seasonService';
 import { getDivisionTier } from '../services/mmrService';
 import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { formatTeamSize } from '../ui/teamSize';
+import { toDiscordTimestamp } from '../utils/time';
 import { logger } from '../utils/logger';
 
 export const seasonCommand = {
@@ -75,7 +76,9 @@ export const seasonCommand = {
         });
       }).join('\n');
 
-      const startedUnix = Math.floor(new Date(season.started_at).getTime() / 1000);
+      // started_at is a bare CURRENT_TIMESTAMP; parsing it with `new Date` would report
+      // the season as having started two hours early on a UTC+2 host.
+      const startedUnix = toDiscordTimestamp(season.started_at);
       const embed = new EmbedBuilder()
         .setColor(0x2979ff)
         .setTitle(`📅 ${season.name}`)
@@ -122,7 +125,7 @@ export const seasonCommand = {
           .join('\n');
 
         const ended = season.ended_at
-          ? `<t:${Math.floor(new Date(season.ended_at).getTime() / 1000)}:D>`
+          ? `<t:${toDiscordTimestamp(season.ended_at)}:D>`
           : 'unknown';
         embed.addFields({
           name: `${season.name} — ended ${ended}`,

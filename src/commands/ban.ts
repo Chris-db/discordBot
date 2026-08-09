@@ -12,6 +12,7 @@ import {
   getActiveMatchForPlayer,
 } from '../database/queries';
 import { removePlayerFromWaitingQueues } from '../services/queuePanel';
+import { parseDbTimestamp } from '../utils/time';
 import { logger } from '../utils/logger';
 
 export function parseDurationToIso(duration: string): string | null {
@@ -205,7 +206,7 @@ export const banCommand = {
             { name: 'Expires', value: expiryStr, inline: true },
             { name: 'Reason', value: activeBan.reason, inline: false }
           )
-          .setTimestamp(new Date(activeBan.created_at));
+          .setTimestamp(new Date(parseDbTimestamp(activeBan.created_at)));
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
       } else {

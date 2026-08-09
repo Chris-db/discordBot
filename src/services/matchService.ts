@@ -36,6 +36,7 @@ import { generateMatchResultImage } from './resultImage';
 import { REMATCH_WINDOW_MS, votesRequiredFor } from './gameRules';
 import { rematchMessages, summariseSeries } from './rematchService';
 import { logger } from '../utils/logger';
+import { formatMatchDuration } from '../utils/duration';
 
 // Vote thresholds live in gameRules.ts so rematchService can share them without the two
 // modules importing each other. Re-exported for existing callers.
@@ -376,15 +377,7 @@ export async function completeMatch(
 
   await updateMatchFeedCard(client, matchId);
 
-  let durationStr: string | undefined;
-  if (match.started_at) {
-    const secs = Math.floor((new Date(completedAt).getTime() - new Date(match.started_at).getTime()) / 1000);
-    if (secs >= 0 && !isNaN(secs)) {
-      const mins = Math.floor(secs / 60);
-      const remSecs = secs % 60;
-      durationStr = `${mins}m ${remSecs}s`;
-    }
-  }
+  const durationStr = formatMatchDuration(match.started_at, completedAt);
 
   const targetChannelId = match.text_channel_id || match.channel_id;
   const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;

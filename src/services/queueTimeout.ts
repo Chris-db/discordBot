@@ -9,6 +9,7 @@ import {
 } from '../database/queries';
 import config from '../config';
 import { logger } from '../utils/logger';
+import { parseDbTimestamp } from '../utils/time';
 import { refreshQueuePanel } from './queuePanel';
 import { cancelMatch } from './matchService';
 
@@ -84,9 +85,14 @@ export async function sweepStaleMatches(client: Client): Promise<void> {
 
   for (const match of getAllLiveMatches()) {
     // started_at is only set once a match reaches IN_PROGRESS; fall back to creation time.
+    //
+    // Must go through parseDbTimestamp: created_at is SQLite's CURRENT_TIMESTAMP, which
+    // has no timezone marker, and `new Date()` reads it as local. On UTC+2 that made every
+    // match look two hours old the moment it was created, so the 15-minute setup timeout
+    // fired immediately and cancelled matches mid-vote.
     const referenceTime = match.state === 'IN_PROGRESS'
-      ? new Date(match.started_at || match.created_at).getTime()
-      : new Date(match.created_at).getTime();
+      ? parseDbTimestamp(match.started_at || match.created_at)
+      : parseDbTimestamp(match.created_at);
 
     if (Number.isNaN(referenceTime)) continue;
 
