@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-08-08 (multi-queue session)
+Last updated: 2026-08-09 (first live session)
 
 ---
 
@@ -16,34 +16,33 @@ Last updated: 2026-08-08 (multi-queue session)
   contradicts agreed design (see "Where the plan is wrong" below).
 - Project memory (`discord-6mans-bot`) — the agreed design decisions.
 
-## Status: nothing is deployed
+## Status: live on the test server
 
-**The bot Chris runs in his terminal is on `ebeb413` (the initial commit).** Every branch
-below is unmerged and has never run in Discord. Chris has said he does not want to test
-incrementally — the plan is to build the batch, then test it all at once.
+Phases 1–5 are **merged to `main` and running**. Migrations 1–4 applied cleanly to the
+real `data/6mans.sqlite` on 2026-08-09 (six players kept their exact MMR on the 3v3
+ladder). `main` is unpushed — `origin/main` is still on `ebeb413`.
 
-Note: local `main` has since been fast-forwarded to `818432c` (5 ahead of `origin/main`),
-even though the running bot is still on the initial commit.
+Matches #5 and #7 played end to end in Discord: queue → ready check → mode vote →
+teams/captains → lobby → report → MMR and streaks. Two bugs came out of that session and
+are fixed (see gotchas below).
 
-He has also said **he does not care about the existing data** and would prefer to start
-fresh, so the migration's legacy-upgrade path is a nice-to-have for onboarding a future
-second server, not a constraint on his own database.
+Chris does **not** care about the pre-existing data, so the migration's legacy-upgrade
+path is for onboarding a future second server, not a constraint on his own database.
 
-## Branch stack
+A pre-migration snapshot is at `data/6mans.pre-phase5.sqlite` if anything needs rolling
+back. All the feature branches still exist; `git reset --hard 818432c` returns `main` to
+where it was before phase 5.
 
-Each branches off the previous. None merged to `main`.
+## Still unexercised in Discord
 
-```
-main (ebeb413)
-└── phase-1-stability          P0 fixes + nightly backups
-    └── fix/voting-and-ban-p1  P1-11, P1-12, P1-13 + ban removes from queue
-        └── phase-2-migration  guild_id, rank divisions, seasons, /division, /season
-            └── feature/rematch        rematch + requeue + dynamic updateMatch
-                └── feature/streak-callouts   streak badges + bundled fonts
-                    └── feature/multi-queue   2v2 / 3v3 / 4v4 + per-size ladders
-```
+Everything else worked, but these have never been run against the real API:
 
-Tests: **168 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+- Reporting by **button vote** (matches #5 and #7 were force-reported via `/match report`).
+- **2v2 and 4v4** in any form — no channel is registered to a size yet.
+- Double or Nothing.
+- Rematch actually starting (the decline path was tested).
+
+Tests: **190 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -83,20 +82,15 @@ player would keep the stale name on the sizes they had not played since.
 Setup for a new size: `/queue panel size:4v4 division:A` in the channel. Most read
 commands take an optional `size:`, defaulting to 3v3.
 
-## Going live
+## Setup still outstanding
 
-Merge down to `main`, `npm run register` (the slash commands have new options), restart,
-and play a real session.
+**No queue channel is registered to a division**, so `guild_divisions.queue_channel_id`
+is empty for all fifteen rows and every match stamps `division = NULL`. Everything
+defaults to 3v3 and plays fine, but rank divisions, promotion/relegation and
+per-division leaderboards stay inert until someone runs `/queue panel division:C` (or
+`/division configure`) in the queue channel.
 
-Migration 4 has been dry-run against a copy of the live `data/6mans.sqlite`: all six
-players keep their exact MMR on the 3v3 ladder, divisions backfill from the legacy bands,
-the existing match and queue rows stamp as 3v3, and `foreign_key_check` /
-`integrity_check` come back clean. Existing 3v3 play is unaffected — a 2v2 or 4v4 channel
-only exists once someone runs `/queue panel size:`.
-
-Worth exercising in Discord, since none of it has met a real Discord API yet: a 4v4
-captains draft (the serpentine order and the taller draft card), the `userLimit` on team
-VCs at 2v2 and 4v4, and a report vote at 4v4 needing 5 of 8.
+A 2v2 or 4v4 channel only exists once someone runs `/queue panel size:`.
 
 ## Where `feature_plan1.md` is wrong
 
@@ -110,6 +104,22 @@ VCs at 2v2 and 4v4, and a report vote at 4v4 needing 5 of 8.
 - Its **Best-of-3** contradicts the agreed *BO5 lobby, winner-only reporting* — one report
   at the end, no per-game score. Rematch was built as "same teams, new match, series
   counter", not a BO3 scoring system.
+
+## Gotchas found in the first live session
+
+- **SQLite `CURRENT_TIMESTAMP` is UTC with no zone marker, and `new Date()` reads it as
+  local.** `"2026-08-09 09:03:13"` is not ISO 8601, so V8 falls back to local-time
+  parsing — on UTC+2 every `created_at` came back two hours early. That made
+  `sweepStaleMatches` see a brand-new match as 121 minutes old and auto-cancel it
+  mid-vote. **Always use `parseDbTimestamp` from `src/utils/time.ts`**, never a bare
+  `new Date(row.created_at)`. Note the columns hold two shapes: `created_at` is bare,
+  while `started_at` / `completed_at` come from `toISOString()` and carry a `Z`.
+- **The vote thresholds are four separate gates** — mode, captain verify, team verify,
+  report. Multi-queue generalised two and missed two, which sat on a literal `4`. There's
+  a tripwire test in `multiQueue.test.ts` now, but it is a regex, not a proof.
+- `votesRequiredFor` caps the threshold at the number of *humans* in the lobby, so a
+  bot-padded test lobby needs only 1 vote. Handy for testing, and worth remembering
+  before concluding a threshold is broken.
 
 ## Gotchas found in the multi-queue session
 
