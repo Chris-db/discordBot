@@ -151,6 +151,38 @@ describe('captains draft pick order', () => {
   });
 });
 
+describe('no hardcoded vote thresholds', () => {
+  // Four separate vote gates exist (mode, captain verify, team verify, report) and the
+  // multi-queue pass fixed two of them and missed two. A literal 4 is wrong in both
+  // directions: unanimous at 2v2, and a minority at 4v4.
+  it('leaves no bare `>= 4` in the vote paths', () => {
+    const dir = path.join(__dirname, '..', 'src');
+    const offenders: string[] = [];
+
+    const walk = (d: string) => {
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith('.ts')) {
+          fs.readFileSync(full, 'utf8')
+            .split('\n')
+            .forEach((line, i) => {
+              if (/(yes|no|vote|agreed|blue|orange|cancel)\w*Count\s*>=\s*\d/i.test(line)) {
+                offenders.push(`${entry.name}:${i + 1}  ${line.trim()}`);
+              }
+            });
+        }
+      }
+    };
+    walk(dir);
+
+    expect(offenders, `vote counts compared against a literal:\n${offenders.join('\n')}`).toEqual(
+      []
+    );
+  });
+});
+
 describe('matchupCount', () => {
   it('agrees with the actual enumeration', () => {
     for (const teamSize of SUPPORTED_TEAM_SIZES) {

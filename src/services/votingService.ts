@@ -459,7 +459,8 @@ export async function handleCaptainsVote(
     components: [buttons],
   });
 
-  if (yesCount >= 4 || noCount >= 4) {
+  const captainVotesRequired = votesRequiredFor(queue.player_ids);
+  if (yesCount >= captainVotesRequired || noCount >= captainVotesRequired) {
     const timer = activeVoteTimers.get(channelId);
     if (timer) {
       clearTimeout(timer);
@@ -666,7 +667,8 @@ export async function handleTeamsVote(
     components: [buttons],
   });
 
-  if (yesCount >= 4 || noCount >= 4) {
+  const teamVotesRequired = votesRequiredFor(queue.player_ids);
+  if (yesCount >= teamVotesRequired || noCount >= teamVotesRequired) {
     const timer = activeVoteTimers.get(channelId);
     if (timer) {
       clearTimeout(timer);
