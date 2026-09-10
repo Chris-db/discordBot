@@ -126,7 +126,12 @@ export function getTeamsVoteButtons(
 }
 
 /**
- * ActionRow for Active Match Actions: Report Blue, Report Orange, Cancel, Mod Override.
+ * ActionRow for Active Match Actions: Report Blue, Report Orange, Cancel.
+ *
+ * There is no Mod Override button. Components on a message are visible to everyone who
+ * can see the message -- Discord has no per-viewer buttons -- so an admin-only control
+ * here was a button six players could see and none of them could use. Admin actions live
+ * on /match, which Discord itself hides from anyone without Manage Channels.
  */
 export function getMatchActionButtons(matchId: number): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -143,34 +148,6 @@ export function getMatchActionButtons(matchId: number): ActionRowBuilder<ButtonB
     new ButtonBuilder()
       .setCustomId(`match_cancel_${matchId}`)
       .setLabel('Cancel')
-      .setEmoji('❌')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(`match_mod_override_${matchId}`)
-      .setLabel('Mod Override')
-      .setEmoji('🛠️')
-      .setStyle(ButtonStyle.Secondary)
-  );
-}
-
-/**
- * Modal or button for Mod Override confirmation modal / buttons.
- */
-export function getModOverrideButtons(matchId: number): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`mod_force_blue_${matchId}`)
-      .setLabel('Force Blue')
-      .setEmoji('🔵')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`mod_force_orange_${matchId}`)
-      .setLabel('Force Orange')
-      .setEmoji('🟠')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`mod_force_cancel_${matchId}`)
-      .setLabel('Force Cancel')
       .setEmoji('❌')
       .setStyle(ButtonStyle.Danger)
   );

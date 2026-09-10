@@ -8,6 +8,7 @@ import {
 import {
   getActiveMatches,
   getMatch,
+  getMatchByTextChannel,
   cancelAllActiveMatches,
   updateMatch,
 } from '../database/queries';
@@ -16,10 +17,31 @@ import { deleteMatchChannels } from '../services/channelService';
 import { autoDeleteReply } from '../utils/autoDelete';
 import { RL_COLORS } from '../ui/embeds';
 
+const NO_MATCH_HERE =
+  '❌ No match in this channel — run this inside a #match channel, or pass `match_id`.';
+
+/**
+ * The match an admin means: the one they named, else the one whose channel they are in.
+ *
+ * This replaced the Mod Override button, which sat on every match card. Standing in the
+ * match channel and typing the command is the same gesture as clicking the button, as
+ * long as nobody has to go and look up the id first.
+ */
+function resolveMatchId(interaction: ChatInputCommandInteraction): number | undefined {
+  const given = interaction.options.getInteger('match_id');
+  if (given !== null) return given;
+  return getMatchByTextChannel(interaction.channelId)?.match_id;
+}
+
 export const matchCommand = {
   data: new SlashCommandBuilder()
     .setName('match')
-    .setDescription('Manage active 6mans matches')
+    .setDescription('Manage active 6mans matches (Admin/Mod)')
+    // Discord hides the command from anyone without this permission, which is the only
+    // way to make an admin control invisible to players -- message buttons cannot be.
+    // The per-subcommand isAdmin checks below stay as the backstop for servers that
+    // loosen this in Integrations settings.
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addSubcommand(sub =>
       sub
         .setName('list')
@@ -28,10 +50,7 @@ export const matchCommand = {
     .addSubcommand(sub =>
       sub
         .setName('report')
-        .setDescription('Force report a match winner (Admin/Mod)')
-        .addIntegerOption(opt =>
-          opt.setName('match_id').setDescription('The ID of the match').setRequired(true)
-        )
+        .setDescription('Force report a match winner')
         .addStringOption(opt =>
           opt
             .setName('winner')
@@ -42,13 +61,16 @@ export const matchCommand = {
               { name: 'Team Orange 🟠', value: 'ORANGE' }
             )
         )
+        .addIntegerOption(opt =>
+          opt.setName('match_id').setDescription('Defaults to the match in this channel').setRequired(false)
+        )
     )
     .addSubcommand(sub =>
       sub
         .setName('cancel')
-        .setDescription('Force cancel an active match (Admin/Mod)')
+        .setDescription('Force cancel an active match')
         .addIntegerOption(opt =>
-          opt.setName('match_id').setDescription('The ID of the match').setRequired(true)
+          opt.setName('match_id').setDescription('Defaults to the match in this channel').setRequired(false)
         )
     )
     .addSubcommand(sub =>
@@ -105,7 +127,10 @@ export const matchCommand = {
         });
       }
 
-      const matchId = interaction.options.getInteger('match_id', true);
+      const matchId = resolveMatchId(interaction);
+      if (matchId === undefined) {
+        return interaction.reply({ content: NO_MATCH_HERE, ephemeral: true });
+      }
       const winner = interaction.options.getString('winner', true) as 'BLUE' | 'ORANGE';
 
       // Completing a match does a lot of Discord I/O (result image, channel sends, VC
@@ -125,7 +150,10 @@ export const matchCommand = {
         });
       }
 
-      const matchId = interaction.options.getInteger('match_id', true);
+      const matchId = resolveMatchId(interaction);
+      if (matchId === undefined) {
+        return interaction.reply({ content: NO_MATCH_HERE, ephemeral: true });
+      }
 
       await interaction.deferReply({ ephemeral: true });
       const res = await cancelMatch(interaction.client, matchId, interaction.user.tag);

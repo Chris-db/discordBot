@@ -19,8 +19,6 @@ import { handleReadyCheckLeave } from '../services/readyCheckService';
 import {
   handleMatchReportVote,
   handleMatchCancelVote,
-  cancelMatch,
-  forceReportMatch,
 } from '../services/matchService';
 import {
   proposeGamble,
@@ -36,7 +34,7 @@ import {
   getMatch,
   getMatchHistory,
 } from '../database/queries';
-import { getModOverrideButtons, getLeaderboardButtons } from '../ui/buttons';
+import { getLeaderboardButtons } from '../ui/buttons';
 import { generateLeaderboardImage } from '../services/leaderboardImage';
 import { generatePlayerProfileImage } from '../services/profileImage';
 import { generateMatchHistoryImage } from '../services/historyImage';
@@ -250,15 +248,18 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
     if (customId.startsWith('match_cancel_')) {
       autoDeleteReply(interaction, 6000);
-      const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
       const matchId = parseInt(customId.split('_').pop()!, 10);
       const match = getMatch(matchId);
 
-      // Allow either an admin or a player in the match to request cancel
+      // This button is a player vote. It used to wave admins through as well, and then
+      // the vote handler rejected them as non-players -- a dead end in two steps.
       const isPlayer = match && (match.blue_team.includes(user.id) || match.orange_team.includes(user.id));
-      if (!isAdmin && !isPlayer) {
+      if (!isPlayer) {
+        const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
         await interaction.reply({
-          content: '❌ Only match players or an Admin can cancel this match.',
+          content: isAdmin
+            ? '❌ Cancel is a player vote. Use `/match cancel` to force it.'
+            : '❌ Only players in this match can vote to cancel.',
           ephemeral: true,
         });
         return;
@@ -270,66 +271,10 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       return;
     }
 
-    if (customId.startsWith('match_mod_override_')) {
-      // Defer first. This branch looks instant, but canvas rendering elsewhere runs on the
-      // main thread and blocks the event loop, which can push the reply past Discord's 3s
-      // acknowledgement window and produce DiscordAPIError[10062] Unknown interaction.
-      await interaction.deferReply({ ephemeral: true });
+    // Mod overrides moved to /match report and /match cancel: a button on the match card
+    // is visible to every player, and Discord can hide a slash command by permission.
 
-      const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
-      if (!isAdmin) {
-        await interaction.editReply({
-          content: '❌ You need **Manage Channels** permission to use Mod Override.',
-        });
-        return;
-      }
-
-      const matchId = parseInt(customId.split('_').pop()!, 10);
-      const buttons = getModOverrideButtons(matchId);
-      await interaction.editReply({
-        content: `🛠️ Mod override — Match #${matchId}`,
-        components: [buttons],
-      });
-      return;
-    }
-
-    // 4. Mod Override Actions
-    if (customId.startsWith('mod_force_blue_') || customId.startsWith('mod_force_orange_')) {
-      const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
-      if (!isAdmin) {
-        await interaction.reply({
-          content: '❌ You need **Manage Channels** permission to use Mod Override controls.',
-          ephemeral: true,
-        });
-        return;
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-      const matchId = parseInt(customId.split('_').pop()!, 10);
-      const winner = customId.includes('_blue_') ? 'BLUE' : 'ORANGE';
-      const res = await forceReportMatch(interaction.client, matchId, winner);
-      await interaction.editReply({ content: res.message });
-      return;
-    }
-
-    if (customId.startsWith('mod_force_cancel_')) {
-      const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
-      if (!isAdmin) {
-        await interaction.reply({
-          content: '❌ You need **Manage Channels** permission to use Mod Override controls.',
-          ephemeral: true,
-        });
-        return;
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-      const matchId = parseInt(customId.split('_').pop()!, 10);
-      const res = await cancelMatch(interaction.client, matchId, interaction.user.tag);
-      await interaction.editReply({ content: res.message });
-      return;
-    }
-
-    // 5. Gamble Actions
+    // 4. Gamble Actions
     if (customId.startsWith('gamble_propose_')) {
       const matchId = parseInt(customId.split('_').pop()!, 10);
       await proposeGamble(interaction.client, interaction, matchId);
