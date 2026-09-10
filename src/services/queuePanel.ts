@@ -42,6 +42,16 @@ const panelMoveTimers = new Map<string, NodeJS.Timeout>();
 const activePanelRefreshes = new Map<string, Promise<void>>();
 
 /**
+ * A join or leave, decided. `settled` is the follow-up work -- panel refresh, and on a
+ * full queue the ready check -- already running; callers answer the click, then await it.
+ */
+export interface QueueClickResult {
+  success: boolean;
+  message: string;
+  settled?: Promise<void>;
+}
+
+/**
  * The team size a channel queues at.
  *
  * A queue channel is registered against exactly one (division, size) pair, so the division
@@ -130,24 +140,20 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
     const components = [getQueuePanelButtons()];
 
+    // Every call to Discord is a round trip -- from here about 200ms each -- and this
+    // refresh used to make three before it had changed anything: fetch the panel, fetch
+    // the newest message to see if they were the same, then edit. The gateway already
+    // keeps lastMessageId current, and an edit by id needs no fetch first, so it is one
+    // call now. A failed edit means the panel is gone; fall through and send a fresh one.
     let editedExisting = false;
     if (queue.message_id) {
-      const existingMsg = await channel.messages.fetch(queue.message_id).catch(() => null);
-      if (existingMsg) {
-        const recentMessages = await channel.messages.fetch({ limit: 1 }).catch(() => null);
-        const isLastMessage = recentMessages && recentMessages.first()?.id === existingMsg.id;
-
-        if (isLastMessage) {
-          await existingMsg.edit({
-            embeds: [],
-            components,
-            files: [attachment],
-            attachments: [],
-          }).catch(() => null);
-          editedExisting = true;
-        } else {
-          await existingMsg.delete().catch(() => null);
-        }
+      if (channel.lastMessageId === queue.message_id) {
+        const edited = await channel.messages
+          .edit(queue.message_id, { embeds: [], components, files: [attachment], attachments: [] })
+          .catch(() => null);
+        editedExisting = edited !== null;
+      } else {
+        await channel.messages.delete(queue.message_id).catch(() => null);
       }
     }
 
@@ -195,7 +201,7 @@ export async function handleJoinQueue(
   channelId: string,
   guildId: string,
   user: User
-): Promise<{ success: boolean; message: string }> {
+): Promise<QueueClickResult> {
   // Check if player is banned
   const activeBan = getActiveBan(guildId, user.id);
   if (activeBan) {
@@ -261,21 +267,27 @@ export async function handleJoinQueue(
     return { success: false, message: txResult.message || 'Could not join queue.' };
   }
 
-  await refreshQueuePanel(client, channelId);
+  // The click is decided the moment the row is written. Everything after this is the
+  // panel re-render and, on a full queue, the whole ready-check setup -- several Discord
+  // round trips the clicker does not need to wait for. It is handed back as a promise so
+  // the caller can answer them first and only then wait for the rest.
+  const settled = (async () => {
+    await refreshQueuePanel(client, channelId);
 
-  // Queue full -- start the AFK voice ready check.
-  if (txResult.newCount === txResult.capacity) {
-    const latestQueue = getQueue(channelId);
-    if (
-      latestQueue &&
-      latestQueue.state === 'WAITING' &&
-      latestQueue.player_ids.length === latestQueue.team_size * 2
-    ) {
-      await startReadyCheckPhase(client, channelId, guildId, latestQueue);
+    // Queue full -- start the AFK voice ready check.
+    if (txResult.newCount === txResult.capacity) {
+      const latestQueue = getQueue(channelId);
+      if (
+        latestQueue &&
+        latestQueue.state === 'WAITING' &&
+        latestQueue.player_ids.length === latestQueue.team_size * 2
+      ) {
+        await startReadyCheckPhase(client, channelId, guildId, latestQueue);
+      }
     }
-  }
+  })().catch(err => logger.error(`Join queue follow-up failed in ${channelId}:`, err));
 
-  return { success: true, message: 'Joined the queue! 🚀' };
+  return { success: true, message: 'Joined the queue! 🚀', settled };
 }
 
 /**
@@ -349,7 +361,7 @@ export async function handleLeaveQueue(
   client: Client,
   channelId: string,
   user: User
-): Promise<{ success: boolean; message: string }> {
+): Promise<QueueClickResult> {
   // The queue row is the only thing here that knows which guild this channel belongs to.
   const existingQueue = getQueue(channelId);
   if (!existingQueue) {
@@ -391,9 +403,11 @@ export async function handleLeaveQueue(
     return { success: false, message: txResult.message || 'Could not leave queue.' };
   }
 
-  await refreshQueuePanel(client, channelId);
+  const settled = refreshQueuePanel(client, channelId).catch(err =>
+    logger.error(`Leave queue follow-up failed in ${channelId}:`, err)
+  );
 
-  return { success: true, message: 'Left the queue. 🚪' };
+  return { success: true, message: 'Left the queue. 🚪', settled };
 }
 
 /**
@@ -428,7 +442,7 @@ export async function fillQueueWithBots(
   channelId: string,
   guildId: string,
   skipVoting: boolean = false
-): Promise<{ success: boolean; message: string }> {
+): Promise<QueueClickResult> {
   const queue = getOrInitQueue(channelId, guildId);
   if (queue.state !== 'WAITING') {
     return { success: false, message: 'Queue has already popped!' };
@@ -480,7 +494,7 @@ export async function forcePopQueue(
   channelId: string,
   guildId: string,
   mode?: 'balanced' | 'captains' | 'random'
-): Promise<{ success: boolean; message: string }> {
+): Promise<QueueClickResult> {
   await fillQueueWithBots(client, channelId, guildId, true);
 
   const queue = getQueue(channelId);

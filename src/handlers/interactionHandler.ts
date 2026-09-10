@@ -52,19 +52,23 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
   try {
     // 1. Queue Panel Buttons
+    // Join and Leave answer before the panel re-renders. The decision is a single SQLite
+    // write, so there is nothing to defer for; deferring and then waiting on the panel
+    // (three round trips and an image upload) is what kept "thinking" on screen for a
+    // second. The follow-up is still awaited afterwards so its errors land in this catch.
     if (customId === 'queue_join') {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
       const res = await handleJoinQueue(interaction.client, channelId, guildId, user);
-      await interaction.editReply({ content: res.message });
+      await interaction.reply({ content: res.message, ephemeral: true });
+      await res.settled;
       return;
     }
 
     if (customId === 'queue_leave') {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
       const res = await handleLeaveQueue(interaction.client, channelId, user);
-      await interaction.editReply({ content: res.message });
+      await interaction.reply({ content: res.message, ephemeral: true });
+      await res.settled;
       return;
     }
 
