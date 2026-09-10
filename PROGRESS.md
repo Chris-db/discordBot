@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-10 (queue-sequence audit)
+Last updated: 2026-09-10 (audit leftovers + queue wait line)
 
 ---
 
@@ -63,7 +63,7 @@ Everything else worked, but these have never been run against the real API:
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
 
-Tests: **249 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **259 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -109,6 +109,32 @@ Landed in the follow-up session (same day, all on `main`):
 **Audit items deliberately left as policy decisions for Chris:**
 - AFK cooldown for a player who fails/leaves a ready check (comment marks the spot).
 - Whether the 90s rematch window is long enough after a BO5.
+
+## Audit leftovers (2026-09-10, third session)
+
+Everything in `AUDIT.md` P2-14 and Part 5 that was still open, plus the two cheapest UX
+items. All on `main`; nothing here needs `npm run register`.
+
+- **Boot hardening.** `validateConfig()` refuses to start on a missing token/client id or
+  a non-numeric timeout (a typo used to parse to NaN and make that timeout "never").
+  `uncaughtException` now exits(1) — the Pi's `Restart=always` brings a clean process
+  back in ~1s and `recoverStuckQueues` cleans up — instead of carrying on with half-written
+  state. The **MessageContent intent is dropped**; nothing read message content. You can
+  untick it in the Developer Portal too, but nothing breaks if you don't.
+- `/queue clear` inside `#match-N` now refuses and points at `/match cancel` (it used to
+  wipe the lobby row and leave the match live). The rank-channel path clears every vote
+  state, which it had drifted from.
+- `ephemeral: true` → `flags: MessageFlags.Ephemeral` across all 81 sites. discord.js
+  logs a deprecation warning for the boolean.
+- **Queue wait line.** The panel message now says `⏳ First in queue joined 22 minutes
+  ago · 3 more to pop` as a live `<t:…:R>` — the image is a snapshot, so the text is
+  where a clock has to live. Empty and full queues say nothing.
+- Draft card subtext shows the pick order (`🔵 🟠🟠 · last player → 🔵`); lobby name and
+  password sit on separate lines so a copy grabs one.
+
+Not done from the audit, on purpose: the "typically pops in ~N min" estimate needs
+queue-to-pop history the schema does not keep; party/duo support and MMR preview on the
+teams vote are features, not fixes — ask Chris before building either.
 
 ## Next
 
