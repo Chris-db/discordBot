@@ -98,12 +98,16 @@ function dropBusyPlayers(channelId: string, guildId: string, queue: ActiveQueue)
 /**
  * Starts the AFK Voice Ready Check once the queue is full. Its length is
  * `config.readyCheckTimeoutSeconds` (READY_CHECK_TIMEOUT_SECONDS, five minutes by default).
+ *
+ * `carryOverVcId` is the voice channel of a check that just failed: anyone on this roster
+ * who is still sitting in it is moved into the new one rather than made to rejoin.
  */
 export async function startReadyCheckPhase(
   client: Client,
   channelId: string,
   guildId: string,
-  queue: ActiveQueue
+  queue: ActiveQueue,
+  options: { carryOverVcId?: string } = {}
 ): Promise<void> {
   const teamSize = queue.team_size;
   const rosterSize = teamSize * 2;
@@ -237,6 +241,22 @@ export async function startReadyCheckPhase(
   // Record the VC against the match, not just the queue row. cancelMatch deletes the queue
   // row before channel cleanup runs, which used to leave this VC orphaned in the server.
   updateMatch(match.match_id, { ready_check_vc_id: readyCheckVc.id });
+
+  // On a re-pop the players who did show up are still in the failed check's VC, which is
+  // deleted a few seconds from now. That used to disconnect them, and they had to rejoin
+  // voice and sit through a fresh five-minute check they had already passed. A move that
+  // fails is only logged: that player shows as not ready and can rejoin by hand.
+  if (options.carryOverVcId) {
+    const oldVc = await guild.channels.fetch(options.carryOverVcId).catch(() => null);
+    if (oldVc && oldVc.type === ChannelType.GuildVoice) {
+      for (const member of oldVc.members.values()) {
+        if (!queue.player_ids.includes(member.id)) continue;
+        await member.voice.setChannel(readyCheckVc, 'Ready check re-popped').catch(err =>
+          logger.warn(`Could not move ${member.user.tag} into Ready Check #${match.match_id}:`, err)
+        );
+      }
+    }
+  }
 
   // 1. Save matchQueue for textChannelId (#match-123) in READY_CHECK state so timer and voting can run against it
   const matchQueue: ActiveQueue = {
@@ -379,7 +399,8 @@ export async function startReadyCheckPhase(
       channelId,
       guildId,
       readyPlayerIds,
-      currentQueue.player_join_times
+      currentQueue.player_join_times,
+      readyCheckVc.id
     );
 
     const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
@@ -477,13 +498,16 @@ export async function startReadyCheckPhase(
  *
  * Call this after the failed match has been cancelled: until then its players still count
  * as mid-match, and the backstop in startReadyCheckPhase would drop every one of them.
+ * `carryOverVcId` is the failed check's voice channel, handed to the re-pop so the players
+ * sitting in it are moved across rather than disconnected.
  */
 export async function returnPlayersToQueue(
   client: Client,
   channelId: string,
   guildId: string,
   playerIds: string[],
-  joinTimes: Record<string, number> | undefined
+  joinTimes: Record<string, number> | undefined,
+  carryOverVcId?: string
 ): Promise<{ rePopped: boolean; waiting: number }> {
   const rankQueue = getOrInitQueue(channelId, guildId);
   const rosterSize = rankQueue.team_size * 2;
@@ -533,7 +557,7 @@ export async function returnPlayersToQueue(
   // The failed check still has channels to tear down after this returns, so a re-pop that
   // falls over must not take that with it. The stale-match sweep picks up what it left.
   try {
-    await startReadyCheckPhase(client, channelId, guildId, popQueue);
+    await startReadyCheckPhase(client, channelId, guildId, popQueue, { carryOverVcId });
   } catch (error) {
     logger.error(`Re-pop of ${channelId} after a failed ready check did not start:`, error);
   }
