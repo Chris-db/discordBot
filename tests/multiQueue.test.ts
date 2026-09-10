@@ -27,6 +27,7 @@ import {
 import {
   getAllUniqueMatchups,
   getPickOrder,
+  describePickOrder,
   totalPicks,
   matchupCount,
   createBalancedTeams,
@@ -122,6 +123,15 @@ describe('captains draft pick order', () => {
       // Two captains + the picks made + one auto-assigned = the whole roster.
       expect(2 + totalPicks(teamSize) + 1).toBe(teamSize * 2);
     }
+  });
+
+  it('describes the order and where the unpicked last player lands', () => {
+    // 2v2: Blue picks once (2), so the last player fills Orange.
+    expect(describePickOrder(2)).toBe('🔵 · last player → 🟠');
+    // 3v3: Blue 1 + Orange 2 leaves Blue short.
+    expect(describePickOrder(3)).toBe('🔵 🟠🟠 · last player → 🔵');
+    // 4v4: Blue 3 + Orange 2 leaves Orange short.
+    expect(describePickOrder(4)).toBe('🔵 🟠🟠 🔵🔵 · last player → 🟠');
   });
 
   it.each(SUPPORTED_TEAM_SIZES)('fills both teams at %iv%i', teamSize => {

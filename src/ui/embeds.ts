@@ -82,7 +82,9 @@ export function buildActiveMatchEmbed(
   },
   votesRequired: number = 4
 ): EmbedBuilder {
-  const lines = [`**Name** \`${rlName}\`   **Password** \`${rlPass}\``];
+  // One credential per line. Clicking an inline code span copies it on desktop, and a
+  // long-press on mobile selects the line -- with both on one line it grabbed both.
+  const lines = [`**Name** \`${rlName}\``, `**Password** \`${rlPass}\``];
 
   // These two used to be accepted and never rendered, so "join your team's voice room"
   // pointed at nothing clickable.

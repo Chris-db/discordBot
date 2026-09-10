@@ -198,7 +198,8 @@ describe('vote phase cards', () => {
 
       const autoPickAt = stamp(Date.now() + config.draftPickTimeoutSeconds * 1000);
       expect(channel.sends[0].content).toBe(
-        `🔵 <@${queue.draft_state!.blueCaptain}> — pick 1 of 3 · auto-pick ${autoPickAt}`
+        `🔵 <@${queue.draft_state!.blueCaptain}> — pick 1 of 3 · auto-pick ${autoPickAt}\n` +
+          `-# Order 🔵 🟠🟠 · last player → 🔵`
       );
     });
 

@@ -32,7 +32,7 @@ import {
   processCaptainPick,
 } from './draftService';
 import { votesRequiredFor, MAX_REROLLS } from './gameRules';
-import { totalPicks, matchupCount, captainPairCount } from './draftService';
+import { totalPicks, matchupCount, captainPairCount, describePickOrder } from './draftService';
 import { startNewMatch } from './matchService';
 import { generateCaptainsDraftImage } from './draftImage';
 import { generateModeVoteImage } from './voteImage';
@@ -916,7 +916,9 @@ export async function sendCaptainsDraftCard(
   // This mention is the one ping that stays: it is aimed at a single person who has to act.
   const autoPickAt = captainIsBot ? '' : ` · auto-pick ${relativeTimestamp(sentAt + pickTimeoutMs)}`;
   const sentMsg = await channel.send({
-    content: `${draft.turn === 'BLUE' ? '🔵' : '🟠'} <@${currentCaptain}> — pick ${draft.pickNumber} of ${picks}${autoPickAt}`,
+    content:
+      `${draft.turn === 'BLUE' ? '🔵' : '🟠'} <@${currentCaptain}> — pick ${draft.pickNumber} of ${picks}${autoPickAt}\n` +
+      `-# Order ${describePickOrder(teamSize)}`,
     components: [selectMenu],
     files: [attachment],
   });

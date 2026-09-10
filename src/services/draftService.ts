@@ -108,6 +108,27 @@ export function getPickOrder(teamSize: number): ('BLUE' | 'ORANGE')[] {
 }
 
 /**
+ * The pick order as one line of dots, for the draft card: "🔵 🟠🟠 · last player → 🔵" at
+ * 3v3. Serpentine is not obvious the first time -- Orange picking twice in a row looks
+ * like a bug to anyone who has not seen it before -- and the last player is never picked
+ * at all, which is the other surprise.
+ */
+export function describePickOrder(teamSize: number): string {
+  const order = getPickOrder(teamSize);
+  const dot = (t: 'BLUE' | 'ORANGE') => (t === 'BLUE' ? '🔵' : '🟠');
+
+  let dots = '';
+  order.forEach((t, i) => {
+    if (i > 0 && order[i - 1] !== t) dots += ' ';
+    dots += dot(t);
+  });
+
+  const bluePicks = order.filter(t => t === 'BLUE').length;
+  const lastTo: 'BLUE' | 'ORANGE' = bluePicks + 1 < teamSize ? 'BLUE' : 'ORANGE';
+  return `${dots} · last player → ${dot(lastTo)}`;
+}
+
+/**
  * Returns the MMR gap between the two sides of a matchup.
  */
 export function getMatchupMmrDiff(matchup: DraftResult): number {
