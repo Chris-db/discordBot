@@ -11,7 +11,9 @@ import {
   getQueue,
   saveQueue,
   deleteQueue,
+  mutateQueue,
   getPlayersByIds,
+  getActiveMatchForPlayer,
   createMatch,
   updateMatch,
   ActiveQueue,
@@ -20,8 +22,66 @@ import { createMatchChannels, deleteMatchChannels } from './channelService';
 import { generateReadyCheckImage } from './readyCheckImage';
 import { logger } from '../utils/logger';
 import config from '../config';
-import { getOrInitQueue, refreshQueuePanel } from './queuePanel';
+import { getOrInitQueue, refreshQueuePanel, removePlayersFromWaitingQueues } from './queuePanel';
 import { startVotingPhase } from './votingService';
+
+/**
+ * Drops anyone who already has a live match from a lobby that is about to pop, and says
+ * whether it is still full.
+ *
+ * Join Queue refuses a player who is mid-match, but only at join time. The pop path now
+ * takes a popped roster out of every other waiting queue, and this is the backstop for
+ * whatever gets past that -- /queue add, a requeue racing a pop -- because a queue must
+ * never pop with a player who is already in a match. Test bots are exempt: they are
+ * shared fixtures, and a bot lobby running in one channel would otherwise make /queue
+ * fill in a second channel silently refuse to pop.
+ *
+ * The lobby and the queue row are not always the same list. On an ordinary pop they are;
+ * on a re-pop after a failed ready check the caller has already sliced the lobby off the
+ * front of the row, and the row holds whoever is waiting behind. So the gap a dropped
+ * player leaves is filled from the waiting list, and whoever cannot pop goes back into
+ * the row -- lobby first, since they were ahead -- rather than being lost.
+ *
+ * Mutates `queue` to the roster that should pop. Only writes the row when something was
+ * actually dropped.
+ */
+function dropBusyPlayers(channelId: string, guildId: string, queue: ActiveQueue): boolean {
+  const rosterSize = queue.team_size * 2;
+  const isBusy = (id: string) =>
+    !id.startsWith('test_bot_') && getActiveMatchForPlayer(guildId, id) !== undefined;
+
+  const busyIds = queue.player_ids.filter(isBusy);
+  if (busyIds.length === 0) return queue.player_ids.length >= rosterSize;
+
+  logger.warn(
+    `Dropping ${busyIds.join(', ')} from the pop in ${channelId}: already in a live match.`
+  );
+
+  const lobby = new Set(queue.player_ids);
+  const joinTimes: Record<string, number> = { ...(queue.player_join_times ?? {}) };
+  let pool: string[] = [];
+
+  const saved = mutateQueue(channelId, row => {
+    for (const [id, t] of Object.entries(row.player_join_times ?? {})) {
+      if (!(id in joinTimes)) joinTimes[id] = t;
+    }
+    pool = [...queue.player_ids, ...row.player_ids.filter(id => !lobby.has(id))].filter(
+      id => !isBusy(id)
+    );
+    const keep = pool.length >= rosterSize ? pool.slice(rosterSize) : pool;
+    row.player_ids = keep;
+    row.player_join_times = Object.fromEntries(keep.map(id => [id, joinTimes[id] ?? Date.now()]));
+  });
+  if (!saved) {
+    pool = queue.player_ids.filter(id => !isBusy(id));
+  }
+
+  queue.player_ids = pool.slice(0, rosterSize);
+  queue.player_join_times = Object.fromEntries(
+    queue.player_ids.map(id => [id, joinTimes[id] ?? Date.now()])
+  );
+  return queue.player_ids.length >= rosterSize;
+}
 
 /**
  * Starts the AFK Voice Ready Check once the queue is full. Its length is
@@ -35,6 +95,14 @@ export async function startReadyCheckPhase(
 ): Promise<void> {
   const teamSize = queue.team_size;
   const rosterSize = teamSize * 2;
+
+  // Both of these run before the branches below fork, because the all-bots path and the
+  // no-guild / no-category fallbacks skip straight to voting and need the same treatment.
+  if (!dropBusyPlayers(channelId, guildId, queue)) {
+    await refreshQueuePanel(client, channelId);
+    return;
+  }
+  await removePlayersFromWaitingQueues(client, guildId, queue.player_ids, channelId);
 
   // If all players are bots, skip ready check and jump directly to voting
   const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
