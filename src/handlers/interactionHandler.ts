@@ -5,6 +5,7 @@ import {
   PermissionFlagsBits,
   AttachmentBuilder,
   Message,
+  MessageFlags,
 } from 'discord.js';
 import {
   handleJoinQueue,
@@ -59,7 +60,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId === 'queue_join') {
       autoDeleteReply(interaction, 6000);
       const res = await handleJoinQueue(interaction.client, channelId, guildId, user);
-      await interaction.reply({ content: res.message, ephemeral: true });
+      await interaction.reply({ content: res.message, flags: MessageFlags.Ephemeral });
       await res.settled;
       return;
     }
@@ -67,7 +68,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId === 'queue_leave') {
       autoDeleteReply(interaction, 6000);
       const res = await handleLeaveQueue(interaction.client, channelId, user);
-      await interaction.reply({ content: res.message, ephemeral: true });
+      await interaction.reply({ content: res.message, flags: MessageFlags.Ephemeral });
       await res.settled;
       return;
     }
@@ -75,19 +76,19 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId.startsWith('ready_leave_')) {
       const matchId = parseInt(customId.split('_').pop()!, 10);
       if (Number.isNaN(matchId)) {
-        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        await interaction.reply({ content: '❌ Malformed button id.', flags: MessageFlags.Ephemeral });
         return;
       }
       autoDeleteReply(interaction, 6000);
       // Failing the check tears channels down and may re-pop the queue, well past 3s.
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await handleReadyCheckLeave(matchId, user.id);
       await interaction.editReply({ content: res.message });
       return;
     }
 
     if (customId === 'queue_stats' || customId === 'leaderboard_my_rank') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId!;
       const teamSize = channelTeamSize(guildId, channelId);
       const player = getOrCreatePlayer(guildId, teamSize, user.id, user.username);
@@ -115,7 +116,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
     if (customId === 'queue_leaderboard') {
       // Defer first — image generation can outrun the 3s interaction deadline.
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const page = 1;
       const guildId = interaction.guildId!;
@@ -141,7 +142,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     }
 
     if (customId === 'queue_history') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId!;
       const matches = getMatchHistory(guildId, 10);
       const imageBuffer = await generateMatchHistoryImage(interaction.client, matches);
@@ -191,7 +192,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     // 2. Captain Verification Vote Buttons
     if (customId === 'captains_verify_yes' || customId === 'captains_verify_no') {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const vote = customId === 'captains_verify_yes' ? 'yes' : 'no';
       const res = await handleCaptainsVote(
         interaction.client,
@@ -208,7 +209,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     // 2b. Team Verification Vote Buttons (Random / Balanced Teams)
     if (customId === 'teams_verify_yes' || customId === 'teams_verify_no') {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const vote = customId === 'teams_verify_yes' ? 'yes' : 'no';
       const res = await handleTeamsVote(
         interaction.client,
@@ -225,7 +226,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     // 3. Mode Vote Buttons
     if (customId.startsWith('vote_')) {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const mode = customId.replace('vote_', '') as 'captains' | 'balanced' | 'random';
       const res = await handleModeVote(
         interaction.client,
@@ -242,7 +243,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     // 3. Match Action Buttons
     if (customId.startsWith('match_report_blue_') || customId.startsWith('match_report_orange_')) {
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const matchId = parseInt(customId.split('_').pop()!, 10);
       const winner = customId.includes('_blue_') ? 'BLUE' : 'ORANGE';
       const res = await handleMatchReportVote(interaction.client, matchId, user.id, winner);
@@ -264,12 +265,12 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
           content: isAdmin
             ? '❌ Cancel is a player vote. Use `/match cancel` to force it.'
             : '❌ Only players in this match can vote to cancel.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await handleMatchCancelVote(interaction.client, matchId, user.id);
       await interaction.editReply({ content: res.message });
       return;
@@ -301,11 +302,11 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId.startsWith('rematch_yes_') || customId.startsWith('rematch_no_')) {
       const matchId = parseInt(customId.split('_').pop()!, 10);
       if (Number.isNaN(matchId)) {
-        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        await interaction.reply({ content: '❌ Malformed button id.', flags: MessageFlags.Ephemeral });
         return;
       }
       autoDeleteReply(interaction, 6000);
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await handleRematchVote(
         interaction.client,
         matchId,
@@ -320,12 +321,12 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     if (customId.startsWith('requeue_')) {
       const matchId = parseInt(customId.split('_').pop()!, 10);
       if (Number.isNaN(matchId)) {
-        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        await interaction.reply({ content: '❌ Malformed button id.', flags: MessageFlags.Ephemeral });
         return;
       }
       autoDeleteReply(interaction, 6000);
       // Re-adding six players and re-rendering the queue panel can outrun the 3s window.
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await handleRequeue(
         interaction.client,
         matchId,
@@ -348,7 +349,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
 
     logger.error(`Error handling button interaction ${customId}:`, error);
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.reply({ content: '❌ An error occurred.', ephemeral: true }).catch(() => null);
+      await interaction.reply({ content: '❌ An error occurred.', flags: MessageFlags.Ephemeral }).catch(() => null);
     }
   }
 }
@@ -364,7 +365,7 @@ export async function handleSelectMenuInteraction(
   const userId = interaction.user.id;
 
   if (customId === 'draft_select_player') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const selectedPlayerId = interaction.values[0];
     const res = await handleCaptainPick(
       interaction.client,

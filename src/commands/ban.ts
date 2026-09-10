@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import {
   createBan,
@@ -98,7 +99,7 @@ export const banCommand = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to ban players.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -113,7 +114,7 @@ export const banCommand = {
       } catch (err: any) {
         await interaction.reply({
           content: `❌ ${err.message || 'Invalid duration string.'}`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -167,7 +168,7 @@ export const banCommand = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to revoke bans.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -182,7 +183,7 @@ export const banCommand = {
       } else {
         await interaction.reply({
           content: `⚠️ No active ban found for <@${user.id}>.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       return;
@@ -208,11 +209,11 @@ export const banCommand = {
           )
           .setTimestamp(new Date(parseDbTimestamp(activeBan.created_at)));
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       } else {
         await interaction.reply({
           content: `✅ <@${user.id}> does not have any active queue bans.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       return;
@@ -223,7 +224,7 @@ export const banCommand = {
       if (activeBans.length === 0) {
         await interaction.reply({
           content: '✅ There are currently no active queue bans in this server.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -244,7 +245,7 @@ export const banCommand = {
         .setDescription(description)
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
     }
   },

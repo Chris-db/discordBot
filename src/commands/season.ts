@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import {
   getActiveSeason,
@@ -51,7 +52,7 @@ export const seasonCommand = {
     if (sub === 'info') {
       const season = getActiveSeason(guildId);
       if (!season) {
-        await interaction.reply({ content: '❌ No active season for this server.', ephemeral: true });
+        await interaction.reply({ content: '❌ No active season for this server.', flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -95,7 +96,7 @@ export const seasonCommand = {
       if (seasons.length === 0) {
         await interaction.reply({
           content: 'ℹ️ No completed seasons yet. The first one is still running.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -142,14 +143,14 @@ export const seasonCommand = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to end a season.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
       const season = getActiveSeason(guildId);
       if (!season) {
-        await interaction.reply({ content: '❌ No active season to end.', ephemeral: true });
+        await interaction.reply({ content: '❌ No active season to end.', flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -162,7 +163,7 @@ export const seasonCommand = {
             `❌ Confirmation did not match. To end **${season.name}**, re-run with ` +
             `\`confirm: ${season.name}\`.\n` +
             `This resets every player's MMR to their division default and cannot be undone.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }

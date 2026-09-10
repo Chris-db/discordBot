@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import {
   getDivisions,
@@ -150,7 +151,7 @@ export const divisionCommand = {
       if (!any) {
         await interaction.reply({
           content: '❌ No divisions configured for this server.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -197,7 +198,7 @@ export const divisionCommand = {
         }
       }
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -205,7 +206,7 @@ export const divisionCommand = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to place players.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -222,7 +223,7 @@ export const divisionCommand = {
       try {
         updated = setPlayerDivision(guildId, teamSize, user.id, division, !keepMmr)!;
       } catch (err: any) {
-        await interaction.reply({ content: `❌ ${err.message}`, ephemeral: true });
+        await interaction.reply({ content: `❌ ${err.message}`, flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -252,7 +253,7 @@ export const divisionCommand = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to configure divisions.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -262,7 +263,7 @@ export const divisionCommand = {
       if (!getDivision(guildId, teamSize, division)) {
         await interaction.reply({
           content: `❌ Division ${division} is not configured for ${formatTeamSize(teamSize)} on this server.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -283,7 +284,7 @@ export const divisionCommand = {
       if (Object.keys(updates).length === 0) {
         await interaction.reply({
           content: 'ℹ️ Nothing to change — pass at least one option.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }

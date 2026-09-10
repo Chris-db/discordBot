@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MessageFlags } from 'discord.js';
 import db from '../src/database/db';
 import {
   createMatch,
@@ -172,7 +173,7 @@ describe('double or nothing', () => {
       await proposeGamble(fakeClient, c, matchId);
 
       expect(c.replies[0].content).toMatch(/moved on/);
-      expect(c.replies[0].ephemeral).toBe(true);
+      expect(c.replies[0].flags).toBe(MessageFlags.Ephemeral);
       expect(gambleState()).toBe('NONE');
       // A refused proposal must not touch the teardown that is already running.
       expect(hasPendingChannelDeletion(matchId)).toBe(true);

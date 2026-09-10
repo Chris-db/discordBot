@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   AttachmentBuilder,
+  MessageFlags,
 } from 'discord.js';
 import {
   getOrCreatePlayer,
@@ -136,7 +137,7 @@ export const setMmrCommand = {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
       return interaction.reply({
         content: '❌ You need **Manage Channels** permission to change player MMR.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 

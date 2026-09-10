@@ -2,6 +2,7 @@ import {
   ChatInputCommandInteraction,
   REST,
   Routes,
+  MessageFlags,
 } from 'discord.js';
 import { queueCommand } from '../commands/queue';
 import { matchCommand } from '../commands/match';
@@ -32,7 +33,7 @@ export const commands = [
 export async function handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const command = commands.find(c => c.data.name === interaction.commandName);
   if (!command) {
-    await interaction.reply({ content: '❌ Unknown command!', ephemeral: true });
+    await interaction.reply({ content: '❌ Unknown command!', flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -44,7 +45,7 @@ export async function handleCommand(interaction: ChatInputCommandInteraction): P
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content }).catch(() => null);
     } else {
-      await interaction.reply({ content, ephemeral: true }).catch(() => null);
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => null);
     }
   }
 }

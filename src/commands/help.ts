@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { RL_COLORS } from '../ui/embeds';
 
@@ -96,6 +97,6 @@ export const helpCommand = {
       .setFooter({ text: 'Rocket League 6mans • Designed to replace legacy queue bots' })
       .setTimestamp();
 
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   },
 };

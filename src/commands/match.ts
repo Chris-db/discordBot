@@ -4,6 +4,7 @@ import {
   PermissionFlagsBits,
   EmbedBuilder,
   AttachmentBuilder,
+  MessageFlags,
 } from 'discord.js';
 import {
   getActiveMatches,
@@ -98,7 +99,7 @@ export const matchCommand = {
       if (active.length === 0) {
         return interaction.reply({
           content: 'ℹ️ **No active matches are currently running.**',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -116,26 +117,26 @@ export const matchCommand = {
         )
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (subcommand === 'report') {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to force-report matches.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       const matchId = resolveMatchId(interaction);
       if (matchId === undefined) {
-        return interaction.reply({ content: NO_MATCH_HERE, ephemeral: true });
+        return interaction.reply({ content: NO_MATCH_HERE, flags: MessageFlags.Ephemeral });
       }
       const winner = interaction.options.getString('winner', true) as 'BLUE' | 'ORANGE';
 
       // Completing a match does a lot of Discord I/O (result image, channel sends, VC
       // teardown) — well past the 3s interaction window.
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await forceReportMatch(interaction.client, matchId, winner);
       return interaction.editReply({
         content: res.success ? `✅ ${res.message}` : `❌ ${res.message}`,
@@ -146,16 +147,16 @@ export const matchCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to cancel matches.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       const matchId = resolveMatchId(interaction);
       if (matchId === undefined) {
-        return interaction.reply({ content: NO_MATCH_HERE, ephemeral: true });
+        return interaction.reply({ content: NO_MATCH_HERE, flags: MessageFlags.Ephemeral });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await cancelMatch(interaction.client, matchId, interaction.user.tag);
       // cancelMatch already posts a public notice in the match channel — keep this one
       // terse so the admin doesn't see the same thing announced twice.
@@ -168,7 +169,7 @@ export const matchCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to clean up match channels.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -182,7 +183,7 @@ export const matchCommand = {
         });
         return interaction.reply({
           content: `✅ Cleaned up temporary channels and cancelled DB record for Match #${matchId}.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         const guild = interaction.guild!;
@@ -228,7 +229,7 @@ export const matchCommand = {
 
         return interaction.reply({
           content: `✅ Cleaned up **${deletedCount}** orphaned Discord channel(s) and marked **${orphanedDbCount}** missing active match(es) as cancelled in DB.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     }
@@ -237,13 +238,13 @@ export const matchCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to cancel all matches.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       const cancelled = cancelAllActiveMatches(guildId);
       return interaction.reply({
         content: `✅ Successfully cancelled **${cancelled}** active/stuck match(es) in the database.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },

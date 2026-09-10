@@ -1,4 +1,4 @@
-import { Client, ButtonInteraction, TextChannel, AttachmentBuilder } from 'discord.js';
+import { Client, ButtonInteraction, TextChannel, AttachmentBuilder, MessageFlags } from 'discord.js';
 import {
   getMatch,
   getMatchByTextChannel,
@@ -158,7 +158,7 @@ export async function proposeGamble(
   if (!match || match.state !== 'COMPLETED') {
     await interaction.reply({
       content: '❌ This match is not eligible for Double or Nothing.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -170,7 +170,7 @@ export async function proposeGamble(
   if (!isPlayer) {
     await interaction.reply({
       content: '❌ Only players who participated in this match can propose Double or Nothing!',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -181,7 +181,7 @@ export async function proposeGamble(
   if (lobbyBrokenUp(match)) {
     await interaction.reply({
       content: '❌ Double or Nothing is off — the lobby has already moved on to a rematch or the queue.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -190,7 +190,7 @@ export async function proposeGamble(
   if (status.state !== 'NONE' && status.state !== 'EXPIRED') {
     await interaction.reply({
       content: '❌ A Double or Nothing gamble has already been proposed or resolved for this match.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -273,7 +273,7 @@ export async function handleGambleAgree(
   if (!match || match.gamble_status?.state !== 'PROPOSED') {
     await interaction.reply({
       content: '❌ No active Double or Nothing proposal is currently open for this match.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -300,7 +300,7 @@ export async function handleGambleAgree(
   if (!isPlayer) {
     await interaction.reply({
       content: '❌ Only players who participated in this match can vote!',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -308,7 +308,7 @@ export async function handleGambleAgree(
   if (match.gamble_status.agreedPlayers.includes(interaction.user.id)) {
     await interaction.reply({
       content: '✅ You have already agreed to the gamble!',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -362,7 +362,7 @@ export async function handleGambleDecline(
   if (!match || match.gamble_status?.state !== 'PROPOSED') {
     await interaction.reply({
       content: '❌ No active Double or Nothing proposal is open for this match.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -374,7 +374,7 @@ export async function handleGambleDecline(
   if (!isPlayer) {
     await interaction.reply({
       content: '❌ Only players in this match can decline!',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
