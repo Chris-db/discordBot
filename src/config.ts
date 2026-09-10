@@ -44,3 +44,33 @@ const config: AppConfig = {
 };
 
 export default config;
+
+/**
+ * Everything that would otherwise fail later, and quietly. An empty token used to leave
+ * the process idling with a warning, which under systemd looks exactly like a bot that is
+ * up; a bad number in `.env` parsed to NaN and turned every timeout into "never".
+ * Returns the problems rather than throwing so the caller decides how loud to be.
+ */
+export function validateConfig(c: AppConfig = config): string[] {
+  const problems: string[] = [];
+  if (!c.discordToken) problems.push('DISCORD_TOKEN is not set.');
+  if (!c.clientId) problems.push('CLIENT_ID is not set (needed to register slash commands).');
+
+  const positive: Array<[keyof AppConfig, string]> = [
+    ['defaultMmr', 'DEFAULT_MMR'],
+    ['queueTimeoutMinutes', 'QUEUE_TIMEOUT_MINUTES'],
+    ['matchTimeoutHours', 'MATCH_TIMEOUT_HOURS'],
+    ['setupTimeoutMinutes', 'SETUP_TIMEOUT_MINUTES'],
+    ['draftPickTimeoutSeconds', 'DRAFT_PICK_TIMEOUT_SECONDS'],
+    ['readyCheckTimeoutSeconds', 'READY_CHECK_TIMEOUT_SECONDS'],
+    ['backupRetentionDays', 'BACKUP_RETENTION_DAYS'],
+    ['voteTimeoutSeconds', 'VOTE_TIMEOUT_SECONDS'],
+  ];
+  for (const [key, envName] of positive) {
+    const value = c[key];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      problems.push(`${envName} must be a positive whole number (got "${process.env[envName]}").`);
+    }
+  }
+  return problems;
+}

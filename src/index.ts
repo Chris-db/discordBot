@@ -4,7 +4,7 @@ import {
   Events,
   ActivityType,
 } from 'discord.js';
-import config from './config';
+import config, { validateConfig } from './config';
 import { initializeDatabase } from './database/schema';
 import { handleCommand, registerCommands } from './handlers/commandHandler';
 import { handleInteraction } from './handlers/interactionHandler';
@@ -23,18 +23,30 @@ import { registerFonts } from './utils/fonts';
 import { logger } from './utils/logger';
 import db from './database/db';
 
+// Refuse to start on a broken .env. Under systemd a process that idles with a warning
+// looks identical to one that is working; a clear exit shows up in `systemctl status`.
+const configProblems = validateConfig();
+if (configProblems.length > 0) {
+  for (const problem of configProblems) logger.error(`Config: ${problem}`);
+  logger.error('Fix .env and restart.');
+  process.exit(1);
+}
+
 registerFonts();
 
 // Initialize SQLite database schema
 initializeDatabase();
 
+// No MessageContent intent: the only message listener re-pins the queue panel, and it
+// needs `author.bot` and `channelId`, both of which arrive without the privileged intent.
+// Asking for it would mean every server that installs the bot has to grant a permission
+// the bot never uses.
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
   ],
 });
 
@@ -113,13 +125,26 @@ client.on(Events.MessageCreate, message => {
   }
 });
 
-// Process error handlers so bot never crashes ungracefully
+// A rejected promise nobody awaited is almost always a Discord call that failed after the
+// interaction had already been answered. Log it and carry on.
 process.on('unhandledRejection', error => {
   logger.error('Unhandled Rejection:', error);
 });
 
+// An uncaught exception is different: whatever threw was mid-way through something, and
+// its timers, locks and half-written state are still in memory. Carrying on from here
+// used to be the policy, which meant one bad throw could leave a lobby that would never
+// advance and never be recovered. Exit instead -- systemd restarts the process in about
+// a second, and recoverStuckQueues does the honest cleanup on boot.
 process.on('uncaughtException', error => {
-  logger.error('Uncaught Exception:', error);
+  logger.error('Uncaught Exception -- exiting so the supervisor restarts a clean process:', error);
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+  } catch {
+    // The database may be what threw; nothing more to do for it.
+  }
+  process.exit(1);
 });
 
 // Graceful shutdown handling for SIGINT and SIGTERM
@@ -140,13 +165,10 @@ function gracefulShutdown(signal: string) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-if (!config.discordToken) {
-  logger.warn('⚠️ DISCORD_TOKEN is empty in .env. Bot will not connect to Discord until configured.');
-} else {
-  client.login(config.discordToken).catch(err => {
-    logger.error('Failed to log in to Discord:', err);
-  });
-}
+client.login(config.discordToken).catch(err => {
+  logger.error('Failed to log in to Discord:', err);
+  process.exit(1);
+});
 
 export default client;
 
