@@ -19,11 +19,14 @@ import {
 import { createMatchChannels, deleteMatchChannels } from './channelService';
 import { generateReadyCheckImage } from './readyCheckImage';
 import { logger } from '../utils/logger';
+import { formatCountdown } from '../utils/time';
+import config from '../config';
 import { getOrInitQueue, refreshQueuePanel } from './queuePanel';
 import { startVotingPhase } from './votingService';
 
 /**
- * Starts the 60-second AFK Voice Ready Check once the queue is full.
+ * Starts the AFK Voice Ready Check once the queue is full. Its length is
+ * `config.readyCheckTimeoutSeconds` (READY_CHECK_TIMEOUT_SECONDS, five minutes by default).
  */
 export async function startReadyCheckPhase(
   client: Client,
@@ -200,18 +203,22 @@ export async function startReadyCheckPhase(
     .map(id => `<@${id}>`)
     .join(' ');
 
+  // Read once so the whole check runs on one number, even if config were reloaded.
+  const timeoutSeconds = config.readyCheckTimeoutSeconds;
+  const countdownLabel = formatCountdown(timeoutSeconds);
+
   const matchTextChannel = (await guild.channels.fetch(textChannelId).catch(() => null)) as TextChannel;
   let readyMsg: Message | undefined;
   if (matchTextChannel) {
     const players = getPlayersByIds(matchQueue.guild_id, matchQueue.team_size, matchQueue.player_ids);
-    const readyImg = await generateReadyCheckImage(client, players, [], 60, teamSize);
+    const readyImg = await generateReadyCheckImage(client, players, [], timeoutSeconds, teamSize);
     const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
 
     // This is the single ping for the whole match. The card below it already states the
     // capacity, the countdown and who is still missing, so the line only has to say who
     // is being summoned and where to.
     readyMsg = await matchTextChannel.send({
-      content: `${mentions} → <#${readyCheckVc.id}> · 60s`,
+      content: `${mentions} → <#${readyCheckVc.id}> · ${countdownLabel}`,
       files: [attachment],
     }).catch(() => undefined);
   }
@@ -223,7 +230,7 @@ export async function startReadyCheckPhase(
   // outcome is edited onto this same message. Announcing the pop and then posting a
   // separate "it failed" message put two notices in the queue channel for one event.
   const popNotice = await queueChannel.send({
-    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · 60s`,
+    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · ${countdownLabel}`,
   }).catch(() => null);
 
   /** Replaces the pop notice with how it ended, then clears it shortly after. */
@@ -285,14 +292,14 @@ export async function startReadyCheckPhase(
     if (elapsed % 6 === 0 && readyMsg) {
       const players = getPlayersByIds(currentQueue.guild_id, currentQueue.team_size, currentQueue.player_ids);
       const readyIds = Array.from(vc.members.keys());
-      const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, 60 - elapsed), teamSize);
+      const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, timeoutSeconds - elapsed), teamSize);
       const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
       await readyMsg.edit({
         files: [attachment],
       }).catch(() => null);
     }
 
-    if (elapsed >= 60) {
+    if (elapsed >= timeoutSeconds) {
       clearInterval(timer);
 
       const afkPlayerIds = currentQueue.player_ids.filter(id => {

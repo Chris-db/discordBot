@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import db from '../src/database/db';
-import { parseDbTimestamp, toDiscordTimestamp } from '../src/utils/time';
+import { parseDbTimestamp, toDiscordTimestamp, formatCountdown } from '../src/utils/time';
 
 describe('parseDbTimestamp', () => {
   it('reads a bare SQLite CURRENT_TIMESTAMP as UTC, not local', () => {
@@ -61,5 +61,18 @@ describe('toDiscordTimestamp', () => {
     // `<t:NaN:R>` renders as literal broken text in Discord.
     expect(toDiscordTimestamp(null)).toBeUndefined();
     expect(toDiscordTimestamp('rubbish')).toBeUndefined();
+  });
+});
+
+describe('formatCountdown', () => {
+  it('shows minutes and zero-padded seconds', () => {
+    expect(formatCountdown(300)).toBe('5:00');
+    expect(formatCountdown(272)).toBe('4:32');
+    expect(formatCountdown(7)).toBe('0:07');
+  });
+
+  it('never goes negative once the check has run out', () => {
+    expect(formatCountdown(0)).toBe('0:00');
+    expect(formatCountdown(-3)).toBe('0:00');
   });
 });

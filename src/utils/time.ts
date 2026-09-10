@@ -40,3 +40,13 @@ export function toDiscordTimestamp(value?: string | null): number | undefined {
   const ms = parseDbTimestamp(value);
   return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000);
 }
+
+/**
+ * Formats a countdown for display: `4:32`, `0:07`. Bare seconds stop reading well past
+ * a minute or so -- "300s" makes the reader do arithmetic that "5:00" does not.
+ */
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}

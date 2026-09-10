@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { formatCountdown } from '../utils/time';
 
 /**
  * Generates the AFK Voice Ready Check graphic: teamSize columns by 2 rows, matching the
@@ -26,8 +27,8 @@ export async function generateReadyCheckImage(
   const capacity = teamSize * 2;
 
   // The status line is centred and long ("ALL 4 PLAYERS MUST JOIN VOICE — TIME
-  // REMAINING: 42s"), so at 2v2 it is wider than the grid and has to set the canvas.
-  const statusMsg = `⏳ ALL ${capacity} PLAYERS MUST JOIN VOICE — TIME REMAINING: ${remainingSeconds}s`;
+  // REMAINING: 0:42"), so at 2v2 it is wider than the grid and has to set the canvas.
+  const statusMsg = `⏳ ALL ${capacity} PLAYERS MUST JOIN VOICE — TIME REMAINING: ${formatCountdown(remainingSeconds)}`;
   const measure = createCanvas(10, 10).getContext('2d');
   measure.font = `bold 16px ${FONT_STACK}`;
   const statusW = measure.measureText(statusMsg).width;
