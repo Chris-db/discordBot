@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   TextChannel,
+  MessageFlags,
 } from 'discord.js';
 import {
   getOrInitQueue,
@@ -19,6 +20,7 @@ import {
   getPlayersByIds,
   getOrCreatePlayer,
   getDivisionByChannel,
+  getMatchByTextChannel,
   getLowestDivision,
   updateDivision,
   Player,
@@ -116,11 +118,11 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to deploy a Queue Panel.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const requestedSize = interaction.options.getInteger('size');
       const requestedDivision = interaction.options.getString('division');
@@ -177,7 +179,7 @@ export const queueCommand = {
       if (!queue || queue.player_ids.length === 0) {
         return interaction.reply({
           content: 'ℹ️ **The queue is currently empty.** Click **Join Queue** on the panel to start!',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -185,7 +187,7 @@ export const queueCommand = {
       const mentions = players.map((p: Player, idx: number) => `**${idx + 1}.** <@${p.discord_id}> (\`${p.mmr} MMR\`)`).join('\n');
       return interaction.reply({
         content: `🚀 **Current ${formatTeamSize(queue.team_size)} Queue (${players.length}/${queue.team_size * 2}):**\n\n${mentions}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -193,7 +195,7 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to manually add players.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -203,7 +205,7 @@ export const queueCommand = {
       if (queue.player_ids.includes(user.id)) {
         return interaction.reply({
           content: `❌ <@${user.id}> is already in the queue.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -218,7 +220,7 @@ export const queueCommand = {
       const capacity = queue.team_size * 2;
       await interaction.reply({
         content: `✅ Added <@${user.id}> to the queue (${queue.player_ids.length}/${capacity}).`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
 
       if (queue.player_ids.length === capacity) {
@@ -231,7 +233,7 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to manually remove players.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -240,7 +242,7 @@ export const queueCommand = {
       if (!queue || !queue.player_ids.includes(user.id)) {
         return interaction.reply({
           content: `❌ <@${user.id}> is not in the queue.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -253,7 +255,7 @@ export const queueCommand = {
       await refreshQueuePanel(interaction.client, channelId);
       return interaction.reply({
         content: `✅ Removed <@${user.id}> from the queue (${queue.player_ids.length}/${queue.team_size * 2}).`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -261,7 +263,18 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to clear the queue.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Inside #match-N the queue row is the lobby, not a waiting list. Wiping it here
+      // would leave the match live with no lobby behind it -- players locked out, channels
+      // never torn down. That is what /match cancel is for.
+      const liveMatch = getMatchByTextChannel(channelId);
+      if (liveMatch) {
+        return interaction.reply({
+          content: `❌ This is the channel for Match #${liveMatch.match_id}. Use \`/match cancel\` to end it.`,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -276,13 +289,16 @@ export const queueCommand = {
       queue.player_join_times = {};
       queue.state = 'WAITING';
       queue.vote_counts = {};
+      queue.draft_state = undefined;
+      queue.captain_vote_state = undefined;
+      queue.team_vote_state = undefined;
       queue.ready_check_vc_id = undefined;
       saveQueue(queue);
 
       await refreshQueuePanel(interaction.client, channelId);
       return interaction.reply({
         content: '🧹 **Queue has been cleared.**',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -290,11 +306,11 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to fill the queue with test bots.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await fillQueueWithBots(interaction.client, channelId, guildId);
       await interaction.editReply({ content: res.message }).catch(() => null);
       return;
@@ -304,11 +320,11 @@ export const queueCommand = {
       if (!isAdmin) {
         return interaction.reply({
           content: '❌ You need **Manage Channels** permission to force-pop the queue.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const mode = interaction.options.getString('mode') as 'balanced' | 'captains' | 'random' | undefined;
       const res = await forcePopQueue(interaction.client, channelId, guildId, mode);
       await interaction.editReply({ content: res.message }).catch(() => null);
