@@ -486,9 +486,22 @@ export async function startReadyCheckPhase(
     }
   };
 
-  timer = setInterval(() => {
-    if (ended) return;
-    tick().catch(err => logger.error(`Ready check tick for Match #${match.match_id} failed:`, err));
+  // A tick fetches avatars and renders a canvas, which on the Pi can take longer than the
+  // interval. Two ticks in flight at once both saw everyone in voice and both started
+  // voting, so a tick that finds the previous one still running skips its turn. The
+  // endCheck gate above is the second line: even if two did get through, only one
+  // transitions.
+  let ticking = false;
+  timer = setInterval(async () => {
+    if (ended || ticking) return;
+    ticking = true;
+    try {
+      await tick();
+    } catch (err) {
+      logger.error(`Ready check tick for Match #${match.match_id} failed:`, err);
+    } finally {
+      ticking = false;
+    }
   }, 3000);
 }
 
