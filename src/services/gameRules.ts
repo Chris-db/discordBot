@@ -17,6 +17,13 @@ export function majorityOf(rosterSize: number): number {
 export const REMATCH_WINDOW_MS = 90_000;
 
 /**
+ * How many times a lobby can reject a captain pair or a team split before the next one is
+ * final. There was no ceiling: every No-majority restarted the vote, and the only thing
+ * that ever ended the loop was the setup sweeper cancelling the match fifteen minutes in.
+ */
+export const MAX_REROLLS = 3;
+
+/**
  * Votes needed from a specific roster.
  *
  * Test bots never click anything, so a lobby padded with them could never reach the

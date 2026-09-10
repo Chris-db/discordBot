@@ -236,7 +236,7 @@ export function randomizeCaptains(
     throw new Error('Need at least 2 players to choose captains.');
   }
 
-  // Generate all 15 possible pairs
+  // Every distinct pair -- captainPairCount of them.
   const allPairs: { p1: Player; p2: Player; key: string }[] = [];
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
@@ -295,6 +295,15 @@ export function matchupCount(teamSize: number): number {
     result = (result * (2 * teamSize - 1 - i)) / (i + 1);
   }
   return Math.round(result);
+}
+
+/**
+ * How many distinct captain pairs a roster of this size has: C(2n, 2) = n(2n - 1).
+ * 6 at 2v2, 15 at 3v3, 28 at 4v4. The captain vote's no-repeat cycle used to wrap at a
+ * literal 15, which is only the 3v3 answer.
+ */
+export function captainPairCount(teamSize: number): number {
+  return teamSize * (2 * teamSize - 1);
 }
 
 /**

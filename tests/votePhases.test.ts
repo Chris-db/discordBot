@@ -17,7 +17,14 @@ import {
   handleTeamsVote,
   sendCaptainsDraftCard,
 } from '../src/services/votingService';
-import { initializeCaptainsDraft } from '../src/services/draftService';
+import {
+  initializeCaptainsDraft,
+  captainPairCount,
+  matchupCount,
+  randomizeCaptains,
+} from '../src/services/draftService';
+import { MAX_REROLLS } from '../src/services/gameRules';
+import { SUPPORTED_TEAM_SIZES } from '../src/database/migrations';
 
 const G = 'guild_vote_phases_test';
 const CHAN = 'match_chan_vote_phases';
@@ -130,7 +137,7 @@ describe('vote phase cards', () => {
 
       const closesAt = stamp(Date.now() + config.voteTimeoutSeconds * 1000);
       expect(channel.sends).toHaveLength(1);
-      expect(channel.sends[0].content).toBe(`Closes ${closesAt} · no vote counts as Proceed`);
+      expect(channel.sends[0].content).toBe(`Closes ${closesAt} · no vote counts as Proceed · 3 re-rolls left`);
       expect(getQueue(CHAN)!.state).toBe('CAPTAINS_VOTE');
     });
 
@@ -141,7 +148,7 @@ describe('vote phase cards', () => {
       await startTeamsVotePhase(clientWith(channel), CHAN, G, queue, 'balanced');
 
       const closesAt = stamp(Date.now() + config.voteTimeoutSeconds * 1000);
-      expect(channel.sends[0].content).toBe(`Closes ${closesAt} · no vote counts as Proceed`);
+      expect(channel.sends[0].content).toBe(`Closes ${closesAt} · no vote counts as Proceed · 3 re-rolls left`);
       expect(getQueue(CHAN)!.state).toBe('TEAMS_VOTE');
     });
 
@@ -210,6 +217,145 @@ describe('vote phase cards', () => {
       expect(card.edits[0].content).toContain('Teams locked in');
       expect(getMatch(seedMatchId())!.state).toBe('IN_PROGRESS');
     });
+  });
+
+  describe('re-roll cap', () => {
+    /** A No majority from the first four players, which resolves the vote as a re-roll. */
+    async function rejectShowing(client: any, card: any, voteOn: typeof handleTeamsVote) {
+      for (const id of ROSTER.slice(0, 4)) {
+        await voteOn(client, CHAN, G, id, 'no', card);
+      }
+    }
+
+    it('makes the split after MAX_REROLLS rejections final and locks it without a vote', async () => {
+      const channel = fakeChannel();
+      const client = clientWith(channel);
+      seedMatch();
+      await startTeamsVotePhase(client, CHAN, G, seedQueue(), 'random');
+      const card = channel.messages[0];
+      const keys = [getQueue(CHAN)!.team_vote_state!.seenMatchups!.at(-1)];
+
+      for (let i = 1; i <= MAX_REROLLS; i++) {
+        const before = card.edits.length;
+        await rejectShowing(client, card, handleTeamsVote);
+        keys.push(getQueue(CHAN)?.team_vote_state?.seenMatchups?.at(-1));
+
+        // The showings before the cap are still votes, and count down what is left.
+        if (i < MAX_REROLLS) {
+          const reroll = card.edits.slice(before).find((e: any) => e.content?.startsWith('Closes'));
+          expect(reroll.content).toContain(`${MAX_REROLLS - i} re-roll${MAX_REROLLS - i === 1 ? '' : 's'} left`);
+          expect(reroll.components).toHaveLength(1);
+          expect(getQueue(CHAN)!.state).toBe('TEAMS_VOTE');
+        }
+      }
+
+      // The (MAX_REROLLS + 1)th showing says it is final, offers no buttons, and is locked
+      // straight away -- no timer, no vote.
+      const finalCard = card.edits.find((e: any) => e.content === '🔒 Final split — re-rolls used up');
+      expect(finalCard.components).toEqual([]);
+      expect(card.edits.at(-1).content).toBe('🔒 Teams locked in — re-rolls used up');
+      expect(getMatch(seedMatchId())!.state).toBe('IN_PROGRESS');
+      // Every showing was a different split, and the history holds all of them.
+      expect(new Set(keys).size).toBe(MAX_REROLLS + 1);
+    });
+
+    it('makes the captain pair after MAX_REROLLS rejections final and opens the draft', async () => {
+      const channel = fakeChannel();
+      const client = clientWith(channel);
+      await startCaptainsVotePhase(client, CHAN, G, seedQueue(), false);
+      const card = channel.messages[0];
+
+      // The first pair is part of the history, so the second re-roll cannot bring it back.
+      expect(getQueue(CHAN)!.captain_vote_state!.seenCaptainPairs).toHaveLength(1);
+
+      for (let i = 1; i <= MAX_REROLLS; i++) {
+        await rejectShowing(client, card, handleCaptainsVote);
+      }
+
+      const finalCard = card.edits.find((e: any) => e.content === '🔒 Final pair — re-rolls used up');
+      expect(finalCard.components).toEqual([]);
+      expect(card.edits.at(-1).content).toMatch(/^🔒 Captains locked \(re-rolls used up\): 🔵 <@h\d> · 🟠 <@h\d>$/);
+      expect(getQueue(CHAN)!.state).toBe('DRAFTING');
+      // The draft card went out.
+      expect(channel.sends.at(-1).content).toMatch(/pick 1 of 3/);
+    });
+
+    it('still reaches the final showing at 2v2, where the pool is smaller than the cap', async () => {
+      // Three splits exist at 2v2, so the fourth showing has to repeat one. The history
+      // must not be reset when the pool wraps (that would lose the re-roll count), and the
+      // repeat must not be the split the lobby just rejected.
+      const duo = ROSTER.slice(0, 4);
+      duo.forEach(id => getOrCreatePlayer(G, 2, id, `User_${id}`));
+      const channel = fakeChannel();
+      const client = clientWith(channel);
+      await startTeamsVotePhase(client, CHAN, G, seedQueue({ team_size: 2, player_ids: duo }), 'random');
+      const card = channel.messages[0];
+
+      const shown = [getQueue(CHAN)!.team_vote_state!.seenMatchups!.at(-1)];
+      for (let i = 1; i <= MAX_REROLLS; i++) {
+        for (const id of duo.slice(0, 3)) await handleTeamsVote(client, CHAN, G, id, 'no', card);
+        const state = getQueue(CHAN)?.team_vote_state;
+        if (state) shown.push(state.seenMatchups!.at(-1));
+      }
+
+      expect(matchupCount(2)).toBe(3);
+      expect(new Set(shown.slice(0, 3)).size).toBe(3);
+      expect(shown[3]).not.toBe(shown[2]);
+      expect(card.edits.at(-1).content).toBe('🔒 Teams locked in — re-rolls used up');
+    });
+
+    it('rejects a click that lands on a final showing before it is locked', async () => {
+      const client = clientWith(fakeChannel());
+      const card = fakeMessage('late');
+      seedQueue({
+        state: 'TEAMS_VOTE',
+        team_vote_state: {
+          blueTeam: ROSTER.slice(0, 3),
+          orangeTeam: ROSTER.slice(3),
+          yesVotes: [],
+          noVotes: [],
+          seenMatchups: Array.from({ length: MAX_REROLLS + 1 }, (_, i) => `k${i}`),
+          mode: 'random',
+        },
+      });
+
+      const res = await handleTeamsVote(client, CHAN, G, 'h1', 'no', card);
+
+      // No vote recorded, and no edit -- the tally edit would have put the buttons back.
+      expect(res.success).toBe(false);
+      expect(res.message).toMatch(/re-rolls used up/);
+      expect(getQueue(CHAN)!.team_vote_state!.noVotes).toEqual([]);
+      expect(card.edits).toHaveLength(0);
+    });
+  });
+});
+
+describe('captainPairCount', () => {
+  it.each([
+    [2, 6],
+    [3, 15],
+    [4, 28],
+  ])('%iv%i has %i distinct pairs', (teamSize, expected) => {
+    expect(captainPairCount(teamSize)).toBe(expected);
+  });
+
+  it('agrees with the pool randomizeCaptains actually draws from', () => {
+    for (const teamSize of SUPPORTED_TEAM_SIZES) {
+      const players = Array.from({ length: teamSize * 2 }, (_, i) => ({
+        discord_id: `p${i}`,
+        mmr: 1000,
+      })) as any[];
+
+      // Draw with a growing seen-list: every draw is new until the pool is exhausted,
+      // and the very next one is a repeat.
+      const seen: string[] = [];
+      for (let i = 0; i < captainPairCount(teamSize); i++) {
+        const { pairKey } = randomizeCaptains(players, undefined, undefined, seen);
+        expect(seen).not.toContain(pairKey);
+        seen.push(pairKey);
+      }
+      expect(seen).toContain(randomizeCaptains(players, undefined, undefined, seen).pairKey);
+    }
   });
 });
 

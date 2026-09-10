@@ -28,10 +28,11 @@ import {
   createRandomTeams,
   initializeCaptainsDraftWithCaptains,
   randomizeCaptains,
+  getCaptainPairKey,
   processCaptainPick,
 } from './draftService';
-import { votesRequiredFor } from './gameRules';
-import { totalPicks, matchupCount } from './draftService';
+import { votesRequiredFor, MAX_REROLLS } from './gameRules';
+import { totalPicks, matchupCount, captainPairCount } from './draftService';
 import { startNewMatch } from './matchService';
 import { generateCaptainsDraftImage } from './draftImage';
 import { generateModeVoteImage } from './voteImage';
@@ -59,6 +60,34 @@ const MODE_LABELS: Record<TeamMode, string> = {
  */
 function relativeTimestamp(atMs: number): string {
   return `<t:${Math.floor(atMs / 1000)}:R>`;
+}
+
+/**
+ * Re-rolls used so far, read off the showing history: the first entry is what the lobby
+ * was first shown, every entry after it is a rejection.
+ */
+function rerollsUsed(seen: string[] | undefined): number {
+  return Math.max(0, (seen?.length ?? 0) - 1);
+}
+
+function rerollsLeftLabel(rerolls: number): string {
+  const left = MAX_REROLLS - rerolls;
+  return `${left} re-roll${left === 1 ? '' : 's'} left`;
+}
+
+/**
+ * The entries the generator has to avoid: everything shown since the pool was last
+ * exhausted, and never fewer than the one just rejected.
+ *
+ * The history used to be reset to a single key once the whole pool had been seen, which
+ * kept the no-repeat cycle going but threw away the count the re-roll cap now reads. The
+ * history stays whole and the wrap happens here instead. With MAX_REROLLS below every pool
+ * size (the smallest is 3 splits at 2v2) the wrap is never reached, but it stays correct
+ * if the cap is ever raised past one.
+ */
+function toAvoid(seen: string[], poolSize: number): string[] {
+  const shownThisCycle = seen.length % poolSize;
+  return shownThisCycle === 0 ? seen.slice(-1) : seen.slice(-shownThisCycle);
 }
 
 /**
@@ -352,42 +381,42 @@ export async function startCaptainsVotePhase(
   const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
   let blueCaptain: Player;
   let orangeCaptain: Player;
+  let pairKey: string;
+
+  // The first pair goes into the history too, so it reads like the team vote's: entry one
+  // is what the lobby was first shown, everything after it is a re-roll. It used to be
+  // left out, which also let the second re-roll hand the original pair straight back.
+  const seenPairs = queue.captain_vote_state?.seenCaptainPairs || [];
 
   if (isRandomize) {
-    const seenPairs = queue.captain_vote_state?.seenCaptainPairs || [];
     const res = randomizeCaptains(
       players,
       queue.captain_vote_state?.blueCaptain,
       queue.captain_vote_state?.orangeCaptain,
-      seenPairs
+      toAvoid(seenPairs, captainPairCount(queue.team_size))
     );
     blueCaptain = res.blueCaptain;
     orangeCaptain = res.orangeCaptain;
-    const newSeenPairs =
-      seenPairs.length >= 15 ? [res.pairKey] : [...seenPairs, res.pairKey];
-
-    queue.state = 'CAPTAINS_VOTE';
-    queue.captain_vote_state = {
-      blueCaptain: blueCaptain.discord_id,
-      orangeCaptain: orangeCaptain.discord_id,
-      yesVotes: [],
-      noVotes: [],
-      seenCaptainPairs: newSeenPairs,
-    };
+    pairKey = res.pairKey;
   } else {
     const sorted = [...players].sort((a, b) => b.mmr - a.mmr);
     blueCaptain = sorted[0];
     orangeCaptain = sorted[1];
-
-    queue.state = 'CAPTAINS_VOTE';
-    queue.captain_vote_state = {
-      blueCaptain: blueCaptain.discord_id,
-      orangeCaptain: orangeCaptain.discord_id,
-      yesVotes: [],
-      noVotes: [],
-      seenCaptainPairs: [],
-    };
+    pairKey = getCaptainPairKey(blueCaptain.discord_id, orangeCaptain.discord_id);
   }
+
+  const newSeenPairs = [...seenPairs, pairKey];
+  const rerolls = rerollsUsed(newSeenPairs);
+  const isFinal = rerolls >= MAX_REROLLS;
+
+  queue.state = 'CAPTAINS_VOTE';
+  queue.captain_vote_state = {
+    blueCaptain: blueCaptain.discord_id,
+    orangeCaptain: orangeCaptain.discord_id,
+    yesVotes: [],
+    noVotes: [],
+    seenCaptainPairs: newSeenPairs,
+  };
   saveQueue(queue);
 
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
@@ -400,15 +429,20 @@ export async function startCaptainsVotePhase(
   const startedAt = Date.now();
 
   // The embed says who the captains are and the buttons say what the choices are. The
-  // content line carries the one thing neither can: when the vote closes, and that a
-  // player who never clicks is counted as Proceed. handleCaptainsVote edits only embeds
-  // and components, so the line survives every tally update.
-  const content = `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed`;
+  // content line carries what neither can: when the vote closes, that a player who never
+  // clicks is counted as Proceed, and how many re-rolls are left. handleCaptainsVote
+  // edits only embeds and components, so the line survives every tally update.
+  //
+  // A final pair is not a vote: there is nothing left to re-roll to, so the card says so
+  // and offers no buttons.
+  const content = isFinal
+    ? '🔒 Final pair — re-rolls used up'
+    : `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed · ${rerollsLeftLabel(rerolls)}`;
   const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain);
-  const buttons = getCaptainsVoteButtons({ yes: 0, no: 0 });
+  const components = isFinal ? [] : [getCaptainsVoteButtons({ yes: 0, no: 0 })];
   // attachments: [] drops anything a re-rolled card was carrying.
-  const payload = { content, embeds: [embed], components: [buttons], attachments: [] };
-  const fresh = { content, embeds: [embed], components: [buttons] };
+  const payload = { content, embeds: [embed], components, attachments: [] };
+  const fresh = { content, embeds: [embed], components };
 
   let sentMsg: Message;
   if (messageToEdit) {
@@ -423,6 +457,11 @@ export async function startCaptainsVotePhase(
   if (activeVoteTimers.has(channelId)) {
     clearTimeout(activeVoteTimers.get(channelId)!);
     activeVoteTimers.delete(channelId);
+  }
+
+  if (isFinal) {
+    await lockCaptains(client, channelId, queue, sentMsg);
+    return;
   }
 
   const timer = setTimeout(async () => {
@@ -452,6 +491,13 @@ export async function handleCaptainsVote(
     }
     if (!q.player_ids.includes(userId)) {
       rejection = 'Only queued players can vote on captains!';
+      return;
+    }
+    // A final pair has no vote to cast. Its buttons are gone, but a click on the previous
+    // card can still land in the moment before it is locked -- and the edit below would
+    // put the buttons back.
+    if (rerollsUsed(q.captain_vote_state.seenCaptainPairs) >= MAX_REROLLS) {
+      rejection = 'Captains are locked — re-rolls used up.';
       return;
     }
 
@@ -510,7 +556,7 @@ export async function finalizeCaptainsVote(
   channelId: string,
   guildId: string,
   message?: Message,
-  allBots?: boolean
+  forceApprove?: boolean
 ): Promise<void> {
   const queue = getQueue(channelId);
   if (!queue || queue.state !== 'CAPTAINS_VOTE' || !queue.captain_vote_state) return;
@@ -518,37 +564,51 @@ export async function finalizeCaptainsVote(
   const yesCount = queue.captain_vote_state.yesVotes.length;
   const noCount = queue.captain_vote_state.noVotes.length;
 
-  if (!allBots && noCount > yesCount) {
+  if (!forceApprove && noCount > yesCount) {
     logger.info(`Channel ${channelId} captains vote rejected. Randomizing new captains...`);
     // No interim edit -- startCaptainsVotePhase reuses this same message for the next
     // pair, so announcing the rejection here would only be overwritten a tick later.
     await startCaptainsVotePhase(client, channelId, guildId, queue, true, message);
   } else {
     logger.info(`Channel ${channelId} captains vote approved.`);
-    if (message) {
-      await collapseCard(
-        message,
-        `✅ Captains locked: 🔵 <@${queue.captain_vote_state.blueCaptain}> · 🟠 <@${queue.captain_vote_state.orangeCaptain}>`
-      );
-    }
-
-    const blueCapId = queue.captain_vote_state.blueCaptain;
-    const orangeCapId = queue.captain_vote_state.orangeCaptain;
-    const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
-
-    queue.state = 'DRAFTING';
-    queue.draft_state = initializeCaptainsDraftWithCaptains(players, blueCapId, orangeCapId);
-    queue.captain_vote_state = undefined;
-    saveQueue(queue);
-
-    await sendCaptainsDraftCard(client, channelId, queue);
+    await lockCaptains(client, channelId, queue, message);
   }
 }
 
 /**
+ * Locks the pair on the card and opens the draft. Split from the finalizer because a
+ * final pair (re-rolls used up) is locked straight from startCaptainsVotePhase, with no
+ * vote in between.
+ */
+async function lockCaptains(
+  client: Client,
+  channelId: string,
+  queue: ActiveQueue,
+  message?: Message
+): Promise<void> {
+  const state = queue.captain_vote_state!;
+  const blueCapId = state.blueCaptain;
+  const orangeCapId = state.orangeCaptain;
+
+  if (message) {
+    const how = rerollsUsed(state.seenCaptainPairs) >= MAX_REROLLS ? '🔒 Captains locked (re-rolls used up)' : '✅ Captains locked';
+    await collapseCard(message, `${how}: 🔵 <@${blueCapId}> · 🟠 <@${orangeCapId}>`);
+  }
+
+  const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
+
+  queue.state = 'DRAFTING';
+  queue.draft_state = initializeCaptainsDraftWithCaptains(players, blueCapId, orangeCapId);
+  queue.captain_vote_state = undefined;
+  saveQueue(queue);
+
+  await sendCaptainsDraftCard(client, channelId, queue);
+}
+
+/**
  * Starts or restarts the Team Verification vote phase for Random / Balanced Teams.
- * When asked if teams are valid, voting "No, Randomize" calls this with isRandomize = true,
- * using Option 2 (exhaustive no-repeat generation until all 10 combinations are seen).
+ * Voting "No" on a split calls this again with the card to overwrite; the generators walk
+ * the no-repeat pool until the re-roll cap makes a split final.
  */
 export async function startTeamsVotePhase(
   client: Client,
@@ -563,13 +623,14 @@ export async function startTeamsVotePhase(
   // seenMatchups carries the re-roll history, so both generators walk to a new matchup
   // rather than repeating one the queue has already rejected.
   const seenMatchups = queue.team_vote_state?.seenMatchups || [];
+  const avoid = toAvoid(seenMatchups, matchupCount(queue.team_size));
 
   const { blueTeam, orangeTeam, matchupKey } =
-    mode === 'balanced'
-      ? createBalancedTeams(players, seenMatchups)
-      : createRandomTeams(players, seenMatchups);
+    mode === 'balanced' ? createBalancedTeams(players, avoid) : createRandomTeams(players, avoid);
 
-  const newSeen = seenMatchups.length >= 10 ? [matchupKey!] : [...seenMatchups, matchupKey!];
+  const newSeen = [...seenMatchups, matchupKey!];
+  const rerolls = rerollsUsed(newSeen);
+  const isFinal = rerolls >= MAX_REROLLS;
 
   queue.state = 'TEAMS_VOTE';
   queue.team_vote_state = {
@@ -591,7 +652,9 @@ export async function startTeamsVotePhase(
   const timeoutMs = allBots ? 1500 : config.voteTimeoutSeconds * 1000;
   const startedAt = Date.now();
 
-  const content = `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed`;
+  const content = isFinal
+    ? '🔒 Final split — re-rolls used up'
+    : `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed · ${rerollsLeftLabel(rerolls)}`;
   const embed = buildTeamsVoteEmbed(
     blueTeam,
     orangeTeam,
@@ -599,9 +662,9 @@ export async function startTeamsVotePhase(
     mode,
     matchupCount(queue.team_size)
   );
-  const buttons = getTeamsVoteButtons({ yes: 0, no: 0 }, mode);
-  const payload = { content, embeds: [embed], components: [buttons], attachments: [] };
-  const fresh = { content, embeds: [embed], components: [buttons] };
+  const components = isFinal ? [] : [getTeamsVoteButtons({ yes: 0, no: 0 }, mode)];
+  const payload = { content, embeds: [embed], components, attachments: [] };
+  const fresh = { content, embeds: [embed], components };
 
   let sentMsg: Message;
   if (messageToEdit) {
@@ -616,6 +679,11 @@ export async function startTeamsVotePhase(
   if (activeVoteTimers.has(channelId)) {
     clearTimeout(activeVoteTimers.get(channelId)!);
     activeVoteTimers.delete(channelId);
+  }
+
+  if (isFinal) {
+    await lockTeams(client, channelId, guildId, queue, sentMsg);
+    return;
   }
 
   const timer = setTimeout(async () => {
@@ -645,6 +713,12 @@ export async function handleTeamsVote(
     }
     if (!q.player_ids.includes(userId)) {
       rejection = 'Only queued players can vote on teams!';
+      return;
+    }
+    // Same as the captain vote: a final split has no vote, and a late click must not put
+    // the buttons back on it.
+    if (rerollsUsed(q.team_vote_state.seenMatchups) >= MAX_REROLLS) {
+      rejection = 'Teams are locked — re-rolls used up.';
       return;
     }
 
@@ -714,7 +788,7 @@ export async function finalizeTeamsVote(
   channelId: string,
   guildId: string,
   message?: Message,
-  allBots?: boolean
+  forceApprove?: boolean
 ): Promise<void> {
   const queue = getQueue(channelId);
   if (!queue || queue.state !== 'TEAMS_VOTE' || !queue.team_vote_state) return;
@@ -722,7 +796,7 @@ export async function finalizeTeamsVote(
   const yesCount = queue.team_vote_state.yesVotes.length;
   const noCount = queue.team_vote_state.noVotes.length;
 
-  if (!allBots && noCount > yesCount) {
+  if (!forceApprove && noCount > yesCount) {
     // Re-roll in the mode the queue actually voted for. This used to hardcode a random
     // re-roll, so voting Balanced and then rejecting the split silently handed back
     // random teams. Rows written before mode was persisted default to random.
@@ -734,17 +808,32 @@ export async function finalizeTeamsVote(
     await startTeamsVotePhase(client, channelId, guildId, queue, mode, message);
   } else {
     logger.info(`Channel ${channelId} team verification vote approved. Starting match (teams locked in)...`);
-
-    const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.blueTeam);
-    const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
-
-    if (message) {
-      await collapseCard(message, '✅ Teams locked in');
-    }
-
-    await startNewMatch(client, guildId, channelId, blueTeam, orangeTeam);
-    resetQueueAfterPop(client, channelId);
+    await lockTeams(client, channelId, guildId, queue, message);
   }
+}
+
+/**
+ * Locks the split on the card and starts the match. Split from the finalizer for the same
+ * reason as lockCaptains: a final split is locked straight from startTeamsVotePhase.
+ */
+async function lockTeams(
+  client: Client,
+  channelId: string,
+  guildId: string,
+  queue: ActiveQueue,
+  message?: Message
+): Promise<void> {
+  const state = queue.team_vote_state!;
+  const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, state.blueTeam);
+  const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, state.orangeTeam);
+
+  if (message) {
+    const line = rerollsUsed(state.seenMatchups) >= MAX_REROLLS ? '🔒 Teams locked in — re-rolls used up' : '✅ Teams locked in';
+    await collapseCard(message, line);
+  }
+
+  await startNewMatch(client, guildId, channelId, blueTeam, orangeTeam);
+  resetQueueAfterPop(client, channelId);
 }
 
 /**
