@@ -63,7 +63,7 @@ Everything else worked, but these have never been run against the real API:
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
 
-Tests: **226 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **249 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -92,13 +92,23 @@ confirmed by probe tests. Landed on `main` the same day:
 - A proposed Double or Nothing holds the channel open; a gamble is void once a rematch
   or requeue sets `rematchResolved`. Post-match countdowns are live timestamps.
 
-**Still open from the audit** (partial patches parked in `.claude/partial-patches/`,
-untracked — apply with `git apply`, they were mid-flight when stopped):
-- Re-roll cap (`MAX_REROLLS`) and the hardcoded 15/10 seen-caps → `worker-B-reroll-cap.patch`.
-- Finalize race guard (timer vs majority click) — not started.
-- Startup sweep for match channels orphaned by a restart → `worker-C-orphan-sweep.patch`.
-- Split reports (3 Blue / 3 Orange) never escalate; sit until the 3h sweeper.
-- Admins clicking Cancel are gated in but rejected by the vote handler.
+Landed in the follow-up session (same day, all on `main`):
+- Re-roll cap: three re-rolls, then the next pair/split is final. Seen-caps use the real
+  pool size per lobby (`captainPairCount`, `matchupCount`).
+- Finalizers run under a per-channel lock, so a timer and a click cannot resolve a vote
+  twice. Tripwire test fails on the old code.
+- Startup + periodic sweep for match channels orphaned by a restart; a restart-cancelled
+  setup now posts a "re-queue to play" notice in the rank channel.
+- Split reports (neither side can still reach the majority) post one notice to the match
+  channel and one to the feed, with the `/match report` command to settle it.
+- **Mod Override button removed.** Discord cannot hide a button per viewer; `/match` is the
+  admin surface, hidden by `setDefaultMemberPermissions`, and `match_id` defaults to the
+  match in the current channel. **Requires `npm run register` on deploy.**
+- Join/Leave reply before the panel re-renders; panel refresh is one API call, not three.
+
+**Audit items deliberately left as policy decisions for Chris:**
+- AFK cooldown for a player who fails/leaves a ready check (comment marks the spot).
+- Whether the 90s rematch window is long enough after a BO5.
 
 ## Next
 
