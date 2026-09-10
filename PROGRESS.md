@@ -16,11 +16,32 @@ Last updated: 2026-08-09 (first live session)
   contradicts agreed design (see "Where the plan is wrong" below).
 - Project memory (`discord-6mans-bot`) — the agreed design decisions.
 
-## Status: live on the test server
+## Status: deployed on the Pi as a systemd service
+
+Since 2026-09-10 the bot runs on the Raspberry Pi (`pi5.local`, user `chris`) as
+`6mans.service`, from a clone at `/home/chris/discordBot`. `main` on GitHub is the source
+of truth; the Pi pulls it. Windows is for building and testing only — never run the bot
+here while the Pi's copy is up (two processes on one token race every interaction).
+
+**Ship loop:** `npm test` → commit → `git push` (Windows), then on the Pi:
+
+```
+ssh chris@pi5.local
+cd ~/discordBot
+git pull
+npm ci
+npm run build
+sudo systemctl restart 6mans
+systemctl status 6mans
+```
+
+`npm ci` only matters when `package.json` changed, but it is harmless otherwise.
+`npm run register` is only needed when a slash command is added, renamed or gets new
+options. Read logs with `journalctl -u 6mans -f`.
 
 Phases 1–5 are **merged to `main` and running**. Migrations 1–4 applied cleanly to the
 real `data/6mans.sqlite` on 2026-08-09 (six players kept their exact MMR on the 3v3
-ladder). `main` is unpushed — `origin/main` is still on `ebeb413`.
+ladder).
 
 Matches #5 and #7 played end to end in Discord: queue → ready check → mode vote →
 teams/captains → lobby → report → MMR and streaks. Two bugs came out of that session and
