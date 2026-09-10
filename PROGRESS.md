@@ -112,10 +112,10 @@ Landed in the follow-up session (same day, all on `main`):
 
 ## Next
 
-1. `/history` series score (rematch series is tracked but not surfaced there).
-2. Full achievements table — low value for a group of 6; the streak callouts already
+0. **Register the queue channel to a division** (`/queue panel division:C` in the 3v3 channel) — until then divisions, promotion and per-division leaderboards are inert. Then decide the two policy calls above.
+1. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
-3. Webhooks — recommended **skip** until something actually consumes them.
+2. Webhooks — recommended **skip** until something actually consumes them.
 
 ## Multi-queue design (phase 5)
 
