@@ -18,10 +18,7 @@ import {
   broadcastMatchToFeed,
   updateMatchFeedCard,
 } from './channelService';
-import {
-  buildActiveMatchEmbed,
-  buildMatchResultEmbed,
-} from '../ui/embeds';
+import { buildActiveMatchEmbed } from '../ui/embeds';
 import { getMatchActionButtons, getGambleProposeButton, getPostMatchButtons } from '../ui/buttons';
 import { generateRlCredentials } from '../utils/rlCredentials';
 import {
@@ -118,13 +115,9 @@ export async function startNewMatch(
 
     const buttons = getMatchActionButtons(updated.match_id);
 
-    const mentions = [...blueTeam, ...orangeTeam]
-      .filter(p => !p.discord_id.startsWith('test_bot_'))
-      .map(p => `<@${p.discord_id}>`)
-      .join(' ');
-
+    // No mention line: these six were pinged into this channel by the ready check a
+    // minute ago and have been clicking buttons in it ever since.
     const matchMsg = await channel.send({
-      content: `🚨 **6MANS MATCH #${updated.match_id} STARTED!** ${mentions}`,
       embeds: [embed],
       components: [buttons],
       files: [attachment],
@@ -204,9 +197,7 @@ export async function startNewMatch(
 
   const buttons = getMatchActionButtons(match.match_id);
 
-  const mentions = [...blueTeam, ...orangeTeam].map(p => `<@${p.discord_id}>`).join(' ');
   const matchMsg = await channel.send({
-    content: `🚨 **6MANS MATCH #${match.match_id} STARTED!** ${mentions}`,
     embeds: [embed],
     components: [buttons],
     files: [attachment],
@@ -266,17 +257,17 @@ export async function handleMatchReportVote(
 
   if (blueVotesCount >= required) {
     await completeMatch(client, matchId, 'BLUE');
-    return { success: true, message: 'Confirmed! Team Blue wins!', completed: true };
+    return { success: true, message: 'Confirmed — 🔵 Blue wins.', completed: true };
   } else if (orangeVotesCount >= required) {
     await completeMatch(client, matchId, 'ORANGE');
-    return { success: true, message: 'Confirmed! Team Orange wins!', completed: true };
+    return { success: true, message: 'Confirmed — 🟠 Orange wins.', completed: true };
   }
 
   return {
     success: true,
-    message: `Voted for **Team ${reportedWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'} Win** (${
+    message: `Voted ${reportedWinner === 'BLUE' ? '🔵 Blue' : '🟠 Orange'} — ${
       reportedWinner === 'BLUE' ? blueVotesCount : orangeVotesCount
-    }/${required} votes needed).`,
+    }/${required}`,
   };
 }
 
@@ -321,14 +312,14 @@ export async function handleMatchCancelVote(
     await cancelMatch(client, matchId, `${cancelVotesCount} Player Votes`);
     return {
       success: true,
-      message: `Confirmed! ${cancelVotesCount}/${required} votes reached — Match cancelled.`,
+      message: `Confirmed — match cancelled (${cancelVotesCount}/${required}).`,
       cancelled: true,
     };
   }
 
   return {
     success: true,
-    message: `Voted to **Cancel Match** (${cancelVotesCount}/${required} votes needed).`,
+    message: `Voted to cancel — ${cancelVotesCount}/${required}`,
   };
 }
 
@@ -392,18 +383,14 @@ export async function completeMatch(
     );
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'match_result.png' });
 
-    const resultEmbed = buildMatchResultEmbed(matchId, winner, blueResults, orangeResults, durationStr);
-    resultEmbed.setImage('attachment://match_result.png');
-
     const rematchRequired = votesRequiredFor([...match.blue_team, ...match.orange_team]);
 
-    const seriesLine = match.series_id ? `\n${summariseSeries(match.series_id)}` : '';
+    // The result image draws the winner, the duration, every player's new MMR, their
+    // delta and their streak badge. The only thing it cannot know is that this channel
+    // is on a timer -- and the buttons below already name themselves.
+    const seriesLine = match.series_id ? `${summariseSeries(match.series_id)}\n` : '';
     const resultMsg = await channel.send({
-      content:
-        `🏆 **MATCH #${matchId} COMPLETED!** GG!${seriesLine}\n` +
-        `Run it back with **Rematch**, or head **Back to Queue** — otherwise this channel ` +
-        `closes in ${Math.round(REMATCH_WINDOW_MS / 1000)} seconds.`,
-      embeds: [resultEmbed],
+      content: `${seriesLine}Channel closes in ${Math.round(REMATCH_WINDOW_MS / 1000)}s.`,
       files: [attachment],
       components: [
         getPostMatchButtons(matchId, 0, rematchRequired),
@@ -487,9 +474,9 @@ export async function cancelMatch(
   const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
   if (channel) {
     await channel.send({
-      content: `❌ **MATCH #${matchId} CANCELLED** ${
-        cancelerTag ? `by ${cancelerTag}` : ''
-      }. This private channel and voice rooms will auto-delete in 10 seconds.`,
+      content: `❌ Match #${matchId} cancelled${
+        cancelerTag ? ` by ${cancelerTag}` : ''
+      }. Channels close in 10s.`,
     });
 
     if (match.message_id) {

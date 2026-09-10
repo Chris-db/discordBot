@@ -26,7 +26,6 @@ import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import db from '../database/db';
 import config from '../config';
 import { createMatchChannels } from './channelService';
-import { buildQueuePanelEmbed } from '../ui/embeds';
 import { getQueuePanelButtons } from '../ui/buttons';
 import {
   createBalancedTeams,
@@ -123,11 +122,12 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     if (!channel) return;
 
     const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
+
+    // The panel image already draws the size, the count badge, every queued player with
+    // their MMR, and the empty slots. An embed listing the same roster underneath it was
+    // the same panel twice.
     const imageBuffer = await generateQueuePanelImage(client, players, queue.team_size);
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
-
-    const embed = buildQueuePanelEmbed(players, queue.team_size);
-    embed.setImage('attachment://queue_panel.png');
     const components = [getQueuePanelButtons()];
 
     let editedExisting = false;
@@ -139,9 +139,10 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
 
         if (isLastMessage) {
           await existingMsg.edit({
-            embeds: [embed],
+            embeds: [],
             components,
             files: [attachment],
+            attachments: [],
           }).catch(() => null);
           editedExisting = true;
         } else {
@@ -152,7 +153,6 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
 
     if (!editedExisting) {
       const newMsg = await channel.send({
-        embeds: [embed],
         components,
         files: [attachment],
       });

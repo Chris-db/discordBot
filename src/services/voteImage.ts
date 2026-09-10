@@ -14,7 +14,9 @@ export interface VoteCounts {
  */
 export async function generateModeVoteImage(
   players: Player[],
-  voteCounts: VoteCounts
+  voteCounts: VoteCounts,
+  votesRequired: number = 4,
+  teamSize: number = 3
 ): Promise<Buffer> {
   const width = 840;
   const height = 300;
@@ -40,7 +42,12 @@ export async function generateModeVoteImage(
 
   ctx.font = `600 15px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText('4 matching votes will immediately launch the mode  •  Voting closes in 30s', width / 2, 72);
+  // The threshold is a majority of this lobby -- 3 of 4, 4 of 6, 5 of 8 -- not a fixed 4.
+  ctx.fillText(
+    `${votesRequired} matching votes launches the mode  •  Voting closes in 30s`,
+    width / 2,
+    72
+  );
 
   // 3. Draw 3 Mode Cards
   const drawModeCard = (
@@ -82,8 +89,8 @@ export async function generateModeVoteImage(
     ctx.font = `13px ${FONT_STACK}`;
     ctx.fillText(desc, x + cardW / 2, cardY + 105);
 
-    // Vote Progress Bar toward 4 votes
-    const progress = Math.min(1, votes / 4);
+    // Vote Progress Bar toward the threshold
+    const progress = Math.min(1, votes / Math.max(1, votesRequired));
     const barX = x + 25;
     const barY = cardY + 125;
     const barW = cardW - 50;
@@ -100,12 +107,19 @@ export async function generateModeVoteImage(
     // Vote count badge text
     ctx.font = `bold 16px ${FONT_STACK}`;
     ctx.fillStyle = votes > 0 ? colorHex : '#64748b';
-    ctx.fillText(`${votes} / 4 VOTES`, x + cardW / 2, cardY + 163);
+    ctx.fillText(`${votes} / ${votesRequired} VOTES`, x + cardW / 2, cardY + 163);
   };
 
   drawModeCard('CAPTAINS DRAFT', '👑', 'Captains Snake Draft', voteCounts.captains, 40, '#ffd700');
   drawModeCard('BALANCED MMR', '⚖️', 'Fair auto-balanced teams', voteCounts.balanced, 300, '#00b0ff');
-  drawModeCard('RANDOM TEAMS', '🎲', 'Completely randomized 3v3', voteCounts.random, 560, '#00e676');
+  drawModeCard(
+    'RANDOM TEAMS',
+    '🎲',
+    `Completely randomized ${teamSize}v${teamSize}`,
+    voteCounts.random,
+    560,
+    '#00e676'
+  );
 
   return canvas.toBuffer('image/png');
 }

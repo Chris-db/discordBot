@@ -35,7 +35,6 @@ import {
   getMatch,
   getMatchHistory,
 } from '../database/queries';
-import { buildStatsEmbed, buildLeaderboardEmbed, buildMyRankEmbed, buildMatchHistoryEmbed } from '../ui/embeds';
 import { getModOverrideButtons, getLeaderboardButtons } from '../ui/buttons';
 import { generateLeaderboardImage } from '../services/leaderboardImage';
 import { generatePlayerProfileImage } from '../services/profileImage';
@@ -89,12 +88,9 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       const fileName = `profile_${Date.now()}.png`;
       const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
 
-      const avatarUrl = user.displayAvatarURL({ size: 256 });
-      const embed = buildMyRankEmbed(player, rank, totalPlayers, avatarUrl);
-      embed.setImage(`attachment://${fileName}`);
-
+      // The profile image draws the name, tier, standing, MMR progress and the four stat
+      // cards -- the embed was the same numbers again in list form.
       await interaction.editReply({
-        embeds: [embed],
         files: [attachment],
       });
       return;
@@ -112,23 +108,15 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       const totalPlayers = getTotalPlayersCount(guildId, teamSize, division);
       const topPlayers = getLeaderboard(guildId, teamSize, division, 10, 0);
 
-      let topPlayerAvatarUrl: string | undefined;
-      if (topPlayers.length > 0) {
-        try {
-          const topUser = await interaction.client.users.fetch(topPlayers[0].discord_id);
-          topPlayerAvatarUrl = topUser.displayAvatarURL({ size: 256 });
-        } catch {
-          // ignore if user fetch fails
-        }
-      }
-
       const imageBuffer = await generateLeaderboardImage(interaction.client, topPlayers, page);
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'leaderboard.png' });
 
-      const embed = buildLeaderboardEmbed(topPlayers, page, totalPlayers, topPlayerAvatarUrl, true);
-      const buttons = getLeaderboardButtons(page, Math.max(1, Math.ceil(totalPlayers / 10)));
+      // Page context is the one thing the image does not draw, so it is the one thing
+      // left in the text.
+      const totalPages = Math.max(1, Math.ceil(totalPlayers / 10));
+      const buttons = getLeaderboardButtons(page, totalPages);
       await interaction.editReply({
-        embeds: [embed],
+        content: `Page ${page}/${totalPages} · ${totalPlayers} players`,
         components: [buttons],
         files: [attachment],
       });
@@ -141,10 +129,8 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       const matches = getMatchHistory(guildId, 10);
       const imageBuffer = await generateMatchHistoryImage(interaction.client, matches);
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'history.png' });
-      const embed = buildMatchHistoryEmbed(matches);
 
       await interaction.editReply({
-        embeds: [embed],
         files: [attachment],
       });
       return;
@@ -170,24 +156,18 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       }
 
       const topPlayers = getLeaderboard(guildId, teamSize, division, 10, (newPage - 1) * 10);
-      const overallTop = getLeaderboard(guildId, teamSize, division, 1, 0);
-
-      let topPlayerAvatarUrl: string | undefined;
-      if (overallTop.length > 0) {
-        try {
-          const topUser = await interaction.client.users.fetch(overallTop[0].discord_id);
-          topPlayerAvatarUrl = topUser.displayAvatarURL({ size: 256 });
-        } catch {
-          // ignore
-        }
-      }
 
       const imageBuffer = await generateLeaderboardImage(interaction.client, topPlayers, newPage);
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'leaderboard.png' });
 
-      const embed = buildLeaderboardEmbed(topPlayers, newPage, totalPlayers, topPlayerAvatarUrl, true);
       const buttons = getLeaderboardButtons(newPage, totalPages);
-      await interaction.update({ embeds: [embed], components: [buttons], files: [attachment] });
+      await interaction.update({
+        content: `Page ${newPage}/${totalPages} · ${totalPlayers} players`,
+        embeds: [],
+        components: [buttons],
+        files: [attachment],
+        attachments: [],
+      });
       return;
     }
 
@@ -292,7 +272,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       const matchId = parseInt(customId.split('_').pop()!, 10);
       const buttons = getModOverrideButtons(matchId);
       await interaction.editReply({
-        content: `🛠️ **Mod Override Control Panel for Match #${matchId}:**\nChoose an instant action below:`,
+        content: `🛠️ Mod override — Match #${matchId}`,
         components: [buttons],
       });
       return;
@@ -382,7 +362,12 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       autoDeleteReply(interaction, 6000);
       // Re-adding six players and re-rendering the queue panel can outrun the 3s window.
       await interaction.deferReply({ ephemeral: true });
-      const res = await handleRequeue(interaction.client, matchId, user.id);
+      const res = await handleRequeue(
+        interaction.client,
+        matchId,
+        user.id,
+        interaction.message as Message
+      );
       await interaction.editReply({ content: res.message });
       return;
     }

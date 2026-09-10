@@ -508,9 +508,10 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
 
       const imageBuffer = await generateMatchResultImage(client, matchId, match.winner, blueResults, orangeResults);
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'match_result.png' });
-      embed.setImage('attachment://match_result.png');
 
-      await msg.edit({ embeds: [embed], files: [attachment] });
+      // The result image already names the match, the winner and every delta, so the
+      // roster embed is dropped rather than stacked on top of it.
+      await msg.edit({ embeds: [], files: [attachment], attachments: [] });
     } else {
       await msg.edit({ embeds: [embed] });
     }

@@ -65,7 +65,7 @@ export async function startReadyCheckPhase(
   const categoryId = queueChannel.parentId;
   if (!categoryId) {
     await queueChannel.send({
-      content: `❌ **Error:** Queue channel (<#${queueChannel.id}>) is not inside a Discord Category! Skipping ready check...`,
+      content: `❌ <#${queueChannel.id}> is not inside a category — skipping the ready check.`,
     });
     queue.state = 'VOTING';
     queue.vote_counts = { captains: [], balanced: [], random: [] };
@@ -207,33 +207,52 @@ export async function startReadyCheckPhase(
     const readyImg = await generateReadyCheckImage(client, players, [], 60, teamSize);
     const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
 
+    // This is the single ping for the whole match. The card below it already states the
+    // capacity, the countdown and who is still missing, so the line only has to say who
+    // is being summoned and where to.
     readyMsg = await matchTextChannel.send({
-      content:
-        `🚨 **QUEUE FULL (${rosterSize}/${rosterSize})! AFK VOICE READY CHECK!**\n` +
-        `${mentions}\n\n` +
-        `⏳ **You have 60 seconds to connect to <#${readyCheckVc.id}>!**\n` +
-        `*All ${rosterSize} players must join the voice channel to confirm they are ready. Anyone who fails to join within 60s will be removed from the queue.*`,
+      content: `${mentions} → <#${readyCheckVc.id}> · 60s`,
       files: [attachment],
     }).catch(() => undefined);
   }
 
+  // Pingless: everyone in this match was just mentioned in the match channel, and this
+  // notice is only here so the queue channel says where the lobby went.
+  //
+  // It is kept for the whole ready check rather than self-deleting after 15s, because the
+  // outcome is edited onto this same message. Announcing the pop and then posting a
+  // separate "it failed" message put two notices in the queue channel for one event.
   const popNotice = await queueChannel.send({
-    content: `🔔 **Queue Full (${rosterSize}/${rosterSize})!** Match **#${match.match_id}** (${teamSize}v${teamSize}) lobby created in <#${textChannelId}>. Please connect to **🔊 Ready Check #${match.match_id}** (<#${readyCheckVc.id}>) within 60 seconds!`,
+    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · 60s`,
   }).catch(() => null);
-  setTimeout(() => popNotice?.delete().catch(() => null), 15_000);
+
+  /** Replaces the pop notice with how it ended, then clears it shortly after. */
+  const closePopNotice = async (outcome?: string) => {
+    if (!popNotice) return;
+    if (outcome) {
+      await popNotice.edit({ content: outcome }).catch(() => null);
+      setTimeout(() => popNotice.delete().catch(() => null), 15_000);
+    } else {
+      await popNotice.delete().catch(() => null);
+    }
+  };
 
   const readyCheckStartedAt = Date.now();
   const timer = setInterval(async () => {
     const elapsed = Math.floor((Date.now() - readyCheckStartedAt) / 1000);
     const currentQueue = getQueue(textChannelId);
     if (!currentQueue || currentQueue.state !== 'READY_CHECK') {
+      // Cancelled or advanced from somewhere else -- take the notice with it rather than
+      // leaving the queue channel pointing at a ready check that is no longer running.
       clearInterval(timer);
+      await closePopNotice();
       return;
     }
 
     const vc = await guild.channels.fetch(readyCheckVc.id).catch(() => null);
     if (!vc || vc.type !== ChannelType.GuildVoice) {
       clearInterval(timer);
+      await closePopNotice();
       return;
     }
 
@@ -244,9 +263,14 @@ export async function startReadyCheckPhase(
 
     if (allReady) {
       clearInterval(timer);
+      // The match is under way; the queue channel no longer needs to point at it.
+      await closePopNotice();
       if (readyMsg) {
+        // Drop the ready-check card too -- it is a snapshot of a check that has passed.
         await readyMsg.edit({
-          content: `✅ **ALL PLAYERS READY!** Starting mode voting...`,
+          content: '✅ All players ready',
+          files: [],
+          attachments: [],
         }).catch(() => null);
       }
 
@@ -286,10 +310,7 @@ export async function startReadyCheckPhase(
       const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
       if (matchTextChannel) {
         await matchTextChannel.send({
-          content:
-            `❌ **READY CHECK FAILED!**\n` +
-            `The following player(s) failed to join voice within 60s: ${afkMentions || 'Unknown'}\n` +
-            `Closing match lobby in 5 seconds...`,
+          content: `❌ Ready check failed — no voice from ${afkMentions || 'Unknown'}. Closing in 5s.`,
         }).catch(() => null);
       }
 
@@ -323,12 +344,9 @@ export async function startReadyCheckPhase(
         saveQueue(rankQueue);
         await refreshQueuePanel(client, channelId);
 
-        const afkNotice = await queueChannel.send({
-          content:
-            `❌ **Ready Check Failed in Match #${match.match_id}.**\n` +
-            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue popped again (**${rosterSize}/${rosterSize}**)!`,
-        }).catch(() => null);
-        setTimeout(() => afkNotice?.delete().catch(() => null), 15_000);
+        await closePopNotice(
+          `❌ Match #${match.match_id} ready check failed — removed ${afkMentions || 'Unknown'}. Queue re-popped (${rosterSize}/${rosterSize}).`
+        );
 
         const popQueue: ActiveQueue = {
           channel_id: channelId,
@@ -349,12 +367,9 @@ export async function startReadyCheckPhase(
         saveQueue(rankQueue);
         await refreshQueuePanel(client, channelId);
 
-        const afkNotice = await queueChannel.send({
-          content:
-            `❌ **Ready Check Failed in Match #${match.match_id}.**\n` +
-            `Removed AFK player(s): ${afkMentions || 'Unknown'}. Queue is now **${rankQueue.player_ids.length}/${rosterSize}**.`,
-        }).catch(() => null);
-        setTimeout(() => afkNotice?.delete().catch(() => null), 15_000);
+        await closePopNotice(
+          `❌ Match #${match.match_id} ready check failed — removed ${afkMentions || 'Unknown'}. Queue is ${rankQueue.player_ids.length}/${rosterSize}.`
+        );
       }
 
       setTimeout(() => {

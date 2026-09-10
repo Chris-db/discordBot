@@ -12,7 +12,6 @@ import {
   setPlayerMmr,
   getMatchHistory,
 } from '../database/queries';
-import { buildStatsEmbed, buildLeaderboardEmbed, buildMatchHistoryEmbed } from '../ui/embeds';
 import { addTeamSizeOption, getTeamSizeOption, formatTeamSize } from '../ui/teamSize';
 import { getLeaderboardButtons } from '../ui/buttons';
 import { generateLeaderboardImage } from '../services/leaderboardImage';
@@ -54,10 +53,7 @@ export const statsCommand = {
     const fileName = `profile_${Date.now()}.png`;
     const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
 
-    const avatarUrl = user.displayAvatarURL({ size: 256 });
-    const embed = buildStatsEmbed(player, rank, totalPlayers, avatarUrl);
-    embed.setImage(`attachment://${fileName}`);
-    return interaction.editReply({ embeds: [embed], files: [attachment] });
+    return interaction.editReply({ files: [attachment] });
   },
 };
 
@@ -96,16 +92,6 @@ export const leaderboardCommand = {
     const totalPlayers = getTotalPlayersCount(guildId, teamSize, division);
     const topPlayers = getLeaderboard(guildId, teamSize, division, 10, 0);
 
-    let topPlayerAvatarUrl: string | undefined;
-    if (topPlayers.length > 0) {
-      try {
-        const topUser = await interaction.client.users.fetch(topPlayers[0].discord_id);
-        topPlayerAvatarUrl = topUser.displayAvatarURL({ size: 256 });
-      } catch {
-        // ignore if user fetch fails
-      }
-    }
-
     const imageBuffer = await generateLeaderboardImage(
       interaction.client,
       topPlayers,
@@ -114,16 +100,14 @@ export const leaderboardCommand = {
     );
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'leaderboard.png' });
 
-    const embed = buildLeaderboardEmbed(
-      topPlayers,
-      page,
-      totalPlayers,
-      topPlayerAvatarUrl,
-      true,
-      teamSize
-    );
-    const buttons = getLeaderboardButtons(page, Math.max(1, Math.ceil(totalPlayers / 10)));
-    return interaction.editReply({ embeds: [embed], components: [buttons], files: [attachment] });
+    // The board image draws the ladder itself; page context is all that is left to say.
+    const totalPages = Math.max(1, Math.ceil(totalPlayers / 10));
+    const buttons = getLeaderboardButtons(page, totalPages);
+    return interaction.editReply({
+      content: `${formatTeamSize(teamSize)} · ${division} · Page ${page}/${totalPages} · ${totalPlayers} players`,
+      components: [buttons],
+      files: [attachment],
+    });
   },
 };
 
@@ -193,10 +177,8 @@ export const historyCommand = {
 
     const imageBuffer = await generateMatchHistoryImage(interaction.client, matches, targetUser);
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'history.png' });
-    const embed = buildMatchHistoryEmbed(matches, targetUser);
 
     return interaction.editReply({
-      embeds: [embed],
       files: [attachment],
     });
   },

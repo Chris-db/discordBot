@@ -1,10 +1,4 @@
-import {
-  Client,
-  ButtonInteraction,
-  TextChannel,
-  AttachmentBuilder,
-  EmbedBuilder,
-} from 'discord.js';
+import { Client, ButtonInteraction, TextChannel, AttachmentBuilder } from 'discord.js';
 import {
   getMatch,
   updateMatchGambleStatus,
@@ -14,11 +8,7 @@ import {
   GambleStatus,
   Player,
 } from '../database/queries';
-import {
-  buildGambleConsensusEmbed,
-  buildGambleSpinningEmbed,
-  RL_COLORS,
-} from '../ui/embeds';
+import { buildGambleConsensusEmbed, buildGambleSpinningEmbed } from '../ui/embeds';
 import { getGambleConsensusButtons } from '../ui/buttons';
 import { generateGambleResultImage, GamblePlayerResult } from './gambleImage';
 import { logger } from '../utils/logger';
@@ -112,17 +102,12 @@ export async function proposeGamble(
       if (channel) {
         const targetMsg = await channel.messages.fetch(msg.id).catch(() => null);
         if (targetMsg) {
-          const expiredEmbed = EmbedBuilder.from(embed)
-            .setColor(RL_COLORS.DARK)
-            .setDescription(
-              '⏰ **The 60-second Double or Nothing consensus window has expired.**\n' +
-                'Not everyone agreed in time. The original match result stands permanently!'
-            )
-            .setFooter({ text: 'Consensus Expired • Match Finalized' });
-
+          // Nobody is going to act on an expired proposal, so it collapses to a line
+          // rather than sitting there as a full card with a dead roster in it.
           await targetMsg.edit({
-            embeds: [expiredEmbed],
-            components: [getGambleConsensusButtons(matchId, true)],
+            content: '⏰ Double or Nothing expired — the original result stands.',
+            embeds: [],
+            components: [],
           });
         }
       }
@@ -200,8 +185,10 @@ export async function handleGambleAgree(
     components: [getGambleConsensusButtons(matchId, false)],
   });
 
-  // Check if everyone has agreed
-  if (status.agreedPlayers.length >= 6) {
+  // Check if everyone has agreed. This used to be a hardcoded 6, so a 2v2 lobby could
+  // never reach consensus at all and a 4v4 would spin two players short of unanimous.
+  const rosterSize = match.blue_team.length + match.orange_team.length;
+  if (status.agreedPlayers.length >= rosterSize) {
     const timer = activeGambleTimers.get(matchId);
     if (timer) {
       clearTimeout(timer);
@@ -252,21 +239,11 @@ export async function handleGambleDecline(
   status.declinedBy = interaction.user.id;
   updateMatchGambleStatus(matchId, status);
 
-  const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
-  const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
-
-  const embed = buildGambleConsensusEmbed(
-    matchId,
-    bluePlayers,
-    orangePlayers,
-    status.agreedPlayers,
-    0,
-    interaction.user.id
-  );
-
+  // A declined proposal is over -- no roster, no stakes, just the outcome.
   await interaction.update({
-    embeds: [embed],
-    components: [getGambleConsensusButtons(matchId, true)],
+    content: `<@${interaction.user.id}> declined. The original result stands.`,
+    embeds: [],
+    components: [],
   });
 }
 
@@ -421,29 +398,15 @@ async function startWheelOfFate(
 
   const attachment = new AttachmentBuilder(imageBuffer, { name: 'wheel_result.png' });
 
-  const finalTitle =
-    resultType === 'INVERTED'
-      ? `💥 WHEEL OF FATE: RESULT INVERTED! (Team ${wheelWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'})`
-      : `🔥 WHEEL OF FATE: JACKPOT DOUBLED! (Team ${wheelWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'})`;
-
-  const finalEmbed = new EmbedBuilder()
-    .setTitle(finalTitle)
-    .setColor(resultType === 'INVERTED' ? RL_COLORS.GOLD : RL_COLORS.RED)
-    .setDescription(
-      resultType === 'INVERTED'
-        ? `🛡️ **THE VICTORY WAS STOLEN!**\nTeam ${wheelWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'} won the Wheel of Fate spin! Original match results have been **INVERTED**.`
-        : `🔥 **JACKPOT FOR THE WINNERS!**\nTeam ${wheelWinner === 'BLUE' ? 'Blue 🔵' : 'Orange 🟠'} won the Wheel of Fate spin! Original MMR deltas have been **DOUBLED**!`
-    )
-    .setImage('attachment://wheel_result.png')
-    .setFooter({ text: 'Wheel of Fate • Official Result' })
-    .setTimestamp();
-
+  // The result image draws the outcome, which team won the 50/50, and every player's new
+  // MMR and delta -- so the message is the image and nothing else.
   await targetMsg.edit({
-    content: `🎲 **DOUBLE OR NOTHING RESOLVED!**`,
-    embeds: [finalEmbed],
+    content: '',
+    embeds: [],
     files: [attachment],
+    attachments: [],
     components: [],
   }).catch((err) => {
-    logger.error(`[Gamble] Failed to post resolved wheel embed for Match #${matchId}:`, err);
+    logger.error(`[Gamble] Failed to post resolved wheel image for Match #${matchId}:`, err);
   });
 }

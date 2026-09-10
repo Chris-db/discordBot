@@ -23,7 +23,6 @@ import {
   updateDivision,
   Player,
 } from '../database/queries';
-import { buildQueuePanelEmbed } from '../ui/embeds';
 import { getQueuePanelButtons } from '../ui/buttons';
 import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { autoDeleteReply } from '../utils/autoDelete';

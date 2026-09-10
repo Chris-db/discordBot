@@ -16,12 +16,7 @@ import {
   Player,
 } from '../database/queries';
 import { createMatchChannels } from './channelService';
-import {
-  buildModeVoteEmbed,
-  buildCaptainsVoteEmbed,
-  buildTeamsVoteEmbed,
-  buildCaptainsDraftEmbed,
-} from '../ui/embeds';
+import { buildCaptainsVoteEmbed, buildTeamsVoteEmbed } from '../ui/embeds';
 import {
   getModeVoteButtons,
   getCaptainsVoteButtons,
@@ -46,6 +41,34 @@ import { refreshQueuePanel, resetQueueAfterPop } from './queuePanel';
 
 // Track active voting timers in memory so we don't duplicate timeouts
 const activeVoteTimers = new Map<string, NodeJS.Timeout>();
+
+const MODE_LABELS: Record<TeamMode, string> = {
+  captains: 'Captains Draft',
+  balanced: 'Balanced MMR',
+  random: 'Random Teams',
+};
+
+/**
+ * Replaces a resolved phase card with a single line of history.
+ *
+ * Resolution used to only rewrite the content and clear the buttons, which left the full
+ * embed and image sitting in the channel forever showing the tally as it stood when the
+ * vote closed. Three of those piled up in every match channel before the game even
+ * started. Stripping the embed, image and buttons leaves the outcome and nothing else.
+ */
+async function collapseCard(message: Message, line: string): Promise<void> {
+  await message
+    .edit({
+      content: line,
+      embeds: [],
+      components: [],
+      files: [],
+      attachments: [],
+      // A collapsed card is history, not a summons -- any mention in it must not ping.
+      allowedMentions: { parse: [] },
+    })
+    .catch(() => null);
+}
 
 /**
  * Starts the mode voting phase once the queue is full.
@@ -120,21 +143,19 @@ export async function startVotingPhase(
   const players = getPlayersByIds(matchQueue.guild_id, matchQueue.team_size, matchQueue.player_ids);
   const voteCounts = { captains: 0, balanced: 0, random: 0 };
 
-  const voteImg = await generateModeVoteImage(players, voteCounts);
+  // The image draws the three mode cards, the threshold and the live tallies, and the
+  // buttons repeat the tallies. There is nothing left for an embed to add. Players were
+  // already pinged into this channel by the ready check, so no mention line either.
+  const voteImg = await generateModeVoteImage(
+    players,
+    voteCounts,
+    votesRequiredFor(players.map(p => p.discord_id)),
+    matchQueue.team_size
+  );
   const attachment = new AttachmentBuilder(voteImg, { name: 'voting_mode.png' });
-
-  const embed = buildModeVoteEmbed(players, voteCounts, votesRequiredFor(players.map(p => p.discord_id)));
-  embed.setImage('attachment://voting_mode.png');
   const buttons = getModeVoteButtons(voteCounts);
 
-  const mentions = players
-    .filter(p => !p.discord_id.startsWith('test_bot_'))
-    .map(p => `<@${p.discord_id}>`)
-    .join(' ');
-
   const voteMsg = await matchChan.send({
-    content: `🔔 **QUEUE POPPED! Welcome to Match #${match.match_id}** ${mentions}`,
-    embeds: [embed],
     components: [buttons],
     files: [attachment],
   });
@@ -200,15 +221,18 @@ export async function handleModeVote(
   };
 
   const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
-  const voteImg = await generateModeVoteImage(players, voteCounts);
+  const voteImg = await generateModeVoteImage(
+    players,
+    voteCounts,
+    votesRequiredFor(players.map(p => p.discord_id)),
+    queue.team_size
+  );
   const attachment = new AttachmentBuilder(voteImg, { name: 'voting_mode.png' });
-  const embed = buildModeVoteEmbed(players, voteCounts, votesRequiredFor(players.map(p => p.discord_id)));
-  embed.setImage('attachment://voting_mode.png');
 
   await message.edit({
-    embeds: [embed],
     components: [getModeVoteButtons(voteCounts)],
     files: [attachment],
+    attachments: [],
   });
 
   // Once a majority of the lobby agrees on a mode, resolve immediately.
@@ -221,7 +245,7 @@ export async function handleModeVote(
     await finalizeVoteAndPop(client, channelId, guildId, message);
   }
 
-  return { success: true, message: `Voted for **${votedMode.toUpperCase()}**!` };
+  return { success: true, message: `Voted: **${MODE_LABELS[votedMode]}**` };
 }
 
 export type TeamMode = 'captains' | 'balanced' | 'random';
@@ -284,14 +308,9 @@ export async function finalizeVoteAndPop(
   if (voteMsg) {
     const tiebreakNote =
       tiedModes.length > 1
-        ? `\n🎲 Tied at ${maxVotes} vote${maxVotes === 1 ? '' : 's'} (${tiedModes
-            .map(m => m.toUpperCase())
-            .join(' vs ')}) — decided by coin flip.`
+        ? ` (coin flip — tied at ${maxVotes} vote${maxVotes === 1 ? '' : 's'})`
         : '';
-    await voteMsg.edit({
-      content: `✅ **VOTING COMPLETE!** Winning mode: **${winningMode.toUpperCase()}**${tiebreakNote}`,
-      components: [],
-    }).catch(() => null);
+    await collapseCard(voteMsg, `✅ **${MODE_LABELS[winningMode]}** won the vote${tiebreakNote}`);
   }
 
   if (winningMode === 'balanced' || winningMode === 'random') {
@@ -356,28 +375,19 @@ export async function startCaptainsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, 0, 0, votesRequiredFor(queue.player_ids));
+  // The embed title says what this is and the buttons say what the choices are, so there
+  // is no content line -- and no attachments to carry over from a re-rolled card.
+  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain);
   const buttons = getCaptainsVoteButtons({ yes: 0, no: 0 });
+  const payload = { content: '', embeds: [embed], components: [buttons], attachments: [] };
 
   let sentMsg: Message;
   if (messageToEdit) {
-    sentMsg = await messageToEdit.edit({
-      content: `👑 **CAPTAIN VERIFICATION VOTE** — Please verify if you want to proceed with these captains:`,
-      embeds: [embed],
-      components: [buttons],
-    }).catch(async () => {
-      return await channel.send({
-        content: `👑 **CAPTAIN VERIFICATION VOTE** — Please verify if you want to proceed with these captains:`,
-        embeds: [embed],
-        components: [buttons],
-      });
-    });
+    sentMsg = await messageToEdit
+      .edit(payload)
+      .catch(async () => await channel.send({ embeds: [embed], components: [buttons] }));
   } else {
-    sentMsg = await channel.send({
-      content: `👑 **CAPTAIN VERIFICATION VOTE** — Please verify if you want to proceed with these captains:`,
-      embeds: [embed],
-      components: [buttons],
-    });
+    sentMsg = await channel.send({ embeds: [embed], components: [buttons] });
   }
 
   queue.captain_vote_state.message_id = sentMsg.id;
@@ -451,7 +461,7 @@ export async function handleCaptainsVote(
   const blueCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.blueCaptain])[0];
   const orangeCaptain = getPlayersByIds(queue.guild_id, queue.team_size, [queue.captain_vote_state.orangeCaptain])[0];
 
-  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain, yesCount, noCount, votesRequiredFor(queue.player_ids));
+  const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain);
   const buttons = getCaptainsVoteButtons({ yes: yesCount, no: noCount });
 
   await message.edit({
@@ -471,7 +481,7 @@ export async function handleCaptainsVote(
 
   return {
     success: true,
-    message: vote === 'yes' ? 'Voted **YES** to proceed with these captains!' : 'Voted **NO** to randomize captains!',
+    message: vote === 'yes' ? 'Voted to proceed.' : 'Voted to randomize captains.',
   };
 }
 
@@ -493,20 +503,16 @@ export async function finalizeCaptainsVote(
 
   if (!allBots && noCount > yesCount) {
     logger.info(`Channel ${channelId} captains vote rejected. Randomizing new captains...`);
-    if (message) {
-      await message.edit({
-        content: `🔄 **CAPTAINS REJECTED!** Randomizing new captains...`,
-        components: [],
-      }).catch(() => null);
-    }
+    // No interim edit -- startCaptainsVotePhase reuses this same message for the next
+    // pair, so announcing the rejection here would only be overwritten a tick later.
     await startCaptainsVotePhase(client, channelId, guildId, queue, true, message);
   } else {
     logger.info(`Channel ${channelId} captains vote approved.`);
     if (message) {
-      await message.edit({
-        content: `✅ **CAPTAINS APPROVED!** Starting Captains Draft...`,
-        components: [],
-      }).catch(() => null);
+      await collapseCard(
+        message,
+        `✅ Captains locked: 🔵 <@${queue.captain_vote_state.blueCaptain}> · 🟠 <@${queue.captain_vote_state.orangeCaptain}>`
+      );
     }
 
     const blueCapId = queue.captain_vote_state.blueCaptain;
@@ -562,28 +568,23 @@ export async function startTeamsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, 0, 0, newSeen.length, mode, votesRequiredFor(queue.player_ids), matchupCount(queue.team_size));
+  const embed = buildTeamsVoteEmbed(
+    blueTeam,
+    orangeTeam,
+    newSeen.length,
+    mode,
+    matchupCount(queue.team_size)
+  );
   const buttons = getTeamsVoteButtons({ yes: 0, no: 0 }, mode);
+  const payload = { content: '', embeds: [embed], components: [buttons], attachments: [] };
 
   let sentMsg: Message;
   if (messageToEdit) {
-    sentMsg = await messageToEdit.edit({
-      content: `🎲 **TEAM VERIFICATION VOTE** — Please verify if you want to proceed with these teams:`,
-      embeds: [embed],
-      components: [buttons],
-    }).catch(async () => {
-      return await channel.send({
-        content: `🎲 **TEAM VERIFICATION VOTE** — Please verify if you want to proceed with these teams:`,
-        embeds: [embed],
-        components: [buttons],
-      });
-    });
+    sentMsg = await messageToEdit
+      .edit(payload)
+      .catch(async () => await channel.send({ embeds: [embed], components: [buttons] }));
   } else {
-    sentMsg = await channel.send({
-      content: `🎲 **TEAM VERIFICATION VOTE** — Please verify if you want to proceed with these teams:`,
-      embeds: [embed],
-      components: [buttons],
-    });
+    sentMsg = await channel.send({ embeds: [embed], components: [buttons] });
   }
 
   queue.team_vote_state.message_id = sentMsg.id;
@@ -659,7 +660,13 @@ export async function handleTeamsVote(
   const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
 
   const mode = queue.team_vote_state.mode || 'random';
-  const embed = buildTeamsVoteEmbed(blueTeam, orangeTeam, yesCount, noCount, seenCount, mode, votesRequiredFor(queue.player_ids), matchupCount(queue.team_size));
+  const embed = buildTeamsVoteEmbed(
+    blueTeam,
+    orangeTeam,
+    seenCount,
+    mode,
+    matchupCount(queue.team_size)
+  );
   const buttons = getTeamsVoteButtons({ yes: yesCount, no: noCount }, mode);
 
   await message.edit({
@@ -681,10 +688,8 @@ export async function handleTeamsVote(
     success: true,
     message:
       vote === 'yes'
-        ? 'Voted **YES** to proceed with these teams!'
-        : `Voted **NO** — re-roll for the ${
-            mode === 'balanced' ? 'next-closest balanced split' : 'next random matchup'
-          }!`,
+        ? 'Voted to proceed.'
+        : `Voted to re-roll (${mode === 'balanced' ? 'next-closest split' : 'new matchup'}).`,
   };
 }
 
@@ -712,27 +717,17 @@ export async function finalizeTeamsVote(
     logger.info(
       `Channel ${channelId} team verification vote rejected. Generating next ${mode} matchup without repeat...`
     );
-    if (message) {
-      const rerollLabel =
-        mode === 'balanced' ? 'next-closest balanced split' : 'new random matchup';
-      await message.edit({
-        content: `🔄 **TEAMS REJECTED** (${noCount} NO vs ${yesCount} YES). Generating a ${rerollLabel}...`,
-        components: [],
-      }).catch(() => null);
-    }
-
+    // The re-rolled split replaces this same message, so there is nothing to announce.
     await startTeamsVotePhase(client, channelId, guildId, queue, mode, message);
   } else {
     logger.info(`Channel ${channelId} team verification vote approved. Starting match (teams locked in)...`);
-    if (message) {
-      await message.edit({
-        content: `✅ **TEAMS APPROVED!** (Teams are now locked in). Launching match...`,
-        components: [],
-      }).catch(() => null);
-    }
 
     const blueTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.blueTeam);
     const orangeTeam = getPlayersByIds(queue.guild_id, queue.team_size, queue.team_vote_state.orangeTeam);
+
+    if (message) {
+      await collapseCard(message, '✅ Teams locked in');
+    }
 
     await startNewMatch(client, guildId, channelId, blueTeam, orangeTeam);
     resetQueueAfterPop(client, channelId);
@@ -773,18 +768,6 @@ export async function sendCaptainsDraftCard(
   );
   const attachment = new AttachmentBuilder(draftImg, { name: 'captains_draft.png' });
 
-  const embed = buildCaptainsDraftEmbed(
-    blueCaptain,
-    orangeCaptain,
-    blueTeam,
-    orangeTeam,
-    remaining,
-    draft.turn,
-    draft.pickNumber,
-    picks
-  );
-  embed.setImage('attachment://captains_draft.png');
-
   const selectMenu = getCaptainsDraftSelectMenu(
     remaining,
     draft.pickNumber,
@@ -792,11 +775,13 @@ export async function sendCaptainsDraftCard(
     picks
   );
 
+  // The image draws both rosters and the remaining pool, and the dropdown's placeholder
+  // repeats the pick number -- so the only thing worth saying is whose turn it is. This
+  // mention is the one ping that stays: it is aimed at a single person who has to act.
   const sentMsg = await channel.send({
-    content: `👑 **CAPTAINS DRAFT IN PROGRESS** | Turn: <@${
+    content: `${draft.turn === 'BLUE' ? '🔵' : '🟠'} <@${
       draft.turn === 'BLUE' ? draft.blueCaptain : draft.orangeCaptain
-    }>`,
-    embeds: [embed],
+    }> — pick ${draft.pickNumber} of ${picks}`,
     components: [selectMenu],
     files: [attachment],
   });
@@ -841,7 +826,7 @@ export async function sendCaptainsDraftCard(
         `Draft pick #${pickNumberAtSend} in ${channelId} timed out. Auto-picking ${autoPick.username}.`
       );
       await sentMsg
-        .reply({ content: `⏰ <@${currentCaptain}> ran out of time — auto-picking **${autoPick.username}**.` })
+        .reply({ content: `⏰ <@${currentCaptain}> timed out — auto-picked **${autoPick.username}**` })
         .catch(() => null);
 
       await handleCaptainPick(client, channelId, currentCaptain, autoPick.discord_id, sentMsg).catch(
@@ -892,10 +877,7 @@ export async function handleCaptainPick(
     const bluePlayers = getPlayersByIds(queue.guild_id, queue.team_size, queue.draft_state.blueTeam);
     const orangePlayers = getPlayersByIds(queue.guild_id, queue.team_size, queue.draft_state.orangeTeam);
 
-    await message.edit({
-      content: '✅ **CAPTAINS DRAFT COMPLETED!** Launching match...',
-      components: [],
-    }).catch(() => null);
+    await collapseCard(message, '✅ Draft complete');
 
     await startNewMatch(client, queue.guild_id, channelId, bluePlayers, orangePlayers);
     resetQueueAfterPop(client, channelId);

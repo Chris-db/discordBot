@@ -70,12 +70,12 @@ export function getCaptainsVoteButtons(voteCounts: {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('captains_verify_yes')
-      .setLabel(`Yes, Proceed (${voteCounts.yes})`)
+      .setLabel(`Proceed (${voteCounts.yes})`)
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('captains_verify_no')
-      .setLabel(`No, Randomize (${voteCounts.no})`)
+      .setLabel(`Randomize (${voteCounts.no})`)
       .setEmoji('🔄')
       .setStyle(ButtonStyle.Danger)
   );
@@ -92,11 +92,11 @@ export function getTeamsVoteButtons(
   mode: 'random' | 'balanced' = 'random'
 ): ActionRowBuilder<ButtonBuilder> {
   // The re-roll stays in the voted mode, so the label has to match what the button does.
-  const rerollLabel = mode === 'balanced' ? 'No, Next Split' : 'No, Randomize';
+  const rerollLabel = mode === 'balanced' ? 'Next Split' : 'Randomize';
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('teams_verify_yes')
-      .setLabel(`Yes, Proceed (${voteCounts.yes})`)
+      .setLabel(`Proceed (${voteCounts.yes})`)
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
@@ -114,17 +114,17 @@ export function getMatchActionButtons(matchId: number): ActionRowBuilder<ButtonB
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`match_report_blue_${matchId}`)
-      .setLabel('Report Blue Win')
+      .setLabel('Blue Won')
       .setEmoji('🔵')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`match_report_orange_${matchId}`)
-      .setLabel('Report Orange Win')
+      .setLabel('Orange Won')
       .setEmoji('🟠')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`match_cancel_${matchId}`)
-      .setLabel('Cancel Match')
+      .setLabel('Cancel')
       .setEmoji('❌')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
@@ -142,12 +142,12 @@ export function getModOverrideButtons(matchId: number): ActionRowBuilder<ButtonB
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`mod_force_blue_${matchId}`)
-      .setLabel('Force Blue Win')
+      .setLabel('Force Blue')
       .setEmoji('🔵')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`mod_force_orange_${matchId}`)
-      .setLabel('Force Orange Win')
+      .setLabel('Force Orange')
       .setEmoji('🟠')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
@@ -193,13 +193,12 @@ export function getLeaderboardButtons(page: number, totalPages: number): ActionR
  */
 export function getGambleProposeButton(
   matchId: number,
-  disabled: boolean = false,
-  rosterSize: number = 6
+  disabled: boolean = false
 ): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`gamble_propose_${matchId}`)
-      .setLabel(`Double or Nothing (${rosterSize}/${rosterSize} Required)`)
+      .setLabel('Double or Nothing')
       .setEmoji('🎰')
       .setStyle(ButtonStyle.Primary)
       .setDisabled(disabled)
@@ -215,7 +214,10 @@ export function getPostMatchButtons(
   matchId: number,
   rematchVotes: number,
   votesRequired: number,
-  disabled: boolean = false
+  disabled: boolean = false,
+  // A player leaving for the queue kills the rematch -- the teams no longer exist -- but
+  // the other five still need a way out, so the two halves lock independently.
+  requeueDisabled: boolean = disabled
 ): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -235,7 +237,7 @@ export function getPostMatchButtons(
       .setLabel('Back to Queue')
       .setEmoji('🚪')
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(disabled)
+      .setDisabled(requeueDisabled)
   );
 }
 

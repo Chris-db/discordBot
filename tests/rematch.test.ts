@@ -11,6 +11,7 @@ import {
   getOrCreatePlayer,
   createBan,
   saveQueue,
+  getActiveMatchForPlayer,
 } from '../src/database/queries';
 import { seedGuildDefaults } from '../src/database/migrations';
 import { handleRematchVote, startRematch, summariseSeries, handleRequeue } from '../src/services/rematchService';
@@ -302,7 +303,7 @@ describe('rematch', () => {
 
       // first BLUE, second ORANGE, third still in progress.
       const summary = summariseSeries(third.series_id!);
-      expect(summary).toContain('1 — 1');
+      expect(summary).toContain('1–1');
     });
 
     it('is empty for a series with nothing completed', () => {
@@ -311,23 +312,29 @@ describe('rematch', () => {
   });
 
   describe('requeue', () => {
-    it('puts the whole lobby back into the queue channel', async () => {
+    /** Everyone but the last player clicks Back to Queue. */
+    async function requeueAllBut(matchId: number, holdout: string) {
+      for (const id of ROSTER.filter(p => p !== holdout)) {
+        await handleRequeue(fakeClient, matchId, id);
+      }
+    }
+
+    it('queues only the player who clicked', async () => {
       const match = makeCompletedMatch();
       const res = await handleRequeue(fakeClient, match.match_id, 'b1');
 
       expect(res.success).toBe(true);
-      expect(getQueue('queue_chan')!.player_ids.sort()).toEqual([...ROSTER].sort());
+      expect(getQueue('queue_chan')!.player_ids).toEqual(['b1']);
     });
 
-    it('skips banned players rather than failing the batch', async () => {
+    it('refuses a banned player', async () => {
       createBan(G, 'o3', 'admin', 'being rude', null);
       const match = makeCompletedMatch();
 
-      await handleRequeue(fakeClient, match.match_id, 'b1');
+      const res = await handleRequeue(fakeClient, match.match_id, 'o3');
 
-      const queued = getQueue('queue_chan')!.player_ids;
-      expect(queued).not.toContain('o3');
-      expect(queued.length).toBe(5);
+      expect(res.success).toBe(false);
+      expect(getQueue('queue_chan')).toBeUndefined();
     });
 
     it('does not add anyone to a queue that has already popped', async () => {
@@ -347,21 +354,76 @@ describe('rematch', () => {
       expect(getQueue('queue_chan')!.player_ids).toEqual(['someone_else']);
     });
 
-    it('does not duplicate a player already waiting', async () => {
-      getOrInitQueueRow('queue_chan', G, 3, ['b1']);
+    it('refuses a second click from the same player', async () => {
       const match = makeCompletedMatch();
+      await handleRequeue(fakeClient, match.match_id, 'b1');
 
-      await handleRequeue(fakeClient, match.match_id, 'b2');
+      const res = await handleRequeue(fakeClient, match.match_id, 'b1');
 
-      const queued = getQueue('queue_chan')!.player_ids;
-      expect(queued.filter(id => id === 'b1').length).toBe(1);
-      expect(queued.length).toBe(6);
+      expect(res.success).toBe(false);
+      expect(getQueue('queue_chan')!.player_ids).toEqual(['b1']);
     });
 
     it('rejects a requeue from someone who was not in the match', async () => {
       const match = makeCompletedMatch();
       const res = await handleRequeue(fakeClient, match.match_id, 'stranger');
       expect(res.success).toBe(false);
+    });
+
+    // The click that fills the queue has to pop it. Nothing checked capacity afterwards,
+    // so a full lobby landed in a 6/6 queue that never popped and just sat there.
+    it('pops the queue when the last player fills it', async () => {
+      const match = makeCompletedMatch();
+      await requeueAllBut(match.match_id, 'o3');
+
+      expect(getActiveMatchForPlayer(G, 'b1')).toBeUndefined();
+
+      await handleRequeue(fakeClient, match.match_id, 'o3');
+
+      const next = getActiveMatchForPlayer(G, 'b1');
+      expect(next).toBeDefined();
+      expect(next!.match_id).not.toBe(match.match_id);
+    });
+
+    it('never fills the queue past capacity', async () => {
+      getOrInitQueueRow('queue_chan', G, 3, ['early_1', 'early_2', 'early_3']);
+      const match = makeCompletedMatch();
+
+      // Three were already waiting, so the third returning player fills the queue and the
+      // rest have nowhere to go. An over-capacity row matches no pop condition at all.
+      await requeueAllBut(match.match_id, 'o3');
+      const res = await handleRequeue(fakeClient, match.match_id, 'o3');
+
+      expect(res.success).toBe(false);
+      expect(getActiveMatchForPlayer(G, 'early_1')).toBeDefined();
+      expect(getActiveMatchForPlayer(G, 'o3')).toBeUndefined();
+    });
+
+    // The reported bug: Back to Queue popped a fresh match, then the still-live Rematch
+    // button started a second one with the same six players.
+    it('kills the rematch as soon as one player leaves', async () => {
+      const match = makeCompletedMatch();
+      await handleRequeue(fakeClient, match.match_id, 'b1');
+
+      const res = await handleRematchVote(fakeClient, match.match_id, 'b2', 'yes');
+
+      expect(res.success).toBe(false);
+      // b1 is queued and b2 is in nothing -- crucially, no second live match exists.
+      expect(getActiveMatchForPlayer(G, 'b2')).toBeUndefined();
+    });
+
+    // And the reverse order: once a rematch is live, nobody may queue on top of it.
+    // The card in the old channel still carries the finished match's Back to Queue.
+    it('refuses to requeue a player who is already in a live match', async () => {
+      const match = makeCompletedMatch();
+      const next = (await startRematch(fakeClient, match.match_id))!;
+      expect(next.state).toBe('IN_PROGRESS');
+
+      const res = await handleRequeue(fakeClient, match.match_id, 'b1');
+
+      expect(res.message).toContain(`Match #${next.match_id}`);
+      expect(res.success).toBe(false);
+      expect(getQueue('queue_chan')).toBeUndefined();
     });
   });
 });

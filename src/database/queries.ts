@@ -139,8 +139,13 @@ export interface Match {
     /** Post-match "run it back" vote. Lives here so it reuses the transactional mutator. */
     rematchVotes?: string[];
     rematchDeclines?: string[];
-    /** Set once a rematch has been launched, so the buttons cannot fire twice. */
+    /**
+     * Set once the post-match window is closed to a rematch -- either because one was
+     * launched, or because a player left for the queue and the teams no longer exist.
+     */
     rematchResolved?: boolean;
+    /** Players who have taken Back to Queue. The channel closes once all of them have. */
+    requeued?: string[];
   };
   gamble_status?: GambleStatus;
   /** Groups the matches of a rematch series; null for a one-off. */
@@ -673,10 +678,21 @@ export function getOrInitQueueRow(
     if (queue.state !== 'WAITING') return [];
 
     const added: string[] = [];
+    const capacity = queue.team_size * 2;
     queue.player_join_times = queue.player_join_times || {};
     for (const id of discordIds) {
+      // A queue row is a fixed-size waiting list -- it pops the instant it is full, so it
+      // must never be filled past capacity. Six players returning to a channel that
+      // already had two waiting used to make an eight-player 3v3 row, which no pop
+      // condition matches.
+      if (queue.player_ids.length >= capacity) break;
       if (queue.player_ids.includes(id)) continue;
       if (getActiveBan(guildId, id)) continue;
+      // Someone whose previous lobby already re-popped must not be queued into a second
+      // one. The requeue button can be clicked by six people at once, and the source row
+      // stays WAITING throughout a ready check, so without this a second click re-adds a
+      // roster that is already mid-match and pops a duplicate lobby.
+      if (getActiveMatchForPlayer(guildId, id)) continue;
       queue.player_ids.push(id);
       queue.player_join_times[id] = Date.now();
       added.push(id);
