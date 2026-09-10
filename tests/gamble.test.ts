@@ -232,6 +232,38 @@ describe('double or nothing', () => {
     });
   });
 
+  describe('the countdown', () => {
+    const deadlineOf = (payload: any): string | undefined =>
+      payload.embeds[0].data.description.match(/<t:\d+:R>/)?.[0];
+
+    // A `<t:…:R>` ticks on every viewer's screen by itself. The card used to carry a
+    // seconds-remaining figure that only moved when someone clicked.
+    it('is a Discord timestamp fixed at proposal time, not re-derived per click', async () => {
+      const proposedAt = Date.now();
+      const first = click('b1');
+      await proposeGamble(fakeClient, first, matchId);
+
+      const expected = `<t:${Math.floor((proposedAt + 60_000) / 1000)}:R>`;
+      expect(deadlineOf(first.replies[0])).toBe(expected);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      const later = click('o1');
+      await handleGambleAgree(fakeClient, later, matchId);
+
+      expect(deadlineOf(later.updates[0])).toBe(expected);
+    });
+
+    it('expires at the instant the card advertises', async () => {
+      await proposeGamble(fakeClient, click('b1'), matchId);
+
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(gambleState()).toBe('PROPOSED');
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(gambleState()).toBe('EXPIRED');
+    });
+  });
+
   describe('agreeing', () => {
     it('records each player once and keeps the timer running', async () => {
       await proposeGamble(fakeClient, click('b1'), matchId);

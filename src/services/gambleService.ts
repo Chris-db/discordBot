@@ -33,10 +33,15 @@ const TEARDOWN_AFTER_WHEEL_MS = 60_000;
 const activeGambleTimers = new Map<number, NodeJS.Timeout>();
 const activeGambleMessages = new Map<number, { channelId: string; messageId: string }>();
 
-/** Whole seconds left in the window, from the stored proposedAt. */
-function consensusSecondsLeft(status: GambleStatus): number {
-  const deadline = (status.proposedAt ?? Date.now()) + GAMBLE_WINDOW_MS;
-  return Math.max(1, Math.ceil((deadline - Date.now()) / 1000));
+/**
+ * When the window closes, in unix seconds for the card's `<t:…:R>`.
+ *
+ * Computed from the stored proposedAt -- the same instant the expiry timer is measured
+ * from -- so every re-render of the card and the timer agree on one deadline. Each click
+ * used to recompute a seconds-remaining figure, which only moved when someone clicked.
+ */
+function consensusDeadline(status: GambleStatus): number {
+  return Math.floor(((status.proposedAt ?? Date.now()) + GAMBLE_WINDOW_MS) / 1000);
 }
 
 /**
@@ -211,7 +216,7 @@ export async function proposeGamble(
     bluePlayers,
     orangePlayers,
     newStatus.agreedPlayers,
-    consensusSecondsLeft(newStatus)
+    consensusDeadline(newStatus)
   );
 
   let msg;
@@ -326,7 +331,7 @@ export async function handleGambleAgree(
     bluePlayers,
     orangePlayers,
     status.agreedPlayers,
-    consensusSecondsLeft(status)
+    consensusDeadline(status)
   );
 
   await interaction.update({

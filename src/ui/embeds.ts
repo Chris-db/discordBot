@@ -150,7 +150,10 @@ export function buildGambleConsensusEmbed(
   blueTeam: Player[],
   orangeTeam: Player[],
   agreedIds: string[],
-  timeRemainingSec: number
+  // Unix seconds. Discord renders `<t:…:R>` as "in 45 seconds" and ticks it on every
+  // viewer's screen by itself. This used to be a seconds-remaining number, which was only
+  // as fresh as the last click that re-rendered the card.
+  deadlineUnixSeconds: number
 ): EmbedBuilder {
   const rosterSize = blueTeam.length + orangeTeam.length;
 
@@ -162,7 +165,7 @@ export function buildGambleConsensusEmbed(
     .setColor(RL_COLORS.GOLD)
     .setDescription(
       `A 50/50 spin. Losers win the wheel → the result flips. Winners win it → MMR is doubled.\n` +
-      `All ${rosterSize} must agree within ${timeRemainingSec}s.`
+      `All ${rosterSize} must agree. Closes <t:${deadlineUnixSeconds}:R>.`
     )
     .addFields(
       { name: '🔵 Blue', value: roster(blueTeam), inline: true },

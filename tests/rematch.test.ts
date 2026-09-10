@@ -15,7 +15,9 @@ import {
 } from '../src/database/queries';
 import { seedGuildDefaults } from '../src/database/migrations';
 import { handleRematchVote, startRematch, summariseSeries, handleRequeue } from '../src/services/rematchService';
-import { votesRequiredFor } from '../src/services/gameRules';
+import { votesRequiredFor, REMATCH_WINDOW_MS } from '../src/services/gameRules';
+import { completeMatch } from '../src/services/matchService';
+import { hasPendingChannelDeletion, cancelMatchChannelDeletion } from '../src/services/channelService';
 
 const G = 'guild_rematch_test';
 const BLUE = ['b1', 'b2', 'b3'];
@@ -513,5 +515,49 @@ describe('updateMatch dynamic SET', () => {
     const after = getMatch(match.match_id)!;
     expect(after.series_id).toBe('series-x');
     expect(after.series_game).toBe(3);
+  });
+});
+
+describe('post-match card', () => {
+  beforeEach(() => {
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM matches; DELETE FROM active_queues; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    seedGuildDefaults(db, G);
+    for (const id of ROSTER) getOrCreatePlayer(G, 3, id, `User_${id}`);
+  });
+
+  // "Channel closes in 90s." never changed. A `<t:…:R>` ticks on every viewer's screen
+  // by itself, and it has to name the instant the teardown actually fires at.
+  it('says when the channel closes as a live Discord timestamp', async () => {
+    const sent: any[] = [];
+    const channel = {
+      send: async (payload: any) => {
+        sent.push(payload);
+        return { id: 'result_msg' };
+      },
+      messages: { fetch: async () => null },
+    };
+    const client = { ...fakeClient, channels: { fetch: async () => channel } };
+
+    const match = createMatch({
+      guild_id: G,
+      channel_id: 'queue_chan',
+      blue_team: BLUE,
+      orange_team: ORANGE,
+      text_channel_id: 'match_chan',
+    });
+    const before = Date.now();
+    await completeMatch(client, match.match_id, 'BLUE');
+    const after = Date.now();
+
+    expect(sent).toHaveLength(1);
+    const stamp = sent[0].content.match(/^Channel closes <t:(\d+):R>\.$/);
+    expect(stamp).not.toBeNull();
+    // The stamp is whole seconds, so it may floor up to a second below the real instant.
+    const closesAt = Number(stamp![1]) * 1000;
+    expect(closesAt).toBeGreaterThanOrEqual(before + REMATCH_WINDOW_MS - 1000);
+    expect(closesAt).toBeLessThanOrEqual(after + REMATCH_WINDOW_MS);
+
+    expect(hasPendingChannelDeletion(match.match_id)).toBe(true);
+    cancelMatchChannelDeletion(match.match_id);
   });
 });

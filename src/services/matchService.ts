@@ -370,6 +370,13 @@ export async function completeMatch(
 
   const durationStr = formatMatchDuration(match.started_at, completedAt);
 
+  // The result card says when the channel closes as a `<t:…:R>`, which Discord ticks on
+  // every viewer's screen by itself. It used to say "closes in 90s" and never changed.
+  // Fixed here, before the image is rendered and sent, so the teardown below can be
+  // measured to the same instant the line advertises rather than 90s from whenever the
+  // upload finished.
+  const closesAtMs = Date.now() + REMATCH_WINDOW_MS;
+
   const targetChannelId = match.text_channel_id || match.channel_id;
   const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
   if (channel) {
@@ -390,7 +397,7 @@ export async function completeMatch(
     // is on a timer -- and the buttons below already name themselves.
     const seriesLine = match.series_id ? `${summariseSeries(match.series_id)}\n` : '';
     const resultMsg = await channel.send({
-      content: `${seriesLine}Channel closes in ${Math.round(REMATCH_WINDOW_MS / 1000)}s.`,
+      content: `${seriesLine}Channel closes <t:${Math.floor(closesAtMs / 1000)}:R>.`,
       files: [attachment],
       components: [
         getPostMatchButtons(matchId, 0, rematchRequired),
@@ -409,7 +416,7 @@ export async function completeMatch(
 
   if (match.text_channel_id) {
     // The teardown is cancellable now, so a rematch can call it off.
-    scheduleMatchChannelDeletion(client, matchId, REMATCH_WINDOW_MS);
+    scheduleMatchChannelDeletion(client, matchId, Math.max(0, closesAtMs - Date.now()));
   } else {
     const guild = await client.guilds.fetch(match.guild_id).catch(() => null);
     if (guild) {
