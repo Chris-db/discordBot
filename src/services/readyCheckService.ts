@@ -19,7 +19,6 @@ import {
 import { createMatchChannels, deleteMatchChannels } from './channelService';
 import { generateReadyCheckImage } from './readyCheckImage';
 import { logger } from '../utils/logger';
-import { formatCountdown } from '../utils/time';
 import config from '../config';
 import { getOrInitQueue, refreshQueuePanel } from './queuePanel';
 import { startVotingPhase } from './votingService';
@@ -205,20 +204,25 @@ export async function startReadyCheckPhase(
 
   // Read once so the whole check runs on one number, even if config were reloaded.
   const timeoutSeconds = config.readyCheckTimeoutSeconds;
-  const countdownLabel = formatCountdown(timeoutSeconds);
+  const readyCheckStartedAt = Date.now();
+  // Discord renders `<t:…:R>` as a live "in 4 minutes" / "in 30 seconds" on every
+  // viewer's screen, ticking by itself. The image used to carry the countdown, but it
+  // could only move as often as it was re-rendered and re-uploaded (every 6s), which read
+  // as a stuck clock. The text is the countdown now; the image is who is in voice.
+  const closesAt = `<t:${Math.floor((readyCheckStartedAt + timeoutSeconds * 1000) / 1000)}:R>`;
 
   const matchTextChannel = (await guild.channels.fetch(textChannelId).catch(() => null)) as TextChannel;
   let readyMsg: Message | undefined;
   if (matchTextChannel) {
     const players = getPlayersByIds(matchQueue.guild_id, matchQueue.team_size, matchQueue.player_ids);
-    const readyImg = await generateReadyCheckImage(client, players, [], timeoutSeconds, teamSize);
+    const readyImg = await generateReadyCheckImage(client, players, [], teamSize);
     const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
 
     // This is the single ping for the whole match. The card below it already states the
-    // capacity, the countdown and who is still missing, so the line only has to say who
-    // is being summoned and where to.
+    // capacity and who is still missing, so the line only has to say who is being
+    // summoned, where to, and by when.
     readyMsg = await matchTextChannel.send({
-      content: `${mentions} → <#${readyCheckVc.id}> · ${countdownLabel}`,
+      content: `${mentions} → <#${readyCheckVc.id}> · closes ${closesAt}`,
       files: [attachment],
     }).catch(() => undefined);
   }
@@ -230,7 +234,7 @@ export async function startReadyCheckPhase(
   // outcome is edited onto this same message. Announcing the pop and then posting a
   // separate "it failed" message put two notices in the queue channel for one event.
   const popNotice = await queueChannel.send({
-    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · ${countdownLabel}`,
+    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · closes ${closesAt}`,
   }).catch(() => null);
 
   /** Replaces the pop notice with how it ended, then clears it shortly after. */
@@ -244,7 +248,6 @@ export async function startReadyCheckPhase(
     }
   };
 
-  const readyCheckStartedAt = Date.now();
   const timer = setInterval(async () => {
     const elapsed = Math.floor((Date.now() - readyCheckStartedAt) / 1000);
     const currentQueue = getQueue(textChannelId);
@@ -292,7 +295,7 @@ export async function startReadyCheckPhase(
     if (elapsed % 6 === 0 && readyMsg) {
       const players = getPlayersByIds(currentQueue.guild_id, currentQueue.team_size, currentQueue.player_ids);
       const readyIds = Array.from(vc.members.keys());
-      const readyImg = await generateReadyCheckImage(client, players, readyIds, Math.max(0, timeoutSeconds - elapsed), teamSize);
+      const readyImg = await generateReadyCheckImage(client, players, readyIds, teamSize);
       const attachment = new AttachmentBuilder(readyImg, { name: 'ready_check.png' });
       await readyMsg.edit({
         files: [attachment],
