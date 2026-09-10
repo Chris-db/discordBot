@@ -146,6 +146,8 @@ export interface Match {
     rematchResolved?: boolean;
     /** Players who have taken Back to Queue. The channel closes once all of them have. */
     requeued?: string[];
+    /** Set once the split-report notice has gone out, so a re-vote does not repeat it. */
+    disputeNoticed?: boolean;
   };
   gamble_status?: GambleStatus;
   /** Groups the matches of a rematch series; null for a one-off. */

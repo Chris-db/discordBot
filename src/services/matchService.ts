@@ -11,12 +11,14 @@ import {
   getQueue,
   deleteQueue,
   Player,
+  Match,
 } from '../database/queries';
 import {
   grantTeamVoiceAccessAndMove,
   scheduleMatchChannelDeletion,
   broadcastMatchToFeed,
   updateMatchFeedCard,
+  findFeedChannel,
 } from './channelService';
 import { buildActiveMatchEmbed } from '../ui/embeds';
 import { getMatchActionButtons, getGambleProposeButton, getPostMatchButtons } from '../ui/buttons';
@@ -263,12 +265,76 @@ export async function handleMatchReportVote(
     return { success: true, message: 'Confirmed — 🟠 Orange wins.', completed: true };
   }
 
+  await noticeSplitReport(client, updated, required);
+
   return {
     success: true,
     message: `Voted ${reportedWinner === 'BLUE' ? '🔵 Blue' : '🟠 Orange'} — ${
       reportedWinner === 'BLUE' ? blueVotesCount : orangeVotesCount
     }/${required}`,
   };
+}
+
+/**
+ * Whether the report can no longer settle itself: neither side can reach the majority even
+ * if everyone who has not voted yet joins it. 3 Blue / 3 Orange at 3v3 is the plain case.
+ * Exported for the tests; the notice below is what acts on it.
+ */
+export function isReportSplit(match: Match, required: number): boolean {
+  const humans = [...match.blue_team, ...match.orange_team].filter(id => !id.startsWith('test_bot_'));
+  const { blueVotes = [], orangeVotes = [], cancelVotes = [] } = match.report_status;
+  const unvoted = humans.length - blueVotes.length - orangeVotes.length - cancelVotes.length;
+  return (
+    blueVotes.length > 0 &&
+    orangeVotes.length > 0 &&
+    blueVotes.length + unvoted < required &&
+    orangeVotes.length + unvoted < required
+  );
+}
+
+/**
+ * Says so, once, when the report is split.
+ *
+ * A 3/3 report used to sit in silence until the three-hour match sweeper cancelled it:
+ * nothing told the players it was stuck, and nothing told an admin there was something to
+ * settle. The notice goes in the match channel for the players and in the public feed for
+ * the admins, who are not in the private channel. A vote can still be changed, so the
+ * players are told that first.
+ */
+async function noticeSplitReport(client: Client, match: Match, required: number): Promise<void> {
+  if (match.report_status.disputeNoticed || !isReportSplit(match, required)) return;
+
+  const claimed = mutateMatchReportStatus(match.match_id, status => {
+    status.disputeNoticed = true;
+  });
+  if (!claimed) return;
+
+  const blue = match.report_status.blueVotes?.length ?? 0;
+  const orange = match.report_status.orangeVotes?.length ?? 0;
+  const tally = `🔵 ${blue} / 🟠 ${orange}`;
+
+  const channel = (await client.channels
+    .fetch(match.text_channel_id || match.channel_id)
+    .catch(() => null)) as TextChannel | null;
+  if (channel) {
+    await channel
+      .send({
+        content:
+          `⚠️ Reports disagree — ${tally}. Change your vote if you got it wrong; ` +
+          `otherwise an admin settles it with \`/match report\`.`,
+      })
+      .catch(() => null);
+  }
+
+  const guild = await client.guilds.fetch(match.guild_id).catch(() => null);
+  const feed = guild ? await findFeedChannel(guild) : null;
+  if (feed) {
+    await feed
+      .send({
+        content: `⚠️ Match #${match.match_id} has a split report (${tally}) and needs an admin: \`/match report match_id:${match.match_id}\``,
+      })
+      .catch(() => null);
+  }
 }
 
 /**
