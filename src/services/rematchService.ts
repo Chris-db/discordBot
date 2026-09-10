@@ -12,6 +12,7 @@ import {
   Match,
 } from '../database/queries';
 import { cancelMatchChannelDeletion, broadcastMatchToFeed } from './channelService';
+import { voidPendingGamble } from './gambleService';
 import { buildActiveMatchEmbed } from '../ui/embeds';
 import {
   getMatchActionButtons,
@@ -166,6 +167,11 @@ export async function startRematch(
     division: previous.division,
   });
 
+  // A Double or Nothing still collecting agreements would otherwise spin mid-rematch and
+  // rewrite a result the lobby has already moved past. Voided after the new row exists,
+  // so the gamble's own teardown logic can see the channel is occupied and leave it be.
+  await voidPendingGamble(client, previousMatchId);
+
   if (resultMessage) {
     await resultMessage
       .edit({ components: [getPostMatchButtons(previousMatchId, 0, 1, true)] })
@@ -276,6 +282,10 @@ export async function handleRequeue(
 
   const requeuedCount = updated?.report_status.requeued?.length ?? 1;
   const everyoneLeft = requeuedCount >= roster.length;
+
+  // A gamble needs every one of these players to agree, and one has just left. If a
+  // proposal was open it had also cancelled the teardown; voiding it puts one back.
+  await voidPendingGamble(client, matchId);
 
   // Refresh lazily: importing queuePanel at module scope would close an import cycle
   // (queuePanel -> matchService -> rematchService).

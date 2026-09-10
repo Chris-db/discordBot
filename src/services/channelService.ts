@@ -417,6 +417,11 @@ export function cancelMatchChannelDeletion(matchId: number): boolean {
   return true;
 }
 
+/** Whether a teardown is scheduled for this match. Exists so tests can see the timer. */
+export function hasPendingChannelDeletion(matchId: number): boolean {
+  return pendingChannelDeletions.has(matchId);
+}
+
 /**
  * Finds the public #active-matches feed channel in the guild.
  */

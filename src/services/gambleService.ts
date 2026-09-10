@@ -1,20 +1,145 @@
 import { Client, ButtonInteraction, TextChannel, AttachmentBuilder } from 'discord.js';
 import {
   getMatch,
+  getMatchByTextChannel,
   updateMatchGambleStatus,
   mutateMatchGambleStatus,
   getPlayersByIds,
   applyGambleResultToPlayer,
   GambleStatus,
+  Match,
   Player,
 } from '../database/queries';
+import { cancelMatchChannelDeletion, scheduleMatchChannelDeletion } from './channelService';
 import { buildGambleConsensusEmbed, buildGambleSpinningEmbed } from '../ui/embeds';
 import { getGambleConsensusButtons } from '../ui/buttons';
 import { generateGambleResultImage, GamblePlayerResult } from './gambleImage';
 import { logger } from '../utils/logger';
 
+/** How long the roster has to reach unanimous agreement. */
+const GAMBLE_WINDOW_MS = 60_000;
+
+/**
+ * How long the channel stays open once a proposal dies, and once the wheel has landed.
+ *
+ * Proposing used to leave completeMatch's 90-second teardown running underneath it. The
+ * window is 60 seconds, so a proposal made 40 seconds after the result had its wheel spin
+ * in a channel that no longer existed -- MMR doubled or inverted with nobody watching.
+ * Proposing now cancels that teardown, and these two are its replacements.
+ */
+const TEARDOWN_AFTER_DEAD_PROPOSAL_MS = 30_000;
+const TEARDOWN_AFTER_WHEEL_MS = 60_000;
+
 const activeGambleTimers = new Map<number, NodeJS.Timeout>();
 const activeGambleMessages = new Map<number, { channelId: string; messageId: string }>();
+
+/** Whole seconds left in the window, from the stored proposedAt. */
+function consensusSecondsLeft(status: GambleStatus): number {
+  const deadline = (status.proposedAt ?? Date.now()) + GAMBLE_WINDOW_MS;
+  return Math.max(1, Math.ceil((deadline - Date.now()) / 1000));
+}
+
+/**
+ * Whether the post-match lobby is gone: a rematch has launched in its channel, or a player
+ * has gone back to the queue. A gamble needs every player to agree and then rewrites the
+ * result, so it cannot outlive either.
+ *
+ * Both of those set rematchResolved -- but so does a declined rematch vote, which leaves
+ * the teams intact and the Double or Nothing button live. Hence the two concrete checks
+ * rather than the flag alone.
+ */
+function lobbyBrokenUp(match: Match): boolean {
+  if (!match.report_status.rematchResolved) return false;
+  if ((match.report_status.requeued?.length ?? 0) > 0) return true;
+  if (!match.text_channel_id) return false;
+  const occupant = getMatchByTextChannel(match.text_channel_id);
+  return !!occupant && occupant.match_id !== match.match_id;
+}
+
+function clearGambleTimer(matchId: number): void {
+  const timer = activeGambleTimers.get(matchId);
+  if (!timer) return;
+  clearTimeout(timer);
+  activeGambleTimers.delete(matchId);
+}
+
+/**
+ * Puts the teardown back once the gamble no longer needs the channel.
+ *
+ * Unless a rematch has launched in it since: a rematch reuses these channels, so deleting
+ * them now would pull a live match out from under six players. The rematch's own
+ * completeMatch schedules the teardown when it ends.
+ */
+function rescheduleTeardown(client: Client, match: Match, delayMs: number): void {
+  if (!match.text_channel_id) return;
+  const occupant = getMatchByTextChannel(match.text_channel_id);
+  if (occupant && occupant.match_id !== match.match_id) return;
+  scheduleMatchChannelDeletion(client, match.match_id, delayMs);
+}
+
+/**
+ * Ends a PROPOSED gamble without a spin. Returns the match, or undefined if there was no
+ * open proposal to end -- the timer, a decline and a rematch can all race for this.
+ */
+function closeProposal(
+  client: Client,
+  matchId: number,
+  mutate: (status: GambleStatus) => void
+): Match | undefined {
+  clearGambleTimer(matchId);
+  activeGambleMessages.delete(matchId);
+
+  let closed = false;
+  const updated = mutateMatchGambleStatus(matchId, status => {
+    if (status.state !== 'PROPOSED') return;
+    mutate(status);
+    closed = true;
+  });
+  if (!updated || !closed) return undefined;
+
+  rescheduleTeardown(client, updated, TEARDOWN_AFTER_DEAD_PROPOSAL_MS);
+  return updated;
+}
+
+/** Replaces the consensus card with a single line, for whoever is still looking at it. */
+async function collapseProposalMessage(
+  client: Client,
+  matchId: number,
+  ref: { channelId: string; messageId: string } | undefined,
+  line: string
+): Promise<void> {
+  if (!ref) return;
+  try {
+    const channel = (await client.channels.fetch(ref.channelId).catch(() => null)) as TextChannel | null;
+    const targetMsg = await channel?.messages.fetch(ref.messageId).catch(() => null);
+    if (targetMsg) {
+      await targetMsg.edit({ content: line, embeds: [], components: [] });
+    }
+  } catch (err) {
+    logger.warn(`[Gamble] Failed to collapse consensus message for Match #${matchId}:`, err);
+  }
+}
+
+/**
+ * Kills an open proposal because the lobby has moved on -- see lobbyBrokenUp. startRematch
+ * and handleRequeue call this at the point they break it up. Returns true if there was a
+ * proposal to void.
+ */
+export async function voidPendingGamble(client: Client, matchId: number): Promise<boolean> {
+  const ref = activeGambleMessages.get(matchId);
+  const closed = closeProposal(client, matchId, status => {
+    status.state = 'EXPIRED';
+  });
+  if (!closed) return false;
+
+  await collapseProposalMessage(
+    client,
+    matchId,
+    ref,
+    '🚫 Double or Nothing is off — the lobby has moved on. The original result stands.'
+  );
+  return true;
+}
 
 /**
  * Initiates the Double or Nothing gamble proposal with a 60-second unanimous consensus window.
@@ -45,6 +170,17 @@ export async function proposeGamble(
     return;
   }
 
+  // The card disables this button when the lobby breaks up, but a click can already be in
+  // flight -- and a gamble on a result that a rematch is busy replacing, or on teams that
+  // no longer exist, must not open at all.
+  if (lobbyBrokenUp(match)) {
+    await interaction.reply({
+      content: '❌ Double or Nothing is off — the lobby has already moved on to a rematch or the queue.',
+      ephemeral: true,
+    });
+    return;
+  }
+
   const status = match.gamble_status || { state: 'NONE', agreedPlayers: [] };
   if (status.state !== 'NONE' && status.state !== 'EXPIRED') {
     await interaction.reply({
@@ -64,6 +200,9 @@ export async function proposeGamble(
 
   updateMatchGambleStatus(matchId, newStatus);
 
+  // The channel is now in use until the proposal is settled; see the teardown constants.
+  cancelMatchChannelDeletion(matchId);
+
   const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
   const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
@@ -72,49 +211,47 @@ export async function proposeGamble(
     bluePlayers,
     orangePlayers,
     newStatus.agreedPlayers,
-    60
+    consensusSecondsLeft(newStatus)
   );
 
-  const msg = await interaction.reply({
-    embeds: [embed],
-    components: [getGambleConsensusButtons(matchId, false)],
-    fetchReply: true,
-  });
+  let msg;
+  try {
+    msg = await interaction.reply({
+      embeds: [embed],
+      components: [getGambleConsensusButtons(matchId, false)],
+      fetchReply: true,
+    });
+  } catch (err) {
+    // The card never reached the channel, so nobody can agree to it -- and the teardown
+    // has just been cancelled on its behalf, so it must be closed out, not left PROPOSED.
+    closeProposal(client, matchId, status => {
+      status.state = 'EXPIRED';
+    });
+    logger.warn(`[Gamble] Could not post the proposal for Match #${matchId}:`, err);
+    return;
+  }
 
-  activeGambleMessages.set(matchId, {
-    channelId: interaction.channelId,
-    messageId: msg.id,
-  });
+  const ref = { channelId: interaction.channelId, messageId: msg.id };
+  activeGambleMessages.set(matchId, ref);
 
-  // Start 60s timer
+  // The delay is measured from proposedAt rather than from here, so the timer fires at
+  // the instant the card's countdown reaches zero -- the reply above took real time.
   const timer = setTimeout(async () => {
     activeGambleTimers.delete(matchId);
-    const m = getMatch(matchId);
-    if (!m || m.gamble_status?.state !== 'PROPOSED') return;
-
-    updateMatchGambleStatus(matchId, {
-      ...m.gamble_status,
-      state: 'EXPIRED',
+    const closed = closeProposal(client, matchId, status => {
+      status.state = 'EXPIRED';
     });
+    if (!closed) return;
 
-    try {
-      const channel = (await client.channels.fetch(interaction.channelId)) as TextChannel;
-      if (channel) {
-        const targetMsg = await channel.messages.fetch(msg.id).catch(() => null);
-        if (targetMsg) {
-          // Nobody is going to act on an expired proposal, so it collapses to a line
-          // rather than sitting there as a full card with a dead roster in it.
-          await targetMsg.edit({
-            content: '⏰ Double or Nothing expired — the original result stands.',
-            embeds: [],
-            components: [],
-          });
-        }
-      }
-    } catch (err) {
-      logger.warn(`[Gamble] Failed to edit expired consensus message for Match #${matchId}:`, err);
-    }
-  }, 60000);
+    // Nobody is going to act on an expired proposal, so it collapses to a line rather
+    // than sitting there as a full card with a dead roster in it.
+    await collapseProposalMessage(
+      client,
+      matchId,
+      ref,
+      '⏰ Double or Nothing expired — the original result stands.'
+    );
+  }, Math.max(0, newStatus.proposedAt! + GAMBLE_WINDOW_MS - Date.now()));
 
   activeGambleTimers.set(matchId, timer);
 }
@@ -132,6 +269,21 @@ export async function handleGambleAgree(
     await interaction.reply({
       content: '❌ No active Double or Nothing proposal is currently open for this match.',
       ephemeral: true,
+    });
+    return;
+  }
+
+  // The rematch and requeue paths void the proposal themselves, but a click can land in
+  // the gap between the lobby breaking up and the card being collapsed. This click is on
+  // the card, so it does the collapsing.
+  if (lobbyBrokenUp(match)) {
+    closeProposal(client, matchId, status => {
+      status.state = 'EXPIRED';
+    });
+    await interaction.update({
+      content: '🚫 Double or Nothing is off — the lobby has moved on. The original result stands.',
+      embeds: [],
+      components: [],
     });
     return;
   }
@@ -169,15 +321,12 @@ export async function handleGambleAgree(
   const bluePlayers = getPlayersByIds(match.guild_id, match.team_size, match.blue_team);
   const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
-  const elapsedSec = Math.floor((Date.now() - (status.proposedAt || Date.now())) / 1000);
-  const remSec = Math.max(1, 60 - elapsedSec);
-
   const embed = buildGambleConsensusEmbed(
     matchId,
     bluePlayers,
     orangePlayers,
     status.agreedPlayers,
-    remSec
+    consensusSecondsLeft(status)
   );
 
   await interaction.update({
@@ -189,11 +338,8 @@ export async function handleGambleAgree(
   // never reach consensus at all and a 4v4 would spin two players short of unanimous.
   const rosterSize = match.blue_team.length + match.orange_team.length;
   if (status.agreedPlayers.length >= rosterSize) {
-    const timer = activeGambleTimers.get(matchId);
-    if (timer) {
-      clearTimeout(timer);
-      activeGambleTimers.delete(matchId);
-    }
+    clearGambleTimer(matchId);
+    activeGambleMessages.delete(matchId);
 
     await startWheelOfFate(client, matchId, interaction.channelId, interaction.message.id);
   }
@@ -228,16 +374,10 @@ export async function handleGambleDecline(
     return;
   }
 
-  const timer = activeGambleTimers.get(matchId);
-  if (timer) {
-    clearTimeout(timer);
-    activeGambleTimers.delete(matchId);
-  }
-
-  const status = match.gamble_status;
-  status.state = 'DECLINED';
-  status.declinedBy = interaction.user.id;
-  updateMatchGambleStatus(matchId, status);
+  closeProposal(client, matchId, status => {
+    status.state = 'DECLINED';
+    status.declinedBy = interaction.user.id;
+  });
 
   // A declined proposal is over -- no roster, no stakes, just the outcome.
   await interaction.update({
@@ -249,8 +389,27 @@ export async function handleGambleDecline(
 
 /**
  * Triggers the Wheel of Fate spinning animation and resolves the outcome.
+ *
+ * The teardown comes back in a finally: the proposal cancelled the original one, and a
+ * failed result image must not leave the channel open for good.
  */
 async function startWheelOfFate(
+  client: Client,
+  matchId: number,
+  channelId: string,
+  messageId: string
+): Promise<void> {
+  const match = getMatch(matchId);
+  if (!match) return;
+
+  try {
+    await spinWheelOfFate(client, matchId, channelId, messageId);
+  } finally {
+    rescheduleTeardown(client, match, TEARDOWN_AFTER_WHEEL_MS);
+  }
+}
+
+async function spinWheelOfFate(
   client: Client,
   matchId: number,
   channelId: string,
