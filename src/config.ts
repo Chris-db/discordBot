@@ -22,6 +22,8 @@ export interface AppConfig {
   backupEnabled: boolean;
   backupDir: string;
   backupRetentionDays: number;
+  /** How long each setup vote (mode, captains, teams) stays open before silence decides it. */
+  voteTimeoutSeconds: number;
 }
 
 const config: AppConfig = {
@@ -38,6 +40,7 @@ const config: AppConfig = {
   backupEnabled: (process.env.BACKUP_ENABLED || 'true').toLowerCase() !== 'false',
   backupDir: process.env.BACKUP_DIR || path.join('data', 'backups'),
   backupRetentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '14', 10),
+  voteTimeoutSeconds: parseInt(process.env.VOTE_TIMEOUT_SECONDS || '60', 10),
 };
 
 export default config;

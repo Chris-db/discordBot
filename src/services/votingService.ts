@@ -49,6 +49,19 @@ const MODE_LABELS: Record<TeamMode, string> = {
 };
 
 /**
+ * A deadline as a live Discord timestamp: `<t:…:R>` renders as "in 45 seconds" and ticks
+ * on every viewer's screen without the bot editing anything.
+ *
+ * Every vote phase used to run on a hidden setTimeout. Nothing on the card said there was
+ * a clock, or what silence would do when it ran out, so a lobby that was still arguing in
+ * voice found its teams locked. The deadline is computed from the same Date.now() the
+ * timer is armed from, so the two agree to the second.
+ */
+function relativeTimestamp(atMs: number): string {
+  return `<t:${Math.floor(atMs / 1000)}:R>`;
+}
+
+/**
  * Replaces a resolved phase card with a single line of history.
  *
  * Resolution used to only rewrite the content and clear the buttons, which left the full
@@ -155,7 +168,13 @@ export async function startVotingPhase(
   const attachment = new AttachmentBuilder(voteImg, { name: 'voting_mode.png' });
   const buttons = getModeVoteButtons(voteCounts);
 
+  const timeoutMs = config.voteTimeoutSeconds * 1000;
+  const startedAt = Date.now();
+
+  // handleModeVote only edits components and files, so this line survives every tally
+  // update and is only replaced when the card collapses.
   const voteMsg = await matchChan.send({
+    content: `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no votes → Balanced`,
     components: [buttons],
     files: [attachment],
   });
@@ -165,11 +184,10 @@ export async function startVotingPhase(
     queue_channel_id: channelId,
   });
 
-  // Start 30 second countdown
   const timer = setTimeout(async () => {
     activeVoteTimers.delete(textChannelId);
     await finalizeVoteAndPop(client, textChannelId, guildId, voteMsg);
-  }, 30_000);
+  }, timeoutMs);
 
   activeVoteTimers.set(textChannelId, timer);
 }
@@ -375,19 +393,28 @@ export async function startCaptainsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
-  // The embed title says what this is and the buttons say what the choices are, so there
-  // is no content line -- and no attachments to carry over from a re-rolled card.
+  // A bot-only lobby (the /fillbots test path) resolves in a moment instead of waiting
+  // out the vote; the deadline on the card follows whichever clock is actually running.
+  const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
+  const timeoutMs = allBots ? 1500 : config.voteTimeoutSeconds * 1000;
+  const startedAt = Date.now();
+
+  // The embed says who the captains are and the buttons say what the choices are. The
+  // content line carries the one thing neither can: when the vote closes, and that a
+  // player who never clicks is counted as Proceed. handleCaptainsVote edits only embeds
+  // and components, so the line survives every tally update.
+  const content = `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed`;
   const embed = buildCaptainsVoteEmbed(blueCaptain, orangeCaptain);
   const buttons = getCaptainsVoteButtons({ yes: 0, no: 0 });
-  const payload = { content: '', embeds: [embed], components: [buttons], attachments: [] };
+  // attachments: [] drops anything a re-rolled card was carrying.
+  const payload = { content, embeds: [embed], components: [buttons], attachments: [] };
+  const fresh = { content, embeds: [embed], components: [buttons] };
 
   let sentMsg: Message;
   if (messageToEdit) {
-    sentMsg = await messageToEdit
-      .edit(payload)
-      .catch(async () => await channel.send({ embeds: [embed], components: [buttons] }));
+    sentMsg = await messageToEdit.edit(payload).catch(async () => await channel.send(fresh));
   } else {
-    sentMsg = await channel.send({ embeds: [embed], components: [buttons] });
+    sentMsg = await channel.send(fresh);
   }
 
   queue.captain_vote_state.message_id = sentMsg.id;
@@ -398,20 +425,10 @@ export async function startCaptainsVotePhase(
     activeVoteTimers.delete(channelId);
   }
 
-  const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
-  if (allBots) {
-    const timer = setTimeout(async () => {
-      activeVoteTimers.delete(channelId);
-      await finalizeCaptainsVote(client, channelId, guildId, sentMsg, true);
-    }, 1500);
-    activeVoteTimers.set(channelId, timer);
-    return;
-  }
-
   const timer = setTimeout(async () => {
     activeVoteTimers.delete(channelId);
-    await finalizeCaptainsVote(client, channelId, guildId, sentMsg);
-  }, 30_000);
+    await finalizeCaptainsVote(client, channelId, guildId, sentMsg, allBots);
+  }, timeoutMs);
 
   activeVoteTimers.set(channelId, timer);
 }
@@ -568,6 +585,13 @@ export async function startTeamsVotePhase(
   const channel = (await client.channels.fetch(channelId)) as TextChannel;
   if (!channel) return;
 
+  // Same shape as the captain vote: a bot-only lobby runs on the short clock, and the
+  // deadline on the card is whichever clock is really armed.
+  const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
+  const timeoutMs = allBots ? 1500 : config.voteTimeoutSeconds * 1000;
+  const startedAt = Date.now();
+
+  const content = `Closes ${relativeTimestamp(startedAt + timeoutMs)} · no vote counts as Proceed`;
   const embed = buildTeamsVoteEmbed(
     blueTeam,
     orangeTeam,
@@ -576,15 +600,14 @@ export async function startTeamsVotePhase(
     matchupCount(queue.team_size)
   );
   const buttons = getTeamsVoteButtons({ yes: 0, no: 0 }, mode);
-  const payload = { content: '', embeds: [embed], components: [buttons], attachments: [] };
+  const payload = { content, embeds: [embed], components: [buttons], attachments: [] };
+  const fresh = { content, embeds: [embed], components: [buttons] };
 
   let sentMsg: Message;
   if (messageToEdit) {
-    sentMsg = await messageToEdit
-      .edit(payload)
-      .catch(async () => await channel.send({ embeds: [embed], components: [buttons] }));
+    sentMsg = await messageToEdit.edit(payload).catch(async () => await channel.send(fresh));
   } else {
-    sentMsg = await channel.send({ embeds: [embed], components: [buttons] });
+    sentMsg = await channel.send(fresh);
   }
 
   queue.team_vote_state.message_id = sentMsg.id;
@@ -595,20 +618,10 @@ export async function startTeamsVotePhase(
     activeVoteTimers.delete(channelId);
   }
 
-  const allBots = queue.player_ids.every(id => id.startsWith('test_bot_'));
-  if (allBots) {
-    const timer = setTimeout(async () => {
-      activeVoteTimers.delete(channelId);
-      await finalizeTeamsVote(client, channelId, guildId, sentMsg, true);
-    }, 1500);
-    activeVoteTimers.set(channelId, timer);
-    return;
-  }
-
   const timer = setTimeout(async () => {
     activeVoteTimers.delete(channelId);
-    await finalizeTeamsVote(client, channelId, guildId, sentMsg);
-  }, 30_000);
+    await finalizeTeamsVote(client, channelId, guildId, sentMsg, allBots);
+  }, timeoutMs);
 
   activeVoteTimers.set(channelId, timer);
 }
@@ -775,19 +788,24 @@ export async function sendCaptainsDraftCard(
     picks
   );
 
+  const currentCaptain = draft.turn === 'BLUE' ? draft.blueCaptain : draft.orangeCaptain;
+  const captainIsBot = currentCaptain.startsWith('test_bot_');
+  const pickTimeoutMs = (config.draftPickTimeoutSeconds || 90) * 1000;
+  const sentAt = Date.now();
+
   // The image draws both rosters and the remaining pool, and the dropdown's placeholder
-  // repeats the pick number -- so the only thing worth saying is whose turn it is. This
-  // mention is the one ping that stays: it is aimed at a single person who has to act.
+  // repeats the pick number -- so the line says whose turn it is and how long they have.
+  // The auto-pick clock used to be invisible: a captain reading the card had no way to know
+  // the bot would pick for them. A bot captain picks itself in a moment, so no clock there.
+  // This mention is the one ping that stays: it is aimed at a single person who has to act.
+  const autoPickAt = captainIsBot ? '' : ` · auto-pick ${relativeTimestamp(sentAt + pickTimeoutMs)}`;
   const sentMsg = await channel.send({
-    content: `${draft.turn === 'BLUE' ? '🔵' : '🟠'} <@${
-      draft.turn === 'BLUE' ? draft.blueCaptain : draft.orangeCaptain
-    }> — pick ${draft.pickNumber} of ${picks}`,
+    content: `${draft.turn === 'BLUE' ? '🔵' : '🟠'} <@${currentCaptain}> — pick ${draft.pickNumber} of ${picks}${autoPickAt}`,
     components: [selectMenu],
     files: [attachment],
   });
 
-  const currentCaptain = draft.turn === 'BLUE' ? draft.blueCaptain : draft.orangeCaptain;
-  if (currentCaptain.startsWith('test_bot_') && remaining.length > 0) {
+  if (captainIsBot && remaining.length > 0) {
     setTimeout(async () => {
       const sortedRemaining = [...remaining].sort((a, b) => b.mmr - a.mmr);
       const pick = sortedRemaining[0];
@@ -832,7 +850,7 @@ export async function sendCaptainsDraftCard(
       await handleCaptainPick(client, channelId, currentCaptain, autoPick.discord_id, sentMsg).catch(
         err => logger.error('Draft auto-pick failed:', err)
       );
-    }, (config.draftPickTimeoutSeconds || 90) * 1000);
+    }, pickTimeoutMs);
 
     activeVoteTimers.set(channelId, timer);
   }

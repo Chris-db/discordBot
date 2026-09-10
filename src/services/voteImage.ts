@@ -43,11 +43,10 @@ export async function generateModeVoteImage(
   ctx.font = `600 15px ${FONT_STACK}`;
   ctx.fillStyle = '#94a3b8';
   // The threshold is a majority of this lobby -- 3 of 4, 4 of 6, 5 of 8 -- not a fixed 4.
-  ctx.fillText(
-    `${votesRequired} matching votes launches the mode  •  Voting closes in 30s`,
-    width / 2,
-    72
-  );
+  // The deadline is not painted here: a PNG cannot tick, so "closes in 30s" read as a
+  // stuck clock and went stale the moment the timeout became configurable. The message
+  // content carries it as a live Discord timestamp instead.
+  ctx.fillText(`${votesRequired} matching votes launches the mode`, width / 2, 72);
 
   // 3. Draw 3 Mode Cards
   const drawModeCard = (
