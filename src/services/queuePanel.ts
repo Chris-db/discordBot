@@ -279,9 +279,6 @@ export async function handleJoinQueue(
 }
 
 /**
- * Handles a player clicking "Leave Queue" using an atomic SQLite transaction.
- */
-/**
  * Removes a player from every waiting queue in a guild and refreshes the affected panels.
  *
  * The ban check only ran at join time, so banning someone who was already sitting in a
@@ -294,18 +291,41 @@ export async function handleJoinQueue(
 export async function removePlayerFromWaitingQueues(
   client: Client,
   guildId: string,
-  discordId: string
+  discordId: string,
+  exceptChannelId?: string
 ): Promise<string[]> {
+  return removePlayersFromWaitingQueues(client, guildId, [discordId], exceptChannelId);
+}
+
+/**
+ * The same for a whole lobby at once, which is what a queue pop needs.
+ *
+ * Sitting in the 2v2 and 3v3 queues together is allowed -- you get whichever pops first --
+ * but nothing used to take you out of the other one when it did, so the second queue
+ * popped later with a player who was already mid-match. Doing the six removals as one
+ * pass means each other panel is redrawn once rather than six times.
+ *
+ * `exceptChannelId` is the queue that is popping. The pop trims its own row, and taking
+ * the roster out of it here would only add a pointless refresh of that panel.
+ */
+export async function removePlayersFromWaitingQueues(
+  client: Client,
+  guildId: string,
+  discordIds: string[],
+  exceptChannelId?: string
+): Promise<string[]> {
+  const leaving = new Set(discordIds);
   const affected = db.transaction(() => {
     const removedFrom: string[] = [];
     for (const queue of getAllQueues()) {
       if (queue.guild_id !== guildId) continue;
+      if (queue.channel_id === exceptChannelId) continue;
       if (queue.state !== 'WAITING') continue;
-      if (!queue.player_ids.includes(discordId)) continue;
+      if (!queue.player_ids.some(id => leaving.has(id))) continue;
 
-      queue.player_ids = queue.player_ids.filter(id => id !== discordId);
+      queue.player_ids = queue.player_ids.filter(id => !leaving.has(id));
       if (queue.player_join_times) {
-        delete queue.player_join_times[discordId];
+        for (const id of leaving) delete queue.player_join_times[id];
       }
       saveQueue(queue);
       removedFrom.push(queue.channel_id);
@@ -315,13 +335,16 @@ export async function removePlayerFromWaitingQueues(
 
   for (const channelId of affected) {
     await refreshQueuePanel(client, channelId).catch(err =>
-      logger.warn(`Failed to refresh panel for ${channelId} after removing ${discordId}: ${err}`)
+      logger.warn(`Failed to refresh panel for ${channelId} after removing ${discordIds.join(', ')}: ${err}`)
     );
   }
 
   return affected;
 }
 
+/**
+ * Handles a player clicking "Leave Queue" using an atomic SQLite transaction.
+ */
 export async function handleLeaveQueue(
   client: Client,
   channelId: string,

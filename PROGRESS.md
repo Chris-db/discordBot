@@ -176,3 +176,10 @@ A 2v2 or 4v4 channel only exists once someone runs `/queue panel size:`.
 - Test DB cleanup must delete `season_snapshots` before `seasons` (foreign key).
 - Two bot processes on one token cause `DiscordAPIError[10062]`, which looks exactly like
   a performance bug and is not one.
+- **A fake-client pop clobbers the popping queue's row.** `startReadyCheckPhase` with
+  `fakeClient` takes the no-guild fallback, which `saveQueue`s the *lobby* over the source
+  row (state VOTING) before `startVotingPhase` throws at `createMatchChannels`. Assert on
+  the match row and the *other* queues after a fake pop, never on the popping queue's row.
+- **Cancel the failed match before requeueing its players.** `returnPlayersToQueue` re-pops
+  through `startReadyCheckPhase`, whose busy-player backstop drops anyone still in a live
+  match -- so a READY_CHECK match that is not yet CANCELLED drops the whole lobby.

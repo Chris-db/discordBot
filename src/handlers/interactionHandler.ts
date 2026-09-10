@@ -15,6 +15,7 @@ import {
   handleCaptainPick,
 } from '../services/queueService';
 import { channelTeamSize } from '../services/queuePanel';
+import { handleReadyCheckLeave } from '../services/readyCheckService';
 import {
   handleMatchReportVote,
   handleMatchCancelVote,
@@ -65,6 +66,20 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       autoDeleteReply(interaction, 6000);
       await interaction.deferReply({ ephemeral: true });
       const res = await handleLeaveQueue(interaction.client, channelId, user);
+      await interaction.editReply({ content: res.message });
+      return;
+    }
+
+    if (customId.startsWith('ready_leave_')) {
+      const matchId = parseInt(customId.split('_').pop()!, 10);
+      if (Number.isNaN(matchId)) {
+        await interaction.reply({ content: '❌ Malformed button id.', ephemeral: true });
+        return;
+      }
+      autoDeleteReply(interaction, 6000);
+      // Failing the check tears channels down and may re-pop the queue, well past 3s.
+      await interaction.deferReply({ ephemeral: true });
+      const res = await handleReadyCheckLeave(matchId, user.id);
       await interaction.editReply({ content: res.message });
       return;
     }
