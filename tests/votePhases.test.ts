@@ -16,6 +16,7 @@ import {
   handleCaptainsVote,
   handleTeamsVote,
   sendCaptainsDraftCard,
+  finalizeVoteAndPop,
 } from '../src/services/votingService';
 import {
   initializeCaptainsDraft,
@@ -330,6 +331,48 @@ describe('vote phase cards', () => {
   });
 });
 
+describe('finalizer lock', () => {
+  beforeEach(() => {
+    db.exec('DELETE FROM matches; DELETE FROM active_queues; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM guild_divisions;');
+    seedGuildDefaults(db, G);
+    for (const id of ROSTER) getOrCreatePlayer(G, 3, id, id);
+  });
+
+  // The timer firing and a majority click landing in the same instant both used to pass
+  // the state check, because the state only changes after the first one's message edit.
+  it('resolves a mode vote once when two finalizers race', async () => {
+    seedMatch();
+    seedQueue({ vote_counts: { captains: [], balanced: ['h1', 'h2', 'h3', 'h4'], random: [] } });
+    const channel = fakeChannel();
+    const client = clientWith(channel);
+    const voteCard = fakeMessage('mode_vote');
+
+    await Promise.all([
+      finalizeVoteAndPop(client, CHAN, G, voteCard),
+      finalizeVoteAndPop(client, CHAN, G, voteCard),
+    ]);
+
+    // One collapse of the vote card, one Team Vote card sent, one state transition.
+    expect(voteCard.edits.length).toBe(1);
+    expect(channel.sends.length).toBe(1);
+    expect(getQueue(CHAN)!.state).toBe('TEAMS_VOTE');
+  });
+
+  it('lets the next finalize through once the first has finished', async () => {
+    seedMatch();
+    seedQueue({ vote_counts: { captains: [], balanced: ['h1'], random: [] } });
+    const channel = fakeChannel();
+    const client = clientWith(channel);
+
+    await finalizeVoteAndPop(client, CHAN, G, fakeMessage('a'));
+    expect(getQueue(CHAN)!.state).toBe('TEAMS_VOTE');
+
+    // A second call after the first completed is not blocked by the lock -- it is
+    // stopped by the state check, which is the normal path.
+    await finalizeVoteAndPop(client, CHAN, G, fakeMessage('b'));
+    expect(channel.sends.length).toBe(1);
+  });
+});
 describe('captainPairCount', () => {
   it.each([
     [2, 6],

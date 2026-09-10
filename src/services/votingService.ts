@@ -43,6 +43,27 @@ import { refreshQueuePanel, resetQueueAfterPop } from './queuePanel';
 // Track active voting timers in memory so we don't duplicate timeouts
 const activeVoteTimers = new Map<string, NodeJS.Timeout>();
 
+// Channels whose vote is being resolved right now.
+const finalizing = new Set<string>();
+
+/**
+ * Runs a finalizer unless one is already running for this channel.
+ *
+ * Every finalizer checks the phase state synchronously, then awaits a message edit
+ * before the next phase changes that state. A majority click landing in that gap passed
+ * its own state check and resolved the vote a second time -- two Team Vote cards, one of
+ * them dead. The check-and-add here is synchronous, which on a single thread is atomic.
+ */
+async function onceAtATime(channelId: string, run: () => Promise<void>): Promise<void> {
+  if (finalizing.has(channelId)) return;
+  finalizing.add(channelId);
+  try {
+    await run();
+  } finally {
+    finalizing.delete(channelId);
+  }
+}
+
 const MODE_LABELS: Record<TeamMode, string> = {
   captains: 'Captains Draft',
   balanced: 'Balanced MMR',
@@ -334,37 +355,39 @@ export async function finalizeVoteAndPop(
   guildId: string,
   voteMsg?: Message
 ): Promise<void> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'VOTING') return;
+  return onceAtATime(channelId, async () => {
+    const queue = getQueue(channelId);
+    if (!queue || queue.state !== 'VOTING') return;
 
-  const counts = {
-    captains: (queue.vote_counts.captains || []).length,
-    balanced: (queue.vote_counts.balanced || []).length,
-    random: (queue.vote_counts.random || []).length,
-  };
+    const counts = {
+      captains: (queue.vote_counts.captains || []).length,
+      balanced: (queue.vote_counts.balanced || []).length,
+      random: (queue.vote_counts.random || []).length,
+    };
 
-  const { winningMode, tiedModes, maxVotes } = resolveWinningMode(counts);
+    const { winningMode, tiedModes, maxVotes } = resolveWinningMode(counts);
 
-  logger.info(
-    `Channel ${channelId} queue voting ended. Winning mode: ${winningMode}` +
-      (tiedModes.length > 1
-        ? ` (coin flip between ${tiedModes.join(', ')} at ${maxVotes} vote(s) each)`
-        : '')
-  );
+    logger.info(
+      `Channel ${channelId} queue voting ended. Winning mode: ${winningMode}` +
+        (tiedModes.length > 1
+          ? ` (coin flip between ${tiedModes.join(', ')} at ${maxVotes} vote(s) each)`
+          : '')
+    );
 
-  if (voteMsg) {
-    const tiebreakNote =
-      tiedModes.length > 1
-        ? ` (coin flip — tied at ${maxVotes} vote${maxVotes === 1 ? '' : 's'})`
-        : '';
-    await collapseCard(voteMsg, `✅ **${MODE_LABELS[winningMode]}** won the vote${tiebreakNote}`);
-  }
+    if (voteMsg) {
+      const tiebreakNote =
+        tiedModes.length > 1
+          ? ` (coin flip — tied at ${maxVotes} vote${maxVotes === 1 ? '' : 's'})`
+          : '';
+      await collapseCard(voteMsg, `✅ **${MODE_LABELS[winningMode]}** won the vote${tiebreakNote}`);
+    }
 
-  if (winningMode === 'balanced' || winningMode === 'random') {
-    await startTeamsVotePhase(client, channelId, guildId, queue, winningMode);
-  } else if (winningMode === 'captains') {
-    await startCaptainsVotePhase(client, channelId, guildId, queue, false);
-  }
+    if (winningMode === 'balanced' || winningMode === 'random') {
+      await startTeamsVotePhase(client, channelId, guildId, queue, winningMode);
+    } else if (winningMode === 'captains') {
+      await startCaptainsVotePhase(client, channelId, guildId, queue, false);
+    }
+  });
 }
 
 /**
@@ -558,21 +581,23 @@ export async function finalizeCaptainsVote(
   message?: Message,
   forceApprove?: boolean
 ): Promise<void> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'CAPTAINS_VOTE' || !queue.captain_vote_state) return;
+  return onceAtATime(channelId, async () => {
+    const queue = getQueue(channelId);
+    if (!queue || queue.state !== 'CAPTAINS_VOTE' || !queue.captain_vote_state) return;
 
-  const yesCount = queue.captain_vote_state.yesVotes.length;
-  const noCount = queue.captain_vote_state.noVotes.length;
+    const yesCount = queue.captain_vote_state.yesVotes.length;
+    const noCount = queue.captain_vote_state.noVotes.length;
 
-  if (!forceApprove && noCount > yesCount) {
-    logger.info(`Channel ${channelId} captains vote rejected. Randomizing new captains...`);
-    // No interim edit -- startCaptainsVotePhase reuses this same message for the next
-    // pair, so announcing the rejection here would only be overwritten a tick later.
-    await startCaptainsVotePhase(client, channelId, guildId, queue, true, message);
-  } else {
-    logger.info(`Channel ${channelId} captains vote approved.`);
-    await lockCaptains(client, channelId, queue, message);
-  }
+    if (!forceApprove && noCount > yesCount) {
+      logger.info(`Channel ${channelId} captains vote rejected. Randomizing new captains...`);
+      // No interim edit -- startCaptainsVotePhase reuses this same message for the next
+      // pair, so announcing the rejection here would only be overwritten a tick later.
+      await startCaptainsVotePhase(client, channelId, guildId, queue, true, message);
+    } else {
+      logger.info(`Channel ${channelId} captains vote approved.`);
+      await lockCaptains(client, channelId, queue, message);
+    }
+  });
 }
 
 /**
@@ -790,26 +815,28 @@ export async function finalizeTeamsVote(
   message?: Message,
   forceApprove?: boolean
 ): Promise<void> {
-  const queue = getQueue(channelId);
-  if (!queue || queue.state !== 'TEAMS_VOTE' || !queue.team_vote_state) return;
+  return onceAtATime(channelId, async () => {
+    const queue = getQueue(channelId);
+    if (!queue || queue.state !== 'TEAMS_VOTE' || !queue.team_vote_state) return;
 
-  const yesCount = queue.team_vote_state.yesVotes.length;
-  const noCount = queue.team_vote_state.noVotes.length;
+    const yesCount = queue.team_vote_state.yesVotes.length;
+    const noCount = queue.team_vote_state.noVotes.length;
 
-  if (!forceApprove && noCount > yesCount) {
-    // Re-roll in the mode the queue actually voted for. This used to hardcode a random
-    // re-roll, so voting Balanced and then rejecting the split silently handed back
-    // random teams. Rows written before mode was persisted default to random.
-    const mode = queue.team_vote_state.mode || 'random';
-    logger.info(
-      `Channel ${channelId} team verification vote rejected. Generating next ${mode} matchup without repeat...`
-    );
-    // The re-rolled split replaces this same message, so there is nothing to announce.
-    await startTeamsVotePhase(client, channelId, guildId, queue, mode, message);
-  } else {
-    logger.info(`Channel ${channelId} team verification vote approved. Starting match (teams locked in)...`);
-    await lockTeams(client, channelId, guildId, queue, message);
-  }
+    if (!forceApprove && noCount > yesCount) {
+      // Re-roll in the mode the queue actually voted for. This used to hardcode a random
+      // re-roll, so voting Balanced and then rejecting the split silently handed back
+      // random teams. Rows written before mode was persisted default to random.
+      const mode = queue.team_vote_state.mode || 'random';
+      logger.info(
+        `Channel ${channelId} team verification vote rejected. Generating next ${mode} matchup without repeat...`
+      );
+      // The re-rolled split replaces this same message, so there is nothing to announce.
+      await startTeamsVotePhase(client, channelId, guildId, queue, mode, message);
+    } else {
+      logger.info(`Channel ${channelId} team verification vote approved. Starting match (teams locked in)...`);
+      await lockTeams(client, channelId, guildId, queue, message);
+    }
+  });
 }
 
 /**
