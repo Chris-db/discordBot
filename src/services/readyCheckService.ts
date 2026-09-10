@@ -24,6 +24,18 @@ import { logger } from '../utils/logger';
 import config from '../config';
 import { getOrInitQueue, refreshQueuePanel, removePlayersFromWaitingQueues } from './queuePanel';
 import { startVotingPhase } from './votingService';
+import { getReadyCheckButtons } from '../ui/buttons';
+
+/**
+ * Ready checks that are still running, by match id, so the Not-ready button can reach the
+ * one it belongs to. A check registers itself when its timer starts and drops out when it
+ * ends by any route. Nothing survives a restart, which is fine: the startup recovery
+ * cancels every match that was mid-check.
+ */
+const runningReadyChecks = new Map<
+  number,
+  { playerIds: string[]; fail: (afkPlayerIds: string[], why: string) => Promise<boolean> }
+>();
 
 /**
  * Drops anyone who already has a live match from a lobby that is about to pop, and says
@@ -292,6 +304,7 @@ export async function startReadyCheckPhase(
     readyMsg = await matchTextChannel.send({
       content: `${mentions} → <#${readyCheckVc.id}> · closes ${closesAt}`,
       files: [attachment],
+      components: [getReadyCheckButtons(match.match_id)],
     }).catch(() => undefined);
   }
 
@@ -316,21 +329,92 @@ export async function startReadyCheckPhase(
     }
   };
 
-  const timer = setInterval(async () => {
+  // One gate for every way the check can end: all ready, timed out, someone walked out,
+  // or cancelled from elsewhere. The Not-ready button and the timer can both reach the
+  // fail path, and two overlapping ticks could both see everyone in voice, so whichever
+  // gets here first owns the transition and the rest return without doing anything.
+  let ended = false;
+  let timer: NodeJS.Timeout | undefined;
+  const endCheck = (): boolean => {
+    if (ended) return false;
+    ended = true;
+    if (timer) clearInterval(timer);
+    runningReadyChecks.delete(match.match_id);
+    return true;
+  };
+
+  /**
+   * Fails the check with `afkPlayerIds` as the ones who did not show up. Everyone else
+   * goes back to the front of the rank queue (re-popping it if enough are waiting), the
+   * channels come down, and the pop notice is edited with the outcome.
+   *
+   * Returns false if the check had already ended by another route.
+   */
+  const failReadyCheck = async (afkPlayerIds: string[], why: string): Promise<boolean> => {
+    if (!endCheck()) return false;
+
+    const currentQueue = getQueue(textChannelId);
+    if (!currentQueue || currentQueue.state !== 'READY_CHECK') {
+      // Cancelled from elsewhere since the last tick; whoever did that released the players.
+      await closePopNotice();
+      return false;
+    }
+    const readyPlayerIds = currentQueue.player_ids.filter(id => !afkPlayerIds.includes(id));
+
+    updateMatch(match.match_id, {
+      state: 'CANCELLED',
+      winner: 'NONE',
+      completed_at: new Date().toISOString(),
+    });
+    // A queue cooldown for `afkPlayerIds` would go here, if the server ever wants one.
+
+    if (matchTextChannel) {
+      await matchTextChannel.send({
+        content: `❌ Ready check failed — ${why}. Closing in 5s.`,
+      }).catch(() => null);
+    }
+
+    const { rePopped, waiting } = await returnPlayersToQueue(
+      client,
+      channelId,
+      guildId,
+      readyPlayerIds,
+      currentQueue.player_join_times
+    );
+
+    const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
+    await closePopNotice(
+      rePopped
+        ? `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}. Queue re-popped (${rosterSize}/${rosterSize}).`
+        : `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}. Queue is ${waiting}/${rosterSize}.`
+    );
+
+    setTimeout(() => {
+      readyCheckVc.delete('Ready check failed').catch(() => null);
+      deleteMatchChannels(client, match.match_id);
+      deleteQueue(textChannelId);
+    }, 5000);
+    return true;
+  };
+
+  runningReadyChecks.set(match.match_id, {
+    playerIds: [...matchQueue.player_ids],
+    fail: failReadyCheck,
+  });
+
+  const tick = async () => {
     const elapsed = Math.floor((Date.now() - readyCheckStartedAt) / 1000);
     const currentQueue = getQueue(textChannelId);
     if (!currentQueue || currentQueue.state !== 'READY_CHECK') {
       // Cancelled or advanced from somewhere else -- take the notice with it rather than
       // leaving the queue channel pointing at a ready check that is no longer running.
-      clearInterval(timer);
-      await closePopNotice();
+      if (endCheck()) await closePopNotice();
       return;
     }
 
     const vc = await guild.channels.fetch(readyCheckVc.id).catch(() => null);
     if (!vc || vc.type !== ChannelType.GuildVoice) {
-      clearInterval(timer);
-      await closePopNotice();
+      if (endCheck()) await closePopNotice();
       return;
     }
 
@@ -340,7 +424,7 @@ export async function startReadyCheckPhase(
     });
 
     if (allReady) {
-      clearInterval(timer);
+      if (!endCheck()) return;
       // The match is under way; the queue channel no longer needs to point at it.
       await closePopNotice();
       if (readyMsg) {
@@ -349,6 +433,7 @@ export async function startReadyCheckPhase(
           content: '✅ All players ready',
           files: [],
           attachments: [],
+          components: [],
         }).catch(() => null);
       }
 
@@ -371,90 +456,112 @@ export async function startReadyCheckPhase(
     }
 
     if (elapsed >= timeoutSeconds) {
-      clearInterval(timer);
-
       const afkPlayerIds = currentQueue.player_ids.filter(id => {
         if (id.startsWith('test_bot_')) return false;
         return !vc.members.has(id);
       });
-      const readyPlayerIds = currentQueue.player_ids.filter(id => !afkPlayerIds.includes(id));
-
-      updateMatch(match.match_id, {
-        state: 'CANCELLED',
-        winner: 'NONE',
-        completed_at: new Date().toISOString(),
-      });
-
       const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
-      if (matchTextChannel) {
-        await matchTextChannel.send({
-          content: `❌ Ready check failed — no voice from ${afkMentions || 'Unknown'}. Closing in 5s.`,
-        }).catch(() => null);
-      }
-
-      // Return non-AFK players to the front of the rank queue
-      const rankQueue = getOrInitQueue(channelId, guildId);
-      const combinedIds: string[] = [];
-      const combinedJoinTimes: Record<string, number> = {};
-
-      for (const id of readyPlayerIds) {
-        if (!combinedIds.includes(id)) {
-          combinedIds.push(id);
-          combinedJoinTimes[id] = currentQueue.player_join_times?.[id] || Date.now();
-        }
-      }
-      for (const id of rankQueue.player_ids) {
-        if (!combinedIds.includes(id)) {
-          combinedIds.push(id);
-          combinedJoinTimes[id] = rankQueue.player_join_times?.[id] || Date.now();
-        }
-      }
-
-      if (combinedIds.length >= rosterSize) {
-        const nextMatchIds = combinedIds.slice(0, rosterSize);
-        const remainingIds = combinedIds.slice(rosterSize);
-
-        rankQueue.player_ids = remainingIds;
-        rankQueue.player_join_times = {};
-        for (const id of remainingIds) {
-          rankQueue.player_join_times[id] = combinedJoinTimes[id];
-        }
-        saveQueue(rankQueue);
-        await refreshQueuePanel(client, channelId);
-
-        await closePopNotice(
-          `❌ Match #${match.match_id} ready check failed — removed ${afkMentions || 'Unknown'}. Queue re-popped (${rosterSize}/${rosterSize}).`
-        );
-
-        const popQueue: ActiveQueue = {
-          channel_id: channelId,
-          guild_id: guildId,
-          team_size: teamSize,
-          player_ids: nextMatchIds,
-          player_join_times: {},
-          state: 'WAITING',
-          vote_counts: {},
-        };
-        for (const id of nextMatchIds) {
-          popQueue.player_join_times![id] = combinedJoinTimes[id];
-        }
-        await startReadyCheckPhase(client, channelId, guildId, popQueue);
-      } else {
-        rankQueue.player_ids = combinedIds;
-        rankQueue.player_join_times = combinedJoinTimes;
-        saveQueue(rankQueue);
-        await refreshQueuePanel(client, channelId);
-
-        await closePopNotice(
-          `❌ Match #${match.match_id} ready check failed — removed ${afkMentions || 'Unknown'}. Queue is ${rankQueue.player_ids.length}/${rosterSize}.`
-        );
-      }
-
-      setTimeout(() => {
-        vc.delete('AFK Ready check failed').catch(() => null);
-        deleteMatchChannels(client, match.match_id);
-        deleteQueue(textChannelId);
-      }, 5000);
+      await failReadyCheck(afkPlayerIds, `no voice from ${afkMentions || 'Unknown'}`);
     }
+  };
+
+  timer = setInterval(() => {
+    if (ended) return;
+    tick().catch(err => logger.error(`Ready check tick for Match #${match.match_id} failed:`, err));
   }, 3000);
+}
+
+/**
+ * Puts the players who did show up back at the front of the rank queue, ahead of anyone
+ * who joined while the check ran, and pops it again if that makes a full lobby.
+ *
+ * Call this after the failed match has been cancelled: until then its players still count
+ * as mid-match, and the backstop in startReadyCheckPhase would drop every one of them.
+ */
+export async function returnPlayersToQueue(
+  client: Client,
+  channelId: string,
+  guildId: string,
+  playerIds: string[],
+  joinTimes: Record<string, number> | undefined
+): Promise<{ rePopped: boolean; waiting: number }> {
+  const rankQueue = getOrInitQueue(channelId, guildId);
+  const rosterSize = rankQueue.team_size * 2;
+
+  const combinedIds: string[] = [];
+  const combinedJoinTimes: Record<string, number> = {};
+  for (const id of playerIds) {
+    if (!combinedIds.includes(id)) {
+      combinedIds.push(id);
+      combinedJoinTimes[id] = joinTimes?.[id] || Date.now();
+    }
+  }
+  for (const id of rankQueue.player_ids) {
+    if (!combinedIds.includes(id)) {
+      combinedIds.push(id);
+      combinedJoinTimes[id] = rankQueue.player_join_times?.[id] || Date.now();
+    }
+  }
+
+  const nextMatchIds = combinedIds.length >= rosterSize ? combinedIds.slice(0, rosterSize) : undefined;
+  const remainingIds = nextMatchIds ? combinedIds.slice(rosterSize) : combinedIds;
+
+  rankQueue.player_ids = remainingIds;
+  rankQueue.player_join_times = {};
+  for (const id of remainingIds) {
+    rankQueue.player_join_times[id] = combinedJoinTimes[id];
+  }
+  saveQueue(rankQueue);
+  await refreshQueuePanel(client, channelId);
+
+  if (!nextMatchIds) {
+    return { rePopped: false, waiting: remainingIds.length };
+  }
+
+  const popQueue: ActiveQueue = {
+    channel_id: channelId,
+    guild_id: guildId,
+    team_size: rankQueue.team_size,
+    player_ids: nextMatchIds,
+    player_join_times: {},
+    state: 'WAITING',
+    vote_counts: {},
+  };
+  for (const id of nextMatchIds) {
+    popQueue.player_join_times![id] = combinedJoinTimes[id];
+  }
+  // The failed check still has channels to tear down after this returns, so a re-pop that
+  // falls over must not take that with it. The stale-match sweep picks up what it left.
+  try {
+    await startReadyCheckPhase(client, channelId, guildId, popQueue);
+  } catch (error) {
+    logger.error(`Re-pop of ${channelId} after a failed ready check did not start:`, error);
+  }
+  return { rePopped: true, waiting: remainingIds.length };
+}
+
+/**
+ * The Not-ready button. Fails the running check for `matchId` with the clicker as the
+ * one AFK player, which is the same outcome as letting it time out with them missing.
+ *
+ * After a restart the registry is empty, so a click on a card from before it is refused
+ * here; the startup recovery has already cancelled that match anyway.
+ */
+export async function handleReadyCheckLeave(
+  matchId: number,
+  userId: string
+): Promise<{ success: boolean; message: string }> {
+  const check = runningReadyChecks.get(matchId);
+  if (!check) {
+    return { success: false, message: 'No ready check is running for this match.' };
+  }
+  if (!check.playerIds.includes(userId)) {
+    return { success: false, message: 'You are not in this ready check.' };
+  }
+
+  const failed = await check.fail([userId], `<@${userId}> is not ready`);
+  if (!failed) {
+    return { success: false, message: 'This ready check has already ended.' };
+  }
+  return { success: true, message: '🚪 You left the ready check. The others are back at the front of the queue.' };
 }

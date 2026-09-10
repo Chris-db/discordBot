@@ -34,6 +34,24 @@ export function getQueuePanelButtons(): ActionRowBuilder<ButtonBuilder> {
 }
 
 /**
+ * ActionRow under the ready-check card: the one way out of a check that is still running.
+ *
+ * Leave Queue is refused during a ready check, the Cancel button only exists once a match
+ * is in progress, and /match cancel needs Manage Channels -- so one AFK player used to hold
+ * the other five for the full five minutes. Clicking this fails the check at once with the
+ * clicker as the AFK player, and the rest go back to the front of the queue.
+ */
+export function getReadyCheckButtons(matchId: number): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ready_leave_${matchId}`)
+      .setLabel('Not ready')
+      .setEmoji('🚪')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+/**
  * ActionRow for Voting on the Team Selection Mode.
  */
 export function getModeVoteButtons(voteCounts: {

@@ -3,6 +3,7 @@ import db from '../src/database/db';
 import {
   ActiveQueue,
   createMatch,
+  updateMatch,
   getActiveMatches,
   getActiveMatchForPlayer,
   getOrCreatePlayer,
@@ -10,7 +11,11 @@ import {
   saveQueue,
 } from '../src/database/queries';
 import { seedGuildDefaults } from '../src/database/migrations';
-import { startReadyCheckPhase } from '../src/services/readyCheckService';
+import {
+  startReadyCheckPhase,
+  returnPlayersToQueue,
+  handleReadyCheckLeave,
+} from '../src/services/readyCheckService';
 import { removePlayersFromWaitingQueues } from '../src/services/queuePanel';
 
 const G = 'guild_ready_check_test';
@@ -175,5 +180,70 @@ describe('a queue never pops with a player who is already in a live match', () =
     await pop('chan_3v3', getQueue('chan_3v3')!);
 
     expect(getActiveMatches(G)).toHaveLength(2);
+  });
+});
+
+describe('a failed ready check returns the players who showed up', () => {
+  /** The check's own match, already cancelled -- which is what the fail path does first. */
+  function cancelledCheck(roster: string[]) {
+    const m = createMatch({
+      guild_id: G,
+      channel_id: 'chan_3v3',
+      team_size: 3,
+      queue_channel_id: 'chan_3v3',
+      state: 'READY_CHECK',
+      blue_team: roster,
+      orange_team: [],
+      rl_name: '',
+      rl_pass: '',
+    });
+    updateMatch(m.match_id, { state: 'CANCELLED', winner: 'NONE', completed_at: new Date().toISOString() });
+    return m;
+  }
+  const joinTimes = Object.fromEntries(SIX.map((id, i) => [id, 100 + i]));
+  const allBut = (leaver: string) => SIX.filter(id => id !== leaver);
+
+  it('does not return the leaver', async () => {
+    cancelledCheck(SIX);
+    waitingQueue('chan_3v3', []);
+
+    const res = await returnPlayersToQueue(fakeClient, 'chan_3v3', G, allBut('p4'), joinTimes);
+
+    expect(res).toEqual({ rePopped: false, waiting: 5 });
+    const row = getQueue('chan_3v3')!;
+    expect(row.player_ids).toEqual(['p1', 'p2', 'p3', 'p5', 'p6']);
+    expect(row.player_join_times).toEqual({ p1: 100, p2: 101, p3: 102, p5: 104, p6: 105 });
+    expect(row.state).toBe('WAITING');
+  });
+
+  it('puts them ahead of anyone who joined while the check ran', async () => {
+    cancelledCheck(SIX);
+    waitingQueue('chan_3v3', ['p7']);
+
+    const res = await returnPlayersToQueue(fakeClient, 'chan_3v3', G, ['p1', 'p2', 'p3', 'p5'], joinTimes);
+
+    expect(res).toEqual({ rePopped: false, waiting: 5 });
+    const row = getQueue('chan_3v3')!;
+    expect(row.player_ids).toEqual(['p1', 'p2', 'p3', 'p5', 'p7']);
+    expect(row.player_join_times!.p7).toBe(1_000);
+  });
+
+  it('re-pops when the returning players and the waiting ones make a full lobby', async () => {
+    const failed = cancelledCheck(SIX);
+    waitingQueue('chan_3v3', ['p7', 'p8']);
+
+    const res = await returnPlayersToQueue(fakeClient, 'chan_3v3', G, allBut('p4'), joinTimes);
+
+    expect(res).toEqual({ rePopped: true, waiting: 1 });
+    const next = getActiveMatchForPlayer(G, 'p7')!;
+    expect(next.match_id).not.toBe(failed.match_id);
+    expect(next.blue_team).toEqual(['p1', 'p2', 'p3', 'p5', 'p6', 'p7']);
+    expect(getActiveMatchForPlayer(G, 'p4')).toBeUndefined();
+    expect(getActiveMatchForPlayer(G, 'p8')).toBeUndefined();
+  });
+
+  it('refuses the Not-ready button when no check is registered for the match', async () => {
+    const res = await handleReadyCheckLeave(4242, 'p1');
+    expect(res.success).toBe(false);
   });
 });
