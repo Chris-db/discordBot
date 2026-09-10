@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-08-09 (first live session)
+Last updated: 2026-09-10 (queue-sequence audit)
 
 ---
 
@@ -63,7 +63,7 @@ Everything else worked, but these have never been run against the real API:
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
 
-Tests: **190 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **226 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -75,6 +75,30 @@ Tests: **190 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 | 3 | Rematch (same teams, new match row, `series_id`), Back-to-Queue button, cancellable channel teardown, dynamic `updateMatch` |
 | 4 | Streak badges on result card + queue panel; promotion-zone moments; **Inter + Noto Color Emoji bundled** in `assets/fonts` |
 | 5 | Multi-queue at 2v2 / 3v3 / 4v4, with each size a fully separate ladder |
+
+## Queue-sequence audit (2026-09-10)
+
+A full read of queue → ready check → votes → draft → match → post-match, with two findings
+confirmed by probe tests. Landed on `main` the same day:
+
+- **Cross-queue double match** — a pop now strips its roster from every other waiting
+  queue, and never pops with a player who already has a live match.
+- **Not-ready button** on the ready-check card: fails the check early, the others go to
+  the front of the queue. No AFK cooldown yet — policy decision for Chris.
+- A re-pop moves the players who showed up into the new VC instead of kicking them.
+- Ready-check ticks can no longer overlap.
+- Every vote card carries a live `<t:…:R>` deadline and says what silence does.
+  `VOTE_TIMEOUT_SECONDS` (default 60) replaces the hidden 30s.
+- A proposed Double or Nothing holds the channel open; a gamble is void once a rematch
+  or requeue sets `rematchResolved`. Post-match countdowns are live timestamps.
+
+**Still open from the audit** (partial patches parked in `.claude/partial-patches/`,
+untracked — apply with `git apply`, they were mid-flight when stopped):
+- Re-roll cap (`MAX_REROLLS`) and the hardcoded 15/10 seen-caps → `worker-B-reroll-cap.patch`.
+- Finalize race guard (timer vs majority click) — not started.
+- Startup sweep for match channels orphaned by a restart → `worker-C-orphan-sweep.patch`.
+- Split reports (3 Blue / 3 Orange) never escalate; sit until the 3h sweeper.
+- Admins clicking Cancel are gated in but rejected by the vote handler.
 
 ## Next
 
