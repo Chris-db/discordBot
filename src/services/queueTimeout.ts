@@ -3,6 +3,8 @@ import {
   getQueue,
   saveQueue,
   getAllQueues,
+  getQueueChannels,
+  deleteQueue,
   getAllLiveMatches,
   getMatchByTextChannel,
   getRecentlyFinishedMatchesWithChannels,
@@ -263,4 +265,45 @@ async function announceRestartCancellation(client: Client, match: Match): Promis
   if (notice) {
     setTimeout(() => notice.delete().catch(() => null), 60_000);
   }
+}
+
+/**
+ * Removes queue panels from channels that are not registered queue channels.
+ *
+ * An admin command run in the wrong channel used to create a queue row there, and from
+ * then on every chat message in that channel re-posted a queue panel into it. The row
+ * outlives the fix, so it is cleaned up here. Only an empty, idle row goes: a queue with
+ * people in it is left alone whatever its registration says. A guild with no registered
+ * channel at all is skipped -- that is a server that has not set up yet, and its one
+ * panel is the real one.
+ *
+ * Returns the channel ids it cleaned, for the log and the tests.
+ */
+export async function sweepStrayQueuePanels(client: Client): Promise<string[]> {
+  const cleaned: string[] = [];
+  const registeredByGuild = new Map<string, Set<string>>();
+
+  for (const queue of getAllQueues()) {
+    if (!registeredByGuild.has(queue.guild_id)) {
+      registeredByGuild.set(
+        queue.guild_id,
+        new Set(getQueueChannels(queue.guild_id).map(d => d.queue_channel_id!))
+      );
+    }
+    const registered = registeredByGuild.get(queue.guild_id)!;
+    if (registered.size === 0 || registered.has(queue.channel_id)) continue;
+    if (queue.state !== 'WAITING' || queue.player_ids.length > 0) continue;
+
+    if (queue.message_id) {
+      const channel = (await client.channels.fetch(queue.channel_id).catch(() => null)) as TextChannel | null;
+      if (channel) {
+        await channel.messages.delete(queue.message_id).catch(() => null);
+      }
+    }
+    deleteQueue(queue.channel_id);
+    cleaned.push(queue.channel_id);
+    logger.warn(`Removed a stray queue panel from unregistered channel ${queue.channel_id}.`);
+  }
+
+  return cleaned;
 }

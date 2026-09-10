@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-10 (audit leftovers + queue wait line)
+Last updated: 2026-09-10 (stray panel fix)
 
 ---
 
@@ -63,7 +63,7 @@ Everything else worked, but these have never been run against the real API:
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
 
-Tests: **259 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **263 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -135,6 +135,30 @@ items. All on `main`; nothing here needs `npm run register`.
 Not done from the audit, on purpose: the "typically pops in ~N min" estimate needs
 queue-to-pop history the schema does not keep; party/duo support and MMR preview on the
 teams vote are features, not fixes — ask Chris before building either.
+
+## Stray panel in #general (2026-09-10, fourth session)
+
+Chris reported a queue panel re-posting itself into #general on every chat message. The
+live DB had a second `active_queues` row for #general with a `message_id`: an admin
+`/queue` subcommand run there had created the row (`getOrInitQueue`) and posted a panel,
+and a row with a message id was all `handleChannelMessage` needed to keep re-pinning it.
+
+Fixed on `main`:
+- **`guild_divisions.queue_channel_id` is now the single truth for "this channel has a
+  panel".** `/queue panel` registers the channel every time (lowest division by default),
+  and the chat re-pin ignores unregistered channels.
+- `/queue add`, `/queue clear`, `fill-bots` and `force-pop` refuse in a channel with no
+  queue row instead of creating one.
+- **Boot sweep `sweepStrayQueuePanels`**: an empty, idle queue row in an unregistered
+  channel has its panel message and row deleted — only in guilds that have at least one
+  registered channel, so a fresh server's first panel is safe. This is what cleans up
+  #general on the next restart; no manual step.
+
+**"ravi_rl1 is not on the leaderboard" is not a bug.** ravi has only played 2v2 (match #7,
+when the channel was registered at 2v2), so their only ladder row is the 2v2 one.
+`/leaderboard` defaults to 3v3; `/leaderboard size:2v2` shows them. A player gets a row on
+a ladder the first time they join a queue of that size. If Chris wants one ladder across
+sizes, that is a design reversal of the 2026-08-08 decision, not a fix.
 
 ## Next
 

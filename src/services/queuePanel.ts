@@ -202,6 +202,11 @@ export function handleChannelMessage(client: Client, message: Message): void {
   const queue = getQueue(channelId);
   if (!queue || !queue.message_id || queue.state !== 'WAITING') return;
 
+  // Only a registered queue channel gets its panel re-pinned. A queue row used to be
+  // enough, and an admin command run in #general created one there -- after which every
+  // chat message in #general re-posted a queue panel into it.
+  if (!getDivisionByChannel(queue.guild_id, channelId)) return;
+
   if (panelMoveTimers.has(channelId)) {
     clearTimeout(panelMoveTimers.get(channelId)!);
   }
@@ -464,7 +469,12 @@ export async function fillQueueWithBots(
   guildId: string,
   skipVoting: boolean = false
 ): Promise<QueueClickResult> {
-  const queue = getOrInitQueue(channelId, guildId);
+  // A test fill only makes sense where a panel is. This used to create the row, and a
+  // row is all the message listener needed to start re-posting panels into #general.
+  const queue = getQueue(channelId);
+  if (!queue) {
+    return { success: false, message: '❌ There is no queue panel in this channel.' };
+  }
   if (queue.state !== 'WAITING') {
     return { success: false, message: 'Queue has already popped!' };
   }

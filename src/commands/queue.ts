@@ -29,6 +29,8 @@ import { getQueuePanelButtons } from '../ui/buttons';
 import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { autoDeleteReply } from '../utils/autoDelete';
 
+const NO_PANEL_HERE = '❌ There is no queue panel in this channel. Run `/queue panel` in the queue channel.';
+
 export const queueCommand = {
   data: new SlashCommandBuilder()
     .setName('queue')
@@ -127,42 +129,43 @@ export const queueCommand = {
       const requestedSize = interaction.options.getInteger('size');
       const requestedDivision = interaction.options.getString('division');
 
-      // Registering the channel is what sets its size: the division row that owns a
-      // channel is the single source of truth for "how big is this queue".
-      if (requestedSize || requestedDivision) {
-        const size = requestedSize ?? resolveTeamSize(guildId, channelId);
-        const division =
-          requestedDivision ||
-          getDivisionByChannel(guildId, channelId)?.division ||
-          getLowestDivision(guildId, size)?.division;
+      // Deploying a panel registers the channel, every time. The division row that owns a
+      // channel is the single source of truth for "how big is this queue" and, since the
+      // #general incident, for "does this channel have a panel at all" -- the message
+      // listener and the boot sweep both read it. With no size or division given, the
+      // channel keeps its current registration or takes the lowest division.
+      const size = requestedSize ?? resolveTeamSize(guildId, channelId);
+      const division =
+        requestedDivision ||
+        getDivisionByChannel(guildId, channelId)?.division ||
+        getLowestDivision(guildId, size)?.division;
 
-        if (!division) {
+      if (!division) {
+        return interaction.editReply({
+          content: `❌ No divisions are configured for ${formatTeamSize(size)} on this server.`,
+        });
+      }
+
+      const existing = getQueue(channelId);
+      if (existing && existing.team_size !== size) {
+        if (existing.state !== 'WAITING') {
           return interaction.editReply({
-            content: `❌ No divisions are configured for ${formatTeamSize(size)} on this server.`,
+            content: '❌ This queue has already popped — wait for it to finish before changing its size.',
           });
         }
-
-        const existing = getQueue(channelId);
-        if (existing && existing.team_size !== size) {
-          if (existing.state !== 'WAITING') {
-            return interaction.editReply({
-              content: '❌ This queue has already popped — wait for it to finish before changing its size.',
-            });
-          }
-          if (existing.player_ids.length > 0) {
-            return interaction.editReply({
-              content: `❌ ${existing.player_ids.length} player(s) are already queued here. Run \`/queue clear\` first.`,
-            });
-          }
+        if (existing.player_ids.length > 0) {
+          return interaction.editReply({
+            content: `❌ ${existing.player_ids.length} player(s) are already queued here. Run \`/queue clear\` first.`,
+          });
         }
+      }
 
-        updateDivision(guildId, size, division, { queue_channel_id: channelId });
+      updateDivision(guildId, size, division, { queue_channel_id: channelId });
 
-        // The queue row caches the size, so an existing empty row has to be told.
-        if (existing) {
-          existing.team_size = size;
-          saveQueue(existing);
-        }
+      // The queue row caches the size, so an existing empty row has to be told.
+      if (existing) {
+        existing.team_size = size;
+        saveQueue(existing);
       }
 
       getOrInitQueue(channelId, guildId);
@@ -170,7 +173,7 @@ export const queueCommand = {
       await refreshQueuePanel(interaction.client, channelId);
 
       return interaction.editReply({
-        content: `✅ **${formatTeamSize(queue.team_size)}** Queue Panel deployed!`,
+        content: `✅ **${formatTeamSize(queue.team_size)}** Queue Panel deployed — Rank ${division}.`,
       });
     }
 
@@ -200,7 +203,12 @@ export const queueCommand = {
       }
 
       const user = interaction.options.getUser('user', true);
-      const queue = getOrInitQueue(channelId, guildId);
+      // Only a channel with a panel has a queue. Creating the row here is how a stray
+      // panel ended up in #general.
+      const queue = getQueue(channelId);
+      if (!queue) {
+        return interaction.reply({ content: NO_PANEL_HERE, flags: MessageFlags.Ephemeral });
+      }
 
       if (queue.player_ids.includes(user.id)) {
         return interaction.reply({
@@ -278,7 +286,12 @@ export const queueCommand = {
         });
       }
 
-      const queue = getOrInitQueue(channelId, guildId);
+      // Only a channel with a panel has a queue. Creating the row here is how a stray
+      // panel ended up in #general.
+      const queue = getQueue(channelId);
+      if (!queue) {
+        return interaction.reply({ content: NO_PANEL_HERE, flags: MessageFlags.Ephemeral });
+      }
       if (queue.ready_check_vc_id) {
         const vc = await interaction.guild?.channels.fetch(queue.ready_check_vc_id).catch(() => null);
         if (vc) {

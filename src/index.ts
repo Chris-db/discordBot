@@ -14,7 +14,7 @@ import {
   sweepStaleMatches,
   recoverStuckQueues,
 } from './services/queueService';
-import { sweepOrphanedMatchChannels } from './services/queueTimeout';
+import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
 // Registers the bundled fonts before anything can draw a card. The image modules import
 // this too, so it is belt and braces -- but it means a missing font file is reported at
@@ -71,8 +71,9 @@ client.once(Events.ClientReady, async readyClient => {
       logger.error('Error recovering stuck queues:', err);
     })
     .then(() => sweepOrphanedMatchChannels(readyClient))
+    .then(() => sweepStrayQueuePanels(readyClient))
     .catch(err => {
-      logger.error('Error sweeping orphaned match channels:', err);
+      logger.error('Error sweeping orphaned channels:', err);
     });
 
   // Periodically check every 60 seconds for players inactive in queue > 30 minutes
