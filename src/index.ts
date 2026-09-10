@@ -14,6 +14,7 @@ import {
   sweepStaleMatches,
   recoverStuckQueues,
 } from './services/queueService';
+import { sweepOrphanedMatchChannels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
 // Registers the bundled fonts before anything can draw a card. The image modules import
 // this too, so it is belt and braces -- but it means a missing font file is reported at
@@ -49,10 +50,18 @@ client.once(Events.ClientReady, async readyClient => {
     await registerCommands();
   }
 
-  // Recover any queues left in temporary states from before a crash/restart
-  recoverStuckQueues(readyClient).catch(err => {
-    logger.error('Error recovering stuck queues:', err);
-  });
+  // Recover any queues left in temporary states from before a crash/restart, then remove
+  // the channels of matches that finished but whose teardown timer died with the old
+  // process. In that order: the recovery cancels matches and schedules their teardown,
+  // which the sweep then knows to leave alone.
+  recoverStuckQueues(readyClient)
+    .catch(err => {
+      logger.error('Error recovering stuck queues:', err);
+    })
+    .then(() => sweepOrphanedMatchChannels(readyClient))
+    .catch(err => {
+      logger.error('Error sweeping orphaned match channels:', err);
+    });
 
   // Periodically check every 60 seconds for players inactive in queue > 30 minutes
   setInterval(() => {

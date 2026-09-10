@@ -5,13 +5,16 @@ import {
   getAllQueues,
   getAllLiveMatches,
   getMatchByTextChannel,
+  getRecentlyFinishedMatchesWithChannels,
   ActiveQueue,
+  Match,
 } from '../database/queries';
 import config from '../config';
 import { logger } from '../utils/logger';
 import { parseDbTimestamp } from '../utils/time';
 import { refreshQueuePanel } from './queuePanel';
 import { cancelMatch } from './matchService';
+import { deleteMatchChannels, hasPendingChannelDeletion } from './channelService';
 
 /**
  * Checks all active waiting queues for players who have been queued for over 30 minutes
@@ -69,6 +72,16 @@ export async function checkQueueTimeouts(client: Client): Promise<void> {
   }
 }
 
+/** How far back the orphan sweep looks. Every candidate costs a channel lookup. */
+const ORPHAN_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long after a match finishes its channels may legitimately still be open in a
+ * running process: the 90-second rematch window, or a gamble proposed at the end of it
+ * (60s window, the spin, then a minute to read the result). Ten minutes is well clear.
+ */
+const ORPHAN_GRACE_MS = 10 * 60 * 1000;
+
 /**
  * Cancels matches that have been left hanging.
  *
@@ -111,6 +124,66 @@ export async function sweepStaleMatches(client: Client): Promise<void> {
       logger.error(`Failed to auto-cancel stale Match #${match.match_id}:`, err);
     }
   }
+
+  // Cheap with the 24-hour bound, and it catches a teardown lost to anything other than a
+  // restart -- an unhandled error in the timer, say -- within five minutes.
+  await sweepOrphanedMatchChannels(client, ORPHAN_GRACE_MS);
+}
+
+/**
+ * Deletes the channels of finished matches whose teardown never happened.
+ *
+ * The post-match teardown is an in-memory setTimeout, so a restart inside the 90-second
+ * rematch window (or a gamble window) simply loses it. recoverStuckQueues cannot see
+ * these: the temporary queue row is already gone by then. sweepStaleMatches cannot
+ * either: it only looks at live matches, and these are finished. So the match text
+ * channel and both team VCs sat in the server for good, one set per restart.
+ *
+ * `minAgeMs` is the grace for a running process, where a channel from a match that
+ * finished a minute ago is in its rematch window, not orphaned. On startup it is zero:
+ * no timer survived, so anything still standing is an orphan. A match with a teardown
+ * pending in this process is skipped either way, as is one whose channel now hosts a
+ * live rematch -- that match's own teardown will take the channel down.
+ */
+export async function sweepOrphanedMatchChannels(client: Client, minAgeMs = 0): Promise<void> {
+  const now = Date.now();
+  let removed = 0;
+
+  for (const match of getRecentlyFinishedMatchesWithChannels(ORPHAN_LOOKBACK_MS)) {
+    const finishedAt = parseDbTimestamp(match.completed_at);
+    if (Number.isNaN(finishedAt) || now - finishedAt < minAgeMs) continue;
+    if (hasPendingChannelDeletion(match.match_id)) continue;
+
+    if (match.text_channel_id) {
+      const occupant = getMatchByTextChannel(match.text_channel_id);
+      if (occupant && occupant.match_id !== match.match_id) continue;
+    }
+
+    const ids = [
+      match.text_channel_id,
+      match.blue_voice_id,
+      match.orange_voice_id,
+      match.ready_check_vc_id,
+    ].filter((id): id is string => Boolean(id));
+
+    // Almost every candidate had a normal teardown, so this is the check that keeps the
+    // sweep quiet: only a channel that still exists is worth a delete call.
+    const standing: string[] = [];
+    for (const id of ids) {
+      if (await client.channels.fetch(id).catch(() => null)) standing.push(id);
+    }
+    if (standing.length === 0) continue;
+
+    logger.warn(
+      `Match #${match.match_id} finished ${Math.round((now - finishedAt) / 60_000)}m ago but still owns channel(s) ${standing.join(', ')}. Removing.`
+    );
+    await deleteMatchChannels(client, match.match_id);
+    removed++;
+  }
+
+  if (removed > 0) {
+    logger.info(`Removed the channels of ${removed} orphaned finished match(es).`);
+  }
 }
 
 /**
@@ -137,9 +210,13 @@ export async function recoverStuckQueues(client: Client): Promise<void> {
       logger.warn(
         `Match #${activeMatch!.match_id} was mid-${activeMatch!.state} at shutdown. Cancelling so its players are released.`
       );
-      await cancelMatch(client, activeMatch!.match_id, 'Bot restarted').catch(err =>
-        logger.error(`Failed to cancel orphaned Match #${activeMatch!.match_id}:`, err)
-      );
+      const cancelled = await cancelMatch(client, activeMatch!.match_id, 'Bot restarted').catch(err => {
+        logger.error(`Failed to cancel orphaned Match #${activeMatch!.match_id}:`, err);
+        return undefined;
+      });
+      if (cancelled?.success) {
+        await announceRestartCancellation(client, activeMatch!);
+      }
       recoveredCount++;
       continue;
     }
@@ -159,5 +236,31 @@ export async function recoverStuckQueues(client: Client): Promise<void> {
 
   if (recoveredCount > 0) {
     logger.info(`Recovered ${recoveredCount} stuck queue(s) on startup.`);
+  }
+}
+
+/**
+ * Tells the players a restart cost them their match.
+ *
+ * cancelMatch releases them, but the queue they came from was emptied when the match
+ * popped, so from their side the match just vanished and the panel shows 0/6. One notice
+ * in the rank queue channel, cleared after a minute. They are deliberately not put back
+ * in the queue: a queue refilled to capacity with nobody there to click never pops,
+ * which is worse than an empty one.
+ */
+async function announceRestartCancellation(client: Client, match: Match): Promise<void> {
+  const channelId = match.queue_channel_id || match.channel_id;
+  const channel = (await client.channels.fetch(channelId).catch(() => null)) as TextChannel | null;
+  if (!channel) return;
+
+  const humans = [...match.blue_team, ...match.orange_team].filter(id => !id.startsWith('test_bot_'));
+  const mentions = humans.map(id => `<@${id}>`).join(' ');
+  const notice = await channel
+    .send({
+      content: `${mentions ? `${mentions} ` : ''}Match #${match.match_id} was cancelled by a bot restart — re-queue to play.`,
+    })
+    .catch(() => null);
+  if (notice) {
+    setTimeout(() => notice.delete().catch(() => null), 60_000);
   }
 }

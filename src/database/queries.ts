@@ -1086,6 +1086,35 @@ export function isRlCredentialInUse(rlName: string, _rlPass: string): boolean {
   return activeRow ? activeRow.count > 0 : false;
 }
 
+/**
+ * Finished matches that may still own Discord channels, newest last.
+ *
+ * The post-match teardown is an in-memory timer, so a restart inside the rematch window
+ * loses it and the channels stay in the server for good. The orphan sweep uses this to
+ * find them. Bounded to matches that finished in the last `withinMs` because every row
+ * returned costs a channel lookup against Discord -- and a match that finished a week ago
+ * has long since had its channels deleted or dealt with by hand.
+ *
+ * completed_at is written by toISOString(), so a string compare against another ISO
+ * string is a correct time compare.
+ */
+export function getRecentlyFinishedMatchesWithChannels(withinMs: number): Match[] {
+  const since = new Date(Date.now() - withinMs).toISOString();
+  const stmt = db.prepare(`
+    SELECT * FROM matches
+    WHERE state IN ('COMPLETED', 'CANCELLED')
+      AND completed_at >= ?
+      AND (
+        NULLIF(text_channel_id, '') IS NOT NULL
+        OR NULLIF(blue_voice_id, '') IS NOT NULL
+        OR NULLIF(orange_voice_id, '') IS NOT NULL
+        OR NULLIF(ready_check_vc_id, '') IS NOT NULL
+      )
+    ORDER BY match_id
+  `);
+  return (stmt.all(since) as any[]).map(parseMatchRow);
+}
+
 // ==================== Match Duration Query ====================
 
 export function getAverageMatchDuration(discordId?: string): number {
