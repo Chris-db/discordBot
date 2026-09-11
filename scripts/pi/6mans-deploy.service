@@ -1,0 +1,10 @@
+[Unit]
+Description=Deploy the 6mans bot from origin/main if it has moved
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=chris
+WorkingDirectory=/home/chris/discordBot
+ExecStart=/home/chris/discordBot/scripts/pi/deploy.sh

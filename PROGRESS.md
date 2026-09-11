@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (auto-delete timing)
+Last updated: 2026-09-11 (GitHub Issues reporter, auto-deploy timer)
 
 ---
 
@@ -23,21 +23,33 @@ Since 2026-09-10 the bot runs on the Raspberry Pi (`pi5.local`, user `chris`) as
 of truth; the Pi pulls it. Windows is for building and testing only — never run the bot
 here while the Pi's copy is up (two processes on one token race every interaction).
 
-**Ship loop:** `npm test` → commit → `git push` (Windows), then on the Pi:
+**Ship loop (since 2026-09-11): merge to `main`, the Pi does the rest.** A systemd timer
+on the Pi (`6mans-deploy.timer`, every 5 min, units + script in `scripts/pi/`) fetches
+`origin/main`; if it moved it fast-forwards, runs `npm ci` if the lockfile changed, runs
+the tests, builds into `dist.new`, swaps it in and restarts `6mans`. A failing test or
+build rolls the source back, leaves the running bot alone, and opens a `deploy-failed`
+issue. Slash commands re-register on every boot, so `npm run register` is never needed.
+
+Manual fallback, on the Pi:
 
 ```
 ssh chris@pi5.local
-cd ~/discordBot
-git pull
-npm ci
-npm run build
-sudo systemctl restart 6mans
-systemctl status 6mans
+cd ~/discordBot && sudo systemctl start 6mans-deploy.service
+journalctl -u 6mans-deploy -n 30 --no-pager
 ```
 
-`npm ci` only matters when `package.json` changed, but it is harmless otherwise.
-`npm run register` is only needed when a slash command is added, renamed or gets new
-options. Read logs with `journalctl -u 6mans -f`.
+Read bot logs with `journalctl -u 6mans -f`.
+
+**Errors and feedback go to GitHub Issues** (`src/services/errorReporter.ts`,
+`feedbackService.ts`). Every `logger.error` becomes one issue labelled `bot-error`
+(fingerprinted; repeats are comments, at most one an hour; a closed-then-back error is a
+fresh issue). `/feedback <message>` files an issue labelled `feedback`. Both need
+`GITHUB_REPO` + `GITHUB_TOKEN` in the Pi's `.env` (fine-grained PAT, this repo only,
+Issues read+write). State lives in `data/error-reports.json` on the Pi. Hard cap of 30
+GitHub calls an hour. CI (`.github/workflows/test.yml`) runs typecheck + tests on every PR.
+
+Local development only: never run the bot on Windows while the Pi's copy is up (two
+processes on one token race every interaction).
 
 Phases 1–5 are **merged to `main` and running**. Migrations 1–4 applied cleanly to the
 real `data/6mans.sqlite` on 2026-08-09 (six players kept their exact MMR on the 3v3
