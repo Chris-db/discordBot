@@ -320,7 +320,7 @@ ping immediately on ready. A dead Pi, hung process, crash loop or dropped gatewa
 the same to the monitor — the pings stop. Off unless `HEARTBEAT_URL` is set; a non-http(s)
 value refuses to boot. Failures log once on change of state, not per tick.
 
-**Chris's setup steps (not done yet — needs an account):**
+**Live since 2026-09-11.** Chris created the Healthchecks.io check, set `HEARTBEAT_URL` on the Pi, and proved it: `systemctl stop` → Late → Down → email alert → `start` → Up. The steps, for a rebuild:
 1. Healthchecks.io (free, 20 checks, has a Discord integration so the alert can land in
    his server) → New Check → period **5 min**, grace **5 min** → copy the ping URL.
 2. On the Pi: add `HEARTBEAT_URL=https://hc-ping.com/<uuid>` to `~/discordBot/.env`,
@@ -339,7 +339,7 @@ whoever has it can fake the bot being up).
 1. **Before the first outside trial:** (a) ~~per-server match numbers~~ — shipped 2026-09-11,
    see above. (b) Pick hosting: Oracle free tier, else Hetzner ~R80/mo; disclose it either
    way. (c) ~~Uptime monitor~~ — bot side shipped 2026-09-11; Chris creates the
-   Healthchecks.io check and sets `HEARTBEAT_URL` on the Pi (steps above).
+   Healthchecks.io check and set `HEARTBEAT_URL` on the Pi — **done and proven 2026-09-11**.
 2. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
 3. Webhooks — recommended **skip** until something actually consumes them.
