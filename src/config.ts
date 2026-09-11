@@ -30,6 +30,12 @@ export interface AppConfig {
   backupRetentionDays: number;
   /** How long each setup vote (mode, captains, teams) stays open before silence decides it. */
   voteTimeoutSeconds: number;
+  /**
+   * Uptime heartbeat: a URL the bot pings while its gateway is connected, for a monitor
+   * that alerts when the pings stop (Healthchecks.io etc). Unset = no heartbeat.
+   */
+  heartbeatUrl?: string;
+  heartbeatIntervalMinutes: number;
 }
 
 const config: AppConfig = {
@@ -48,6 +54,8 @@ const config: AppConfig = {
   backupDir: process.env.BACKUP_DIR || path.join('data', 'backups'),
   backupRetentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '14', 10),
   voteTimeoutSeconds: parseInt(process.env.VOTE_TIMEOUT_SECONDS || '60', 10),
+  heartbeatUrl: process.env.HEARTBEAT_URL || undefined,
+  heartbeatIntervalMinutes: parseInt(process.env.HEARTBEAT_INTERVAL_MINUTES || '5', 10),
 };
 
 export default config;
@@ -72,6 +80,7 @@ export function validateConfig(c: AppConfig = config): string[] {
     ['readyCheckTimeoutSeconds', 'READY_CHECK_TIMEOUT_SECONDS'],
     ['backupRetentionDays', 'BACKUP_RETENTION_DAYS'],
     ['voteTimeoutSeconds', 'VOTE_TIMEOUT_SECONDS'],
+    ['heartbeatIntervalMinutes', 'HEARTBEAT_INTERVAL_MINUTES'],
   ];
   for (const [key, envName] of positive) {
     const value = c[key];
@@ -82,6 +91,11 @@ export function validateConfig(c: AppConfig = config): string[] {
   // Zero is a valid setting here: it means 'no cooldown'.
   if (!Number.isFinite(c.afkCooldownMinutes) || c.afkCooldownMinutes < 0) {
     problems.push(`AFK_COOLDOWN_MINUTES must be a whole number, 0 or more (got "${process.env.AFK_COOLDOWN_MINUTES}").`);
+  }
+  // A mistyped heartbeat URL would fail silently on every tick, and the monitor would
+  // page for a bot that is perfectly fine.
+  if (c.heartbeatUrl !== undefined && !/^https?:\/\/\S+$/.test(c.heartbeatUrl)) {
+    problems.push(`HEARTBEAT_URL must be an http(s) URL (got "${c.heartbeatUrl}").`);
   }
   return problems;
 }

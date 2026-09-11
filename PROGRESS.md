@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (per-server match numbers)
+Last updated: 2026-09-11 (uptime heartbeat)
 
 ---
 
@@ -88,7 +88,7 @@ Everything else worked, but these have never been run against the real API:
   download path is not).
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **299 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **308 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -311,13 +311,35 @@ against a copy of that morning's off-site snapshot: 10 matches, all Chris's serv
 - Tests: `tests/matchNumber.test.ts` (per-guild counting, cancelled numbers not reused,
   guild-scoped lookup, unique index, migration backfill on a rolled-back file).
 
+## Uptime heartbeat (2026-09-11)
+
+The bot has no HTTP surface and the Pi has nothing inbound, so a monitor cannot poll it.
+`src/services/heartbeat.ts` does the other direction: while `client.isReady()` (gateway
+connected) it GETs `HEARTBEAT_URL` every `HEARTBEAT_INTERVAL_MINUTES` (default 5), first
+ping immediately on ready. A dead Pi, hung process, crash loop or dropped gateway all look
+the same to the monitor — the pings stop. Off unless `HEARTBEAT_URL` is set; a non-http(s)
+value refuses to boot. Failures log once on change of state, not per tick.
+
+**Chris's setup steps (not done yet — needs an account):**
+1. Healthchecks.io (free, 20 checks, has a Discord integration so the alert can land in
+   his server) → New Check → period **5 min**, grace **5 min** → copy the ping URL.
+2. On the Pi: add `HEARTBEAT_URL=https://hc-ping.com/<uuid>` to `~/discordBot/.env`,
+   `sudo systemctl restart 6mans`, check `journalctl -u 6mans -n 20` for
+   `Heartbeat: pinging hc-ping.com every 5 min`.
+3. Prove it: `sudo systemctl stop 6mans`, wait ~10 min, expect the alert; `start` again.
+
+UptimeRobot's heartbeat monitor or Better Stack work identically — anything that alerts
+when a ping URL goes quiet. The log only ever prints the host, never the URL (it's a secret:
+whoever has it can fake the bot being up).
+
 ## Next
 
 0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
 0b. `/replay check` has not yet been run against a real Discord upload — first real dispute (or a deliberate test with a file from `DemosEpic`) is the test.
 1. **Before the first outside trial:** (a) ~~per-server match numbers~~ — shipped 2026-09-11,
    see above. (b) Pick hosting: Oracle free tier, else Hetzner ~R80/mo; disclose it either
-   way. (c) Uptime monitor (UptimeRobot).
+   way. (c) ~~Uptime monitor~~ — bot side shipped 2026-09-11; Chris creates the
+   Healthchecks.io check and sets `HEARTBEAT_URL` on the Pi (steps above).
 2. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
 3. Webhooks — recommended **skip** until something actually consumes them.

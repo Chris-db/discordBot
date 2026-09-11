@@ -16,6 +16,7 @@ import {
 } from './services/queueService';
 import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
+import { startHeartbeat } from './services/heartbeat';
 import { withGuildTheme } from './services/themeService';
 import { ensureGuildDefaults } from './services/guildSetup';
 // Registers the bundled fonts before anything can draw a card. The image modules import
@@ -108,6 +109,9 @@ client.once(Events.ClientReady, async readyClient => {
   // is (correctly) not in version control, so this is the only thing standing between a disk
   // failure and losing the season.
   startBackupSchedule();
+
+  // Tell the uptime monitor we are here, and keep telling it while the gateway is up.
+  startHeartbeat(readyClient);
 
   // Checkpoint SQLite WAL every 30 minutes to maintain small WAL file sizes
   setInterval(() => {
