@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (uptime heartbeat)
+Last updated: 2026-09-11 (first bot trial run)
 
 ---
 
@@ -80,15 +80,15 @@ channel names, role colours) is Discord-side and Chris's; the bot's only naming 
 
 Everything else worked, but these have never been run against the real API:
 
-- Reporting by **button vote** (matches #5 and #7 were force-reported via `/match report`).
+- ~~Reporting by **button vote**~~ — worked in the trial run, 2026-09-11.
 - **2v2 and 4v4** in any form — no channel is registered to a size yet.
-- Double or Nothing.
-- Rematch actually starting (the decline path was tested).
+- ~~Double or Nothing.~~ — worked, 2026-09-11.
+- ~~Rematch actually starting~~ — worked, 2026-09-11 (channel rename bug found and fixed).
 - ~~`/replay check` against a real upload~~ — Chris tested it live in an earlier session (with a
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **308 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **311 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -331,6 +331,24 @@ value refuses to boot. Failures log once on change of state, not per tick.
 UptimeRobot's heartbeat monitor or Better Stack work identically — anything that alerts
 when a ping URL goes quiet. The log only ever prints the host, never the URL (it's a secret:
 whoever has it can fake the bot being up).
+
+## First bot trial run (2026-09-11, evening)
+
+Chris ran the untested paths with the test bots. **Button-vote reporting, rematch starting
+and Double or Nothing all worked.** Two findings, fixed on `main`:
+
+- **Rematch left the channels named after game 1.** The card said Match #12 while the
+  channel was still `#match-11` and the VCs `[Match #11]`. `startRematch` now renames the
+  text channel (name + topic) and both VCs to the new number, fire-and-forget so Discord's
+  two-renames-per-ten-minutes limit can never stall a rematch. Tested with a recording
+  fake channel, and with a channel that cannot be renamed.
+- **"PROMOTION ZONE" yellow pill → arrow.** Chris wanted a symbol, not a box. The result
+  and gamble cards now draw a vector arrow (`src/ui/glyphs.ts`) right-aligned under the
+  MMR delta: green up for the promotion zone, red down for the relegation zone.
+  `getPromotionStatus` returns `direction`; `P.zone.promotion` default is now green
+  (`#00e676`, same as a positive delta). Verified by rendering a lobby with players on
+  both sides of Rank B's lines — `scripts/renderAll.ts`'s fixture never triggers a zone,
+  so a byte-diff cannot see this change; look at the card.
 
 ## Next
 

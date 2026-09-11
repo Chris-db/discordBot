@@ -1,6 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
 import { Player } from '../database/queries';
+import { drawArrow } from '../ui/glyphs';
 import { getDivisionTier, getPromotionStatus, getStreakBadge } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
@@ -177,18 +178,9 @@ export async function generateMatchResultImage(
         item.newMmr - item.delta
       );
       if (zone) {
-        const pillW = 140;
-        const pillH = 22;
-        const pillX = startX + cardW - 20 - pillW;
-        const pillY = cardY + 46;
-
-        ctx.fillStyle = zone.color;
-        ctx.fillRect(pillX, pillY, pillW, pillH);
-
-        ctx.textAlign = 'center';
-        ctx.font = `bold 11px ${FONT_STACK}`;
-        ctx.fillStyle = P.black;
-        ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
+        // An arrow under the delta, right-aligned with it: up for the promotion zone,
+        // down for the relegation zone. Replaced a 140px labelled pill at Chris's request.
+        drawArrow(ctx, startX + cardW - 20 - 14, cardY + 45, 14, 20, zone.direction, zone.color);
       }
     }
   };

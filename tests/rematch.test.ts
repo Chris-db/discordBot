@@ -294,6 +294,46 @@ describe('rematch', () => {
       const second = (await startRematch(fakeClient, first.match_id))!;
       expect(second.division).toBe('A');
     });
+
+    it('renames the reused text channel and team VCs to the new match number', async () => {
+      // Chris's find: the rematch card said #12 while #match-11 and "[Match #11]" stayed.
+      const edits: Record<string, unknown>[] = [];
+      const vcNames: Record<string, string> = {};
+      const textChan = {
+        id: 'match_chan',
+        name: 'match-1',
+        edit: async (data: Record<string, unknown>) => void edits.push(data),
+        send: async () => ({ id: 'msg_1' }),
+      };
+      const vc = (id: string) => ({ id, isVoiceBased: () => true, setName: async (n: string) => void (vcNames[id] = n) });
+      const client = {
+        ...fakeClient,
+        channels: {
+          fetch: async (id: string) => (id === 'match_chan' ? textChan : id.startsWith('vc_') ? vc(id) : null),
+        },
+      } as any;
+
+      const first = makeCompletedMatch({ blue_voice_id: 'vc_blue', orange_voice_id: 'vc_orange' });
+      const second = (await startRematch(client, first.match_id))!;
+      // The renames are fire-and-forget; let their promises settle.
+      await new Promise(r => setTimeout(r, 0));
+
+      const n = second.match_number;
+      expect(n).toBe(first.match_number + 1);
+      expect(edits).toEqual([{ name: `match-${n}`, topic: `Rocket League 6mans | Match #${n} | Private Lobby` }]);
+      expect(vcNames).toEqual({ vc_blue: `🔵 Team Blue [Match #${n}]`, vc_orange: `🟠 Team Orange [Match #${n}]` });
+    });
+
+    it('survives a channel object that cannot be renamed', async () => {
+      const client = {
+        ...fakeClient,
+        channels: { fetch: async () => ({ id: 'match_chan', name: 'match-1', send: async () => ({ id: 'm' }) }) },
+      } as any;
+      const first = makeCompletedMatch({ blue_voice_id: 'vc_blue' });
+      const second = await startRematch(client, first.match_id);
+      await new Promise(r => setTimeout(r, 0));
+      expect(second?.state).toBe('IN_PROGRESS');
+    });
   });
 
   describe('summariseSeries', () => {

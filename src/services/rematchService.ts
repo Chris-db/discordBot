@@ -185,6 +185,12 @@ export async function startRematch(
     return next;
   }
 
+  // The rematch reuses game 1's channels, so their names still carry game 1's number
+  // while every card says the new one. Renamed in the background: Discord allows two
+  // renames per channel per ten minutes, and a series that gets to game 4 inside that
+  // window must not have its rematch stall behind the rate limit.
+  renameMatchChannels(client, channel, next);
+
   const blueTeam = getPlayersByIds(next.guild_id, next.team_size, next.blue_team);
   const orangeTeam = getPlayersByIds(next.guild_id, next.team_size, next.orange_team);
 
@@ -221,6 +227,34 @@ export async function startRematch(
     `Rematch: match id ${next.match_id} is game ${seriesGame} of series ${seriesId} (from match id ${previousMatchId}).`
   );
   return next;
+}
+
+/**
+ * Points the reused text channel and team VCs at the new match number. Fire-and-forget:
+ * a failed or rate-limited rename leaves a stale name, which is cosmetic; awaiting it
+ * could hold up the rematch for minutes.
+ */
+function renameMatchChannels(client: Client, textChannel: TextChannel, match: Match): void {
+  const n = match.match_number;
+  // Started inside a promise so that a synchronous throw (a partial channel object with
+  // no edit(), as in tests) is a caught rejection rather than a crash in startRematch.
+  Promise.resolve()
+    .then(() => textChannel.edit({ name: `match-${n}`, topic: `Rocket League 6mans | Match #${n} | Private Lobby` }))
+    .catch(err => logger.warn(`Could not rename ${textChannel.name} for match id ${match.match_id}:`, err));
+
+  const vcs: Array<[string | undefined, string]> = [
+    [match.blue_voice_id, `🔵 Team Blue [Match #${n}]`],
+    [match.orange_voice_id, `🟠 Team Orange [Match #${n}]`],
+  ];
+  for (const [id, name] of vcs) {
+    if (!id) continue;
+    Promise.resolve()
+      .then(() => client.channels.fetch(id))
+      .then(async vc => {
+        if (vc?.isVoiceBased()) await vc.setName(name);
+      })
+      .catch(err => logger.warn(`Could not rename VC ${id} for match id ${match.match_id}:`, err));
+  }
 }
 
 /** "Series so far: Blue 2 — 1 Orange" across every completed game with this series id. */

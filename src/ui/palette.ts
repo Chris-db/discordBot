@@ -121,8 +121,8 @@ export const DEFAULT_PALETTE: Palette = {
     unstoppable: '#ff1744',
   },
   zone: {
-    promotion: '#ffd700',
-    relegation: '#ff5252',
+    promotion: '#00e676', // The arrow up. Green, same as a positive delta.
+    relegation: '#ff5252', // The arrow down.
   },
 
   queueBg: { top: '#0b0f19', bottom: '#111827' },

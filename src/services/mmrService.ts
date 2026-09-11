@@ -95,13 +95,24 @@ export function getDivisionTier(division: string): RankTier {
  * season reset, so crossing 1200 mid-season promotes nobody. This reports standing
  * against the line instead, which keeps the moment without lying about it.
  */
+/**
+ * Standing against a division's line. The cards draw `direction` as an arrow in
+ * `color` (Chris: "a symbol, not a yellow box"); `label` is for text surfaces.
+ */
+export interface ZoneStatus {
+  label: string;
+  emoji: string;
+  direction: 'up' | 'down';
+  color: string;
+}
+
 export function getPromotionStatus(
   guildId: string,
   teamSize: number,
   division: string,
   mmr: number,
   previousMmr?: number
-): { label: string; emoji: string; color: string } | null {
+): ZoneStatus | null {
   const config = getDivision(guildId, teamSize, division);
   if (!config) return null;
 
@@ -116,13 +127,13 @@ export function getPromotionStatus(
     // Crossing the line this match is the moment worth calling out; sitting above it
     // already is just a status.
     return wasAbovePromotion || previousMmr === undefined
-      ? { label: 'PROMOTION ZONE', emoji: '⬆️', color: P.zone.promotion }
-      : { label: 'ENTERED PROMO ZONE', emoji: '⬆️', color: P.zone.promotion };
+      ? { label: 'PROMOTION ZONE', emoji: '⬆️', direction: 'up', color: P.zone.promotion }
+      : { label: 'ENTERED PROMO ZONE', emoji: '⬆️', direction: 'up', color: P.zone.promotion };
   }
   if (config.relegate_below !== null && mmr < config.relegate_below) {
     return wasBelowRelegation || previousMmr === undefined
-      ? { label: 'RELEGATION ZONE', emoji: '⬇️', color: P.zone.relegation }
-      : { label: 'ENTERED DROP ZONE', emoji: '⬇️', color: P.zone.relegation };
+      ? { label: 'RELEGATION ZONE', emoji: '⬇️', direction: 'down', color: P.zone.relegation }
+      : { label: 'ENTERED DROP ZONE', emoji: '⬇️', direction: 'down', color: P.zone.relegation };
   }
   return null;
 }

@@ -115,3 +115,13 @@ describe('promotion zone transitions', () => {
     expect(getPromotionStatus(G, 3, 'Z', 1500, 1400)).toBeNull();
   });
 });
+
+describe('zone arrow direction', () => {
+  beforeEach(() => seedGuildDefaults(db, G));
+  it('points up in the promotion zone and down in the relegation zone', () => {
+    expect(getPromotionStatus(G, 3, 'B', 1405, 1390)!.direction).toBe('up');
+    expect(getPromotionStatus(G, 3, 'B', 1450, 1420)!.direction).toBe('up');
+    expect(getPromotionStatus(G, 3, 'B', 1190, 1210)!.direction).toBe('down');
+    expect(getPromotionStatus(G, 3, 'B', 1150, 1180)!.direction).toBe('down');
+  });
+});
