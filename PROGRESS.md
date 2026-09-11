@@ -66,7 +66,7 @@ Everything else worked, but these have never been run against the real API:
   download path is not).
 - A second division channel (Rank B) end to end.
 
-Tests: **279 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **274 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -129,9 +129,7 @@ items. All on `main`; nothing here needs `npm run register`.
   state, which it had drifted from.
 - `ephemeral: true` → `flags: MessageFlags.Ephemeral` across all 81 sites. discord.js
   logs a deprecation warning for the boolean.
-- **Queue wait line.** The panel message now says `⏳ First in queue joined 22 minutes
-  ago · 3 more to pop` as a live `<t:…:R>` — the image is a snapshot, so the text is
-  where a clock has to live. Empty and full queues say nothing.
+- ~~Queue wait line~~ — shipped, then **removed on 2026-09-11 at Chris's request** (redundant next to the 3/6 in the image). The panel message has no text again.
 - Draft card subtext shows the pick order (`🔵 🟠🟠 · last player → 🔵`); lobby name and
   password sit on separate lines so a copy grabs one.
 

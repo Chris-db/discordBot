@@ -43,25 +43,6 @@ const panelMoveTimers = new Map<string, NodeJS.Timeout>();
 const activePanelRefreshes = new Map<string, Promise<void>>();
 
 /**
- * The one line of text above the panel image: how long the queue has been sitting.
- *
- * The image is a snapshot -- it only re-renders on a join, a leave or a chat message --
- * so a wait time drawn into it would be wrong within a minute. A `<t:…:R>` in the
- * message content is rendered by every viewer's client and ticks by itself, which is
- * what makes "is this queue dead or about to pop?" answerable at a glance. Empty and
- * full queues say nothing: there is no wait to report, and a full one is already popping.
- */
-export function queuePanelContent(queue: ActiveQueue): string {
-  const capacity = queue.team_size * 2;
-  if (queue.player_ids.length === 0 || queue.player_ids.length >= capacity) return '';
-
-  const joinTimes = queue.player_join_times ?? {};
-  const earliest = Math.min(...queue.player_ids.map(id => joinTimes[id] ?? Date.now()));
-  const missing = capacity - queue.player_ids.length;
-  return `⏳ First in queue joined <t:${Math.floor(earliest / 1000)}:R> · **${missing}** more to pop`;
-}
-
-/**
  * A join or leave, decided. `settled` is the follow-up work -- panel refresh, and on a
  * full queue the ready check -- already running; callers answer the click, then await it.
  */
@@ -159,7 +140,6 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     const imageBuffer = await generateQueuePanelImage(client, players, queue.team_size);
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
     const components = [getQueuePanelButtons()];
-    const content = queuePanelContent(queue);
 
     // Every call to Discord is a round trip -- from here about 200ms each -- and this
     // refresh used to make three before it had changed anything: fetch the panel, fetch
@@ -170,7 +150,7 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     if (queue.message_id) {
       if (channel.lastMessageId === queue.message_id) {
         const edited = await channel.messages
-          .edit(queue.message_id, { content, embeds: [], components, files: [attachment], attachments: [] })
+          .edit(queue.message_id, { content: null, embeds: [], components, files: [attachment], attachments: [] })
           .catch(() => null);
         editedExisting = edited !== null;
       } else {
@@ -180,7 +160,6 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
 
     if (!editedExisting) {
       const newMsg = await channel.send({
-        content: content || undefined,
         components,
         files: [attachment],
       });
