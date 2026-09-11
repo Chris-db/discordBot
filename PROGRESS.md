@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (policy calls shipped)
+Last updated: 2026-09-11 (replay reader, division gate)
 
 ---
 
@@ -62,8 +62,11 @@ Everything else worked, but these have never been run against the real API:
 - **2v2 and 4v4** in any form — no channel is registered to a size yet.
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
+- `/replay check` against a real upload (parser verified on 260 local files, the Discord
+  download path is not).
+- A second division channel (Rank B) end to end.
 
-Tests: **266 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **279 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -159,6 +162,43 @@ when the channel was registered at 2v2), so their only ladder row is the 2v2 one
 `/leaderboard` defaults to 3v3; `/leaderboard size:2v2` shows them. A player gets a row on
 a ladder the first time they join a queue of that size. If Chris wants one ladder across
 sizes, that is a design reversal of the 2026-08-08 decision, not a fix.
+
+## Replay reader + multi-channel divisions (2026-09-11)
+
+Chris confirmed the **one division per player per size** model is what he wants (the
+other 6mans server let people queue in several divisions and he disliked it). What
+landed to make multi-channel divisions real and to give admins a dispute tool:
+
+- **Join is gated by division.** A registered channel refuses a player whose stored
+  division differs from the channel's, with a pointer to their own queue. `/queue add`
+  by an admin still overrides. Unregistered channels are not gated. Setup for a second
+  division: create the channel, `/queue panel division:B` in it, `/division place` the
+  players. Discord role permissions on the channel are still worth setting (they hide the
+  channel); the bot check is the backstop.
+- **`/replay check file1…file5 [match_id]`** (admin, works in any channel — no admin
+  channel registration needed). Downloads the `.replay` attachments, parses the header
+  only (`src/utils/replayHeader.ts`, ~200 lines, no library) and posts one scoreboard per
+  game, the series tally, and warnings (duplicate file, not a private match, wrong size,
+  played before the match started). It never changes a result; `/match report` does.
+  **Requires `npm run register`.**
+- `/match list` shows state, ladder, the match's own channel and start time, and stays
+  up for two minutes.
+
+**Replay format facts, verified against all 260 replays on Chris's PC:**
+- The header (first ~5–20KB) carries `Team0Score`, `Team1Score`, `WinningTeam`,
+  `MatchStartEpoch`, `MatchType`, `Date`, and `PlayerStats` (name, team, platform id,
+  goals/assists/saves/score). The network stream is never read.
+- A property at its default is **omitted** — a missing `Team0Score` means 0.
+- `WinningTeam` only exists in newer replays. The score decides; `WinningTeam` only
+  settles a level score (a forfeit), and its presence with value 0 means Blue.
+- `ByteProperty` with enum name `None` (PSN id padding fields `Term`/`Dummy`) is
+  followed by **one raw byte**, not a string. Missing this desyncs 90% of files.
+- Epic ids live in `PlayerID.EpicAccountId`; Steam/PSN in `OnlineID`. Old files have
+  neither for some players.
+- Rocket League has **no auto-save for replays** and no match-result log. `Launch.log`
+  does write `ScriptLog: Match Ended` plus the private server address the moment a game
+  ends — a clean trigger for a watcher — but no score. Any auto-report design needs a
+  program on a player's PC; parked, see the conversation of 2026-09-11.
 
 ## Next
 

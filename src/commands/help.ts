@@ -61,6 +61,7 @@ export const helpCommand = {
             '`/match report <id> <winner>` — Force report a match winner\n' +
             '`/match cancel <id>` — Force cancel an active match\n' +
             '`/match cleanup [id]` — Clean up temporary match channels\n' +
+            '`/replay check <file…> [match_id]` — Read the score out of saved .replay files to settle a dispute\n' +
             '`/set-mmr <user> <mmr> [size]` — Adjust a player\'s ELO rating\n' +
             '`/ban add <user> <duration> [reason]` — Ban a player from queuing\n' +
             '`/ban remove <user>` — Remove an active queue ban\n' +
