@@ -21,6 +21,7 @@ import {
   getAllQueues,
   getDivisionByChannel,
   getDivision,
+  updateDivision,
   ActiveQueue,
 } from '../database/queries';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
@@ -82,6 +83,32 @@ export function channelTeamSize(guildId: string, channelId: string): number {
  * life. Re-resolving mid-flow would let an admin repointing a channel change the size of a
  * lobby that is already mid ready-check.
  */
+/**
+ * Makes a channel *the* queue channel for one (division, size) ladder and posts its panel.
+ *
+ * This is the one place a channel gets registered, shared by `/queue panel` and `/setup`.
+ * The division row is the single source of truth for a channel's size and ladder, and the
+ * queue row caches the size, so an existing (empty) queue row has to be told too. Callers
+ * are responsible for refusing a size change on a queue that is popped or has players.
+ */
+export async function registerQueueChannel(
+  client: Client,
+  guildId: string,
+  channelId: string,
+  teamSize: number,
+  division: string
+): Promise<ActiveQueue> {
+  updateDivision(guildId, teamSize, division, { queue_channel_id: channelId });
+  const existing = getQueue(channelId);
+  if (existing && existing.team_size !== teamSize) {
+    existing.team_size = teamSize;
+    saveQueue(existing);
+  }
+  getOrInitQueue(channelId, guildId);
+  await refreshQueuePanel(client, channelId);
+  return getQueue(channelId)!;
+}
+
 export function getOrInitQueue(channelId: string, guildId: string): ActiveQueue {
   let queue = getQueue(channelId);
   if (!queue) {

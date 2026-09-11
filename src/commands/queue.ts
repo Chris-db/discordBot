@@ -6,14 +6,13 @@ import {
   MessageFlags,
 } from 'discord.js';
 import {
-  getOrInitQueue,
   refreshQueuePanel,
   startVotingPhase,
   startReadyCheckPhase,
   fillQueueWithBots,
   forcePopQueue,
 } from '../services/queueService';
-import { resolveTeamSize } from '../services/queuePanel';
+import { resolveTeamSize, registerQueueChannel } from '../services/queuePanel';
 import {
   getQueue,
   saveQueue,
@@ -22,7 +21,6 @@ import {
   getDivisionByChannel,
   getMatchByTextChannel,
   getLowestDivision,
-  updateDivision,
   Player,
 } from '../database/queries';
 import { getQueuePanelButtons } from '../ui/buttons';
@@ -164,17 +162,7 @@ export const queueCommand = {
         }
       }
 
-      updateDivision(guildId, size, division, { queue_channel_id: channelId });
-
-      // The queue row caches the size, so an existing empty row has to be told.
-      if (existing) {
-        existing.team_size = size;
-        saveQueue(existing);
-      }
-
-      getOrInitQueue(channelId, guildId);
-      const queue = getQueue(channelId)!;
-      await refreshQueuePanel(interaction.client, channelId);
+      const queue = await registerQueueChannel(interaction.client, guildId, channelId, size, division);
 
       return interaction.editReply({
         content: `✅ **${formatTeamSize(queue.team_size)}** Queue Panel deployed — Rank ${division}.`,

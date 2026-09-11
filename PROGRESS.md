@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (GitHub Issues reporter, auto-deploy timer)
+Last updated: 2026-09-11 (/setup command)
 
 ---
 
@@ -100,7 +100,7 @@ Everything else worked, but these have never been run against the real API:
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **317 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **351 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -435,15 +435,25 @@ player would keep the stale name on the sizes they had not played since.
 Setup for a new size: `/queue panel size:4v4 division:A` in the channel. Most read
 commands take an optional `size:`, defaulting to 3v3.
 
-## Setup still outstanding
+## `/setup` — one-command onboarding (2026-09-11, late)
 
-**No queue channel is registered to a division**, so `guild_divisions.queue_channel_id`
-is empty for all fifteen rows and every match stamps `division = NULL`. Everything
-defaults to 3v3 and plays fine, but rank divisions, promotion/relegation and
-per-division leaderboards stay inert until someone runs `/queue panel division:C` (or
-`/division configure`) in the queue channel.
+`src/services/setupService.ts` + `src/commands/setup.ts`. For a new server: per chosen
+division, find-or-create a category named after it (`Rank C`), a text channel
+`rank-c-3v3` inside it, register it as the queue channel and post the panel (via the new
+shared `registerQueueChannel` in `queuePanel.ts`, which `/queue panel` now uses too);
+optionally a role per division stored on `guild_divisions.role_id` with the category
+locked to that role; optionally the public `#active-matches` feed. Presets: `one` (C only
+— everyone together, default), `three` (C/B/A), `all`. Idempotent: everything is looked
+up by name or by the already-registered channel id first, so a re-run repairs gaps and
+creates nothing that exists. Gated on Manage Server; checks the bot's own permissions
+first and names the missing ones. `tests/setup.test.ts` (fake guild records creates).
 
-A 2v2 or 4v4 channel only exists once someone runs `/queue panel size:`.
+**Not yet run against a real Discord server** — the throwaway test server from the
+second-guild test is the place to try it: `/setup divisions:three roles:true`.
+
+Chris's own server was set up by hand before this existed (all five 3v3 divisions, see
+"Live setup"); `/setup` there would find everything by name except the queue channels,
+which it keeps because they are already registered. No need to run it.
 
 ## Where `feature_plan1.md` is wrong
 

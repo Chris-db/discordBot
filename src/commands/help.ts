@@ -53,6 +53,7 @@ export const helpCommand = {
         {
           name: '🛠️ ADMIN / MOD COMMANDS',
           value:
+            '`/setup [divisions] [size] [roles] [feed]` — Build the rank categories, queue channels and panels in one go (safe to re-run)\n' +
             '`/queue panel [size] [division]` — Deploy the Queue Panel and set this channel\'s size\n' +
             '`/queue add <user>` — Manually add a player to the queue\n' +
             '`/queue remove <user>` — Manually remove a player from the queue\n' +

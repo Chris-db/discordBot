@@ -14,6 +14,7 @@ import { divisionCommand } from '../commands/division';
 import { replayCommand } from '../commands/replay';
 import { themeCommand } from '../commands/theme';
 import { feedbackCommand } from '../commands/feedback';
+import { setupCommand } from '../commands/setup';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -31,6 +32,7 @@ export const commands = [
   replayCommand,
   themeCommand,
   feedbackCommand,
+  setupCommand,
 ];
 
 /**

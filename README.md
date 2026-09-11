@@ -11,6 +11,20 @@ This bot solves the UI/UX friction and common complaints of legacy bots like **N
 
 ---
 
+## 👋 For server admins (the bot is already running)
+
+If someone is hosting the bot for you, setup is three steps:
+
+1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles* (only if you want rank roles), *View Channels*, *Send Messages*, *Attach Files*, *Move Members*.
+2. Run **`/setup`** in any channel. Pick how many rank divisions you want:
+   - `One ladder` — everyone queues together. Right for most servers.
+   - `Three` (C/B/A) or `All five` (C/B/A/X/S) — separate ladders, players are placed by an admin with `/division place`.
+   Add `roles:true` if you want each rank category visible only to its rank role. `/setup` is safe to run again — it only adds what is missing. Run it once per team size (`size:2v2`, `size:4v4`) if you want more than 3v3.
+3. Players click **Join Queue** on the panel in their rank channel. That is it.
+
+Bug or idea? Anyone can type **`/feedback <message>`** — it goes straight to the maintainer.
+
+---
 ## 🛠️ Quick Setup Guide
 
 ### 1. Create a Discord Bot Application
@@ -63,6 +77,8 @@ npm start
 
 | Command | Permission | Description |
 | :--- | :--- | :--- |
+| `/setup` | Admin | Creates rank categories, queue channels, panels and (optionally) roles in one go; safe to re-run |
+| `/feedback <message>` | Everyone | Sends a bug report or suggestion to the maintainer (filed as a GitHub issue) |
 | `/queue panel` | Admin / Mod | Spawns the persistent interactive queue panel with Join/Leave buttons |
 | `/queue status` | Everyone | Displays current queue status and players waiting |
 | `/queue add <user>` | Admin / Mod | Manually adds a player to the current queue |
