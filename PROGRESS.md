@@ -448,8 +448,9 @@ up by name or by the already-registered channel id first, so a re-run repairs ga
 creates nothing that exists. Gated on Manage Server; checks the bot's own permissions
 first and names the missing ones. `tests/setup.test.ts` (fake guild records creates).
 
-**Not yet run against a real Discord server** — the throwaway test server from the
-second-guild test is the place to try it: `/setup divisions:three roles:true`.
+**Run on the throwaway test server 2026-09-11 (`divisions:three roles:true`), twice: built
+correctly, second run created nothing.** Chris asked for highest rank on top and
+`━━━━━  Rank S  ━━━━━` category names (6547fb7); confirmed right after a re-run.
 
 Chris's own server was set up by hand before this existed (all five 3v3 divisions, see
 "Live setup"); `/setup` there would find everything by name except the queue channels,
