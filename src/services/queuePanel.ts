@@ -252,7 +252,7 @@ export async function handleJoinQueue(
     } else {
       return {
         success: false,
-        message: `You are currently in active Match #${activeMatch.match_id}! Please finish or report your match first.`,
+        message: `You are currently in active Match #${activeMatch.match_number}! Please finish or report your match first.`,
       };
     }
   }
@@ -408,7 +408,7 @@ export async function handleLeaveQueue(
   if (activeMatch) {
     return {
       success: false,
-      message: `You cannot leave the queue while you are in active Match #${activeMatch.match_id} (Ready Check/Voting/Match)!`,
+      message: `You cannot leave the queue while you are in active Match #${activeMatch.match_number} (Ready Check/Voting/Match)!`,
     };
   }
 
@@ -567,7 +567,7 @@ export async function forcePopQueue(
   const { textChannelId } = await createMatchChannels(
     client,
     guildId,
-    match.match_id,
+    match,
     queue.player_ids,
     channelId
   );

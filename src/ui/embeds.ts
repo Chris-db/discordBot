@@ -68,7 +68,8 @@ export function buildTeamsVoteEmbed(
  * (clickable). The report tally is appended only once someone has actually reported.
  */
 export function buildActiveMatchEmbed(
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   _blueTeam: Player[],
   _orangeTeam: Player[],
   rlName: string,
@@ -106,7 +107,7 @@ export function buildActiveMatchEmbed(
   }
 
   return new EmbedBuilder()
-    .setTitle(`Match #${matchId}`)
+    .setTitle(`Match #${matchNumber}`)
     .setColor(0x00b0ff)
     .setDescription(lines.join('\n'));
 }
@@ -117,20 +118,21 @@ export function buildActiveMatchEmbed(
  * commentary about what a match is.
  */
 export function buildPublicFeedCardEmbed(
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
   bluePlayers: Player[],
   orangePlayers: Player[],
   winner?: 'BLUE' | 'ORANGE'
 ): EmbedBuilder {
-  let title = `Match #${matchId} — Live`;
+  let title = `Match #${matchNumber} — Live`;
   let color = RL_COLORS.GREEN;
 
   if (status === 'COMPLETED') {
-    title = `Match #${matchId} — ${winner === 'BLUE' ? '🔵 Blue' : '🟠 Orange'} win`;
+    title = `Match #${matchNumber} — ${winner === 'BLUE' ? '🔵 Blue' : '🟠 Orange'} win`;
     color = winner === 'BLUE' ? RL_COLORS.BLUE : RL_COLORS.ORANGE;
   } else if (status === 'CANCELLED') {
-    title = `Match #${matchId} — Cancelled`;
+    title = `Match #${matchNumber} — Cancelled`;
     color = RL_COLORS.RED;
   }
 
@@ -148,7 +150,8 @@ export function buildPublicFeedCardEmbed(
  * to a 50/50 on their own MMR -- but two lines is enough for that.
  */
 export function buildGambleConsensusEmbed(
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   blueTeam: Player[],
   orangeTeam: Player[],
   agreedIds: string[],
@@ -163,7 +166,7 @@ export function buildGambleConsensusEmbed(
     players.map(p => `${agreedIds.includes(p.discord_id) ? '✅' : '⏳'} ${p.username}`).join('\n');
 
   return new EmbedBuilder()
-    .setTitle(`Double or Nothing — Match #${matchId}`)
+    .setTitle(`Double or Nothing — Match #${matchNumber}`)
     .setColor(RL_COLORS.GOLD)
     .setDescription(
       `A 50/50 spin. Losers win the wheel → the result flips. Winners win it → MMR is doubled.\n` +
@@ -180,7 +183,8 @@ export function buildGambleConsensusEmbed(
  */
 export function buildGambleSpinningEmbed(
   step: 1 | 2,
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   _rosterSize: number
 ): EmbedBuilder {
   const ticker =
@@ -189,7 +193,7 @@ export function buildGambleSpinningEmbed(
       : '🟠 — 🔵 — ❓';
 
   return new EmbedBuilder()
-    .setTitle(`Spinning the wheel — Match #${matchId}`)
+    .setTitle(`Spinning the wheel — Match #${matchNumber}`)
     .setColor(RL_COLORS.GOLD)
     .setDescription(ticker);
 }

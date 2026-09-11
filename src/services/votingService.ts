@@ -167,7 +167,7 @@ export async function startVotingPhase(
     const res = await createMatchChannels(
       client,
       guildId,
-      match.match_id,
+      match,
       queue.player_ids,
       channelId
     );

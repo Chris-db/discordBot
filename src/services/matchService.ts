@@ -96,14 +96,14 @@ export async function startNewMatch(
     // 3. Send private Lobby credentials card
     const vsBuffer = await generateMatchVsImage(
       client,
-      updated.match_id,
+      updated.match_number,
       blueTeam,
       orangeTeam
     );
     const attachment = new AttachmentBuilder(vsBuffer, { name: 'match_vs.png' });
 
     const embed = buildActiveMatchEmbed(
-      updated.match_id,
+      updated.match_number,
       blueTeam,
       orangeTeam,
       rlName,
@@ -130,7 +130,7 @@ export async function startNewMatch(
     // 4. Broadcast read-only card to public #active-matches feed
     await broadcastMatchToFeed(client, updated.match_id);
 
-    logger.info(`Started 3-layer Match #${updated.match_id} in channel #${channel.name}`);
+    logger.info(`Started 3-layer match id ${updated.match_id} in channel #${channel.name}`);
     return;
   }
 
@@ -159,12 +159,12 @@ export async function startNewMatch(
     orange_voice_id: orangeVoiceId,
   });
 
-  // Rename voice channels with real match_id
+  // Rename voice channels with the real match number
   if (guild && blueVoiceId && orangeVoiceId) {
     const blueVc = await guild.channels.fetch(blueVoiceId).catch(() => null);
     const orangeVc = await guild.channels.fetch(orangeVoiceId).catch(() => null);
-    await blueVc?.setName(`🔵 Team Blue [Match #${match.match_id}]`).catch(() => null);
-    await orangeVc?.setName(`🟠 Team Orange [Match #${match.match_id}]`).catch(() => null);
+    await blueVc?.setName(`🔵 Team Blue [Match #${match.match_number}]`).catch(() => null);
+    await orangeVc?.setName(`🟠 Team Orange [Match #${match.match_number}]`).catch(() => null);
 
     // Try to auto-move players who are in voice
     await tryMovePlayersToVoice(
@@ -178,14 +178,14 @@ export async function startNewMatch(
 
   const vsBuffer = await generateMatchVsImage(
     client,
-    match.match_id,
+    match.match_number,
     blueTeam,
     orangeTeam
   );
   const attachment = new AttachmentBuilder(vsBuffer, { name: 'match_vs.png' });
 
   const embed = buildActiveMatchEmbed(
-    match.match_id,
+    match.match_number,
     blueTeam,
     orangeTeam,
     rlName,
@@ -206,7 +206,7 @@ export async function startNewMatch(
   });
 
   updateMatch(match.match_id, { message_id: matchMsg.id });
-  logger.info(`Started Match #${match.match_id} in channel ${channelId}`);
+  logger.info(`Started match id ${match.match_id} in channel ${channelId}`);
 }
 
 /**
@@ -331,7 +331,7 @@ async function noticeSplitReport(client: Client, match: Match, required: number)
   if (feed) {
     await feed
       .send({
-        content: `⚠️ Match #${match.match_id} has a split report (${tally}) and needs an admin: \`/match report match_id:${match.match_id}\``,
+        content: `⚠️ Match #${match.match_number} has a split report (${tally}) and needs an admin: \`/match report match:${match.match_number}\``,
       })
       .catch(() => null);
   }
@@ -448,7 +448,7 @@ export async function completeMatch(
   if (channel) {
     const imageBuffer = await generateMatchResultImage(
       client,
-      matchId,
+      match.match_number,
       winner,
       blueResults,
       orangeResults,
@@ -490,7 +490,7 @@ export async function completeMatch(
     }
   }
 
-  logger.info(`Completed Match #${matchId}. Winner: ${winner}`);
+  logger.info(`Completed match id ${matchId}. Winner: ${winner}`);
 }
 
 /**
@@ -513,7 +513,7 @@ export async function cancelMatch(
     }
     return {
       success: false,
-      message: `Match #${matchId} is already ${match.state.toLowerCase()}! Lingering channels are being deleted.`,
+      message: `Match #${match.match_number} is already ${match.state.toLowerCase()}! Lingering channels are being deleted.`,
     };
   }
 
@@ -547,7 +547,7 @@ export async function cancelMatch(
   const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
   if (channel) {
     await channel.send({
-      content: `❌ Match #${matchId} cancelled${
+      content: `❌ Match #${match.match_number} cancelled${
         cancelerTag ? ` by ${cancelerTag}` : ''
       }. Channels close in 10s.`,
     });
@@ -569,8 +569,8 @@ export async function cancelMatch(
     }
   }
 
-  logger.info(`Cancelled Match #${matchId}`);
-  return { success: true, message: `Match #${matchId} cancelled successfully.` };
+  logger.info(`Cancelled match id ${matchId}`);
+  return { success: true, message: `Match #${match.match_number} cancelled successfully.` };
 }
 
 /**
@@ -583,11 +583,11 @@ export async function forceReportMatch(
 ): Promise<{ success: boolean; message: string }> {
   const match = getMatch(matchId);
   if (!match || match.state !== 'IN_PROGRESS') {
-    return { success: false, message: `Match #${matchId} is not currently active.` };
+    return { success: false, message: `Match #${match?.match_number ?? matchId} is not currently active.` };
   }
 
   await completeMatch(client, matchId, winner);
-  return { success: true, message: `Match #${matchId} force-completed. Winner: **Team ${winner}**` };
+  return { success: true, message: `Match #${match.match_number} force-completed. Winner: **Team ${winner}**` };
 }
 
 /**
@@ -609,7 +609,7 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
     const orangeTeam = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildActiveMatchEmbed(
-      matchId,
+      match.match_number,
       blueTeam,
       orangeTeam,
       match.rl_name,
@@ -627,6 +627,6 @@ async function updateActiveMatchEmbed(client: Client, matchId: number): Promise<
 
     await msg.edit({ embeds: [embed] });
   } catch (error) {
-    logger.warn(`Could not update active match embed for Match #${matchId}:`, error);
+    logger.warn(`Could not update active match embed for match id ${matchId}:`, error);
   }
 }

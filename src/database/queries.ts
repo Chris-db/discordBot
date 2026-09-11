@@ -110,7 +110,10 @@ export interface ActiveQueue {
 }
 
 export interface Match {
+  /** Database key, one sequence across every server. Never shown to a human. */
   match_id: number;
+  /** Per-server number counting from 1 -- the "N" in #match-N and "Match #N". */
+  match_number: number;
   guild_id: string;
   channel_id: string;
   /** Players per team, and therefore which ladder the result counts towards. */
@@ -738,12 +741,12 @@ export function createMatch(data: {
 }): Match {
   const stmt = db.prepare(`
     INSERT INTO matches (
-      guild_id, channel_id, team_size, state, blue_team, orange_team, rl_name, rl_pass,
+      guild_id, match_number, channel_id, team_size, state, blue_team, orange_team, rl_name, rl_pass,
       blue_voice_id, orange_voice_id, message_id, text_channel_id, queue_channel_id,
       feed_channel_id, feed_message_id, winner, report_status, gamble_status, started_at,
       series_id, series_game, division, season_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', '{}', '{"state":"NONE","agreedPlayers":[]}', ?, ?, ?, ?, ?)
   `);
   const defaultStartedAt = data.started_at !== undefined ? data.started_at : ((data.state || 'IN_PROGRESS') === 'IN_PROGRESS' ? new Date().toISOString() : null);
 
@@ -753,30 +756,42 @@ export function createMatch(data: {
   const division =
     data.division || getDivisionByChannel(data.guild_id, data.channel_id)?.division || null;
 
-  const res = stmt.run(
-    data.guild_id,
-    data.channel_id,
-    // Coalesced rather than trusted: an undefined here binds as NULL, and a NULL team_size
-    // would silently vanish from every size-filtered query.
-    data.team_size ?? DEFAULT_TEAM_SIZE,
-    data.state || 'IN_PROGRESS',
-    JSON.stringify(data.blue_team),
-    JSON.stringify(data.orange_team),
-    data.rl_name || '',
-    data.rl_pass || '',
-    data.blue_voice_id || null,
-    data.orange_voice_id || null,
-    data.message_id || null,
-    data.text_channel_id || null,
-    data.queue_channel_id || null,
-    data.feed_channel_id || null,
-    data.feed_message_id || null,
-    defaultStartedAt,
-    data.series_id || null,
-    data.series_game ?? null,
-    division,
-    season?.season_id ?? null
-  );
+  // Reading the next number and inserting happen in one transaction so two pops in the
+  // same guild cannot both read the same MAX. Inside a caller's transaction this becomes
+  // a savepoint, which is still atomic.
+  const insertNumbered = db.transaction(() => {
+    const next = (
+      db
+        .prepare('SELECT COALESCE(MAX(match_number), 0) + 1 AS n FROM matches WHERE guild_id = ?')
+        .get(data.guild_id) as { n: number }
+    ).n;
+    return stmt.run(
+      data.guild_id,
+      next,
+      data.channel_id,
+      // Coalesced rather than trusted: an undefined here binds as NULL, and a NULL team_size
+      // would silently vanish from every size-filtered query.
+      data.team_size ?? DEFAULT_TEAM_SIZE,
+      data.state || 'IN_PROGRESS',
+      JSON.stringify(data.blue_team),
+      JSON.stringify(data.orange_team),
+      data.rl_name || '',
+      data.rl_pass || '',
+      data.blue_voice_id || null,
+      data.orange_voice_id || null,
+      data.message_id || null,
+      data.text_channel_id || null,
+      data.queue_channel_id || null,
+      data.feed_channel_id || null,
+      data.feed_message_id || null,
+      defaultStartedAt,
+      data.series_id || null,
+      data.series_game ?? null,
+      division,
+      season?.season_id ?? null
+    );
+  });
+  const res = insertNumbered();
 
   return getMatch(Number(res.lastInsertRowid))!;
 }
@@ -825,6 +840,18 @@ export function getSeriesScore(seriesId: string, uptoGame?: number): SeriesScore
 export function getMatch(matchId: number): Match | undefined {
   const stmt = db.prepare('SELECT * FROM matches WHERE match_id = ?');
   const row = stmt.get(matchId) as any;
+  if (!row) return undefined;
+  return parseMatchRow(row);
+}
+
+/**
+ * Resolves the number a human sees ("Match #12", #match-12) back to the row. Scoped to
+ * the guild, so an admin can only ever reach their own server's matches by number.
+ */
+export function getMatchByNumber(guildId: string, matchNumber: number): Match | undefined {
+  const row = db
+    .prepare('SELECT * FROM matches WHERE guild_id = ? AND match_number = ?')
+    .get(guildId, matchNumber) as any;
   if (!row) return undefined;
   return parseMatchRow(row);
 }
@@ -1052,6 +1079,7 @@ export function getMatchGambleStatus(matchId: number): GambleStatus {
 function parseMatchRow(row: any): Match {
   return {
     match_id: row.match_id,
+    match_number: row.match_number,
     guild_id: row.guild_id,
     channel_id: row.channel_id,
     team_size: row.team_size ?? DEFAULT_TEAM_SIZE,

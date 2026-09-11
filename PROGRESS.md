@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (second-guild fixes)
+Last updated: 2026-09-11 (per-server match numbers)
 
 ---
 
@@ -88,7 +88,7 @@ Everything else worked, but these have never been run against the real API:
   download path is not).
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **293 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **299 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -285,14 +285,39 @@ Second-guild run **passed** after the fix: a bot match in the test server while 
 real one; nothing crossed over. Deploy step was: re-run `/queue panel division:C` in the test server's channel so it
 registers properly (the existing queue row is kept).
 
+## Per-server match numbers (2026-09-11)
+
+`match_id` is one AUTOINCREMENT sequence across every server, so a trial server's first
+match would have been "#11". Migration 6 adds **`matches.match_number`** — counts from 1
+per guild, unique on `(guild_id, match_number)`, backfilled in `match_id` order. Verified
+against a copy of that morning's off-site snapshot: 10 matches, all Chris's server, numbers
+1–10 = ids, so nothing visibly moves for him.
+
+- **`match_id` stays the key.** Buttons' customIds, timers, `updateMatch`, foreign
+  references and every service signature still take it. `match_number` is only ever read
+  for display, and `Match` carries both.
+- **Every human-facing surface shows `match_number`:** `#match-N`, `🔊 Ready Check #N`,
+  the team VC names, the VS / result / gamble / history cards, the live-match and feed
+  embeds, `/match list`, the split-report notice, the restart notice, the ban info field,
+  the replay report. Log lines deliberately keep the DB id and now read `match id 47`
+  rather than `Match #47`, so a log line can't be misread as a display number.
+- **Admin commands take the number a human sees.** `/match report|cancel|cleanup` and
+  `/replay check` have a `match:` option (was `match_id:`) resolved through
+  `getMatchByNumber(guildId, n)` — scoped to the caller's guild, so an admin can no longer
+  reach another server's match by guessing an id (they could before). A number that
+  matches nothing gets "Match #N does not exist in this server." Option rename is picked
+  up by the boot-time registration; no `npm run register` needed.
+- `scripts/renderAll.ts` fixture carries `match_number`; all 13 cards byte-identical.
+- Tests: `tests/matchNumber.test.ts` (per-guild counting, cancelled numbers not reused,
+  guild-scoped lookup, unique index, migration backfill on a rolled-back file).
+
 ## Next
 
 0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
 0b. `/replay check` has not yet been run against a real Discord upload — first real dispute (or a deliberate test with a file from `DemosEpic`) is the test.
-1. **Before the first outside trial:** (a) per-server match numbers — `match_id` is one global
-   sequence, so a trial server's first match is "#47"; keep the key, add a per-guild display
-   number and use it everywhere a human sees one (~40 sites). (b) Pick hosting: Oracle free
-   tier, else Hetzner ~R80/mo; disclose it either way. (c) Uptime monitor (UptimeRobot).
+1. **Before the first outside trial:** (a) ~~per-server match numbers~~ — shipped 2026-09-11,
+   see above. (b) Pick hosting: Oracle free tier, else Hetzner ~R80/mo; disclose it either
+   way. (c) Uptime monitor (UptimeRobot).
 2. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
 3. Webhooks — recommended **skip** until something actually consumes them.

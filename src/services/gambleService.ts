@@ -121,7 +121,7 @@ async function collapseProposalMessage(
       await targetMsg.edit({ content: line, embeds: [], components: [] });
     }
   } catch (err) {
-    logger.warn(`[Gamble] Failed to collapse consensus message for Match #${matchId}:`, err);
+    logger.warn(`[Gamble] Failed to collapse consensus message for match id ${matchId}:`, err);
   }
 }
 
@@ -212,7 +212,7 @@ export async function proposeGamble(
   const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
-    matchId,
+    match.match_number,
     bluePlayers,
     orangePlayers,
     newStatus.agreedPlayers,
@@ -232,7 +232,7 @@ export async function proposeGamble(
     closeProposal(client, matchId, status => {
       status.state = 'EXPIRED';
     });
-    logger.warn(`[Gamble] Could not post the proposal for Match #${matchId}:`, err);
+    logger.warn(`[Gamble] Could not post the proposal for match id ${matchId}:`, err);
     return;
   }
 
@@ -327,7 +327,7 @@ export async function handleGambleAgree(
   const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
   const embed = buildGambleConsensusEmbed(
-    matchId,
+    match.match_number,
     bluePlayers,
     orangePlayers,
     status.agreedPlayers,
@@ -433,7 +433,7 @@ async function spinWheelOfFate(
   if (!targetMsg) return;
 
   // Step 1: Spinning
-  const step1Embed = buildGambleSpinningEmbed(1, matchId, match.blue_team.length + match.orange_team.length);
+  const step1Embed = buildGambleSpinningEmbed(1, match.match_number, match.blue_team.length + match.orange_team.length);
   await targetMsg.edit({
     embeds: [step1Embed],
     components: [],
@@ -442,7 +442,7 @@ async function spinWheelOfFate(
   await new Promise((res) => setTimeout(res, 2000));
 
   // Step 2: Slowdown
-  const step2Embed = buildGambleSpinningEmbed(2, matchId, match.blue_team.length + match.orange_team.length);
+  const step2Embed = buildGambleSpinningEmbed(2, match.match_number, match.blue_team.length + match.orange_team.length);
   await targetMsg.edit({
     embeds: [step2Embed],
     components: [],
@@ -553,7 +553,7 @@ async function spinWheelOfFate(
   // Generate victory image
   const imageBuffer = await generateGambleResultImage(
     client,
-    matchId,
+    match.match_number,
     wheelWinner,
     resultType,
     blueResults,
@@ -571,6 +571,6 @@ async function spinWheelOfFate(
     attachments: [],
     components: [],
   }).catch((err) => {
-    logger.error(`[Gamble] Failed to post resolved wheel image for Match #${matchId}:`, err);
+    logger.error(`[Gamble] Failed to post resolved wheel image for match id ${matchId}:`, err);
   });
 }

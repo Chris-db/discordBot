@@ -92,7 +92,7 @@ export async function generateMatchHistoryImage(
     ctx.textAlign = 'left';
     ctx.fillStyle = P.text;
     ctx.font = `bold 18px ${FONT_STACK}`;
-    ctx.fillText(`MATCH #${match.match_id}`, startX + 25, cardY + 30);
+    ctx.fillText(`MATCH #${match.match_number}`, startX + 25, cardY + 30);
 
     const dateStr = match.completed_at
       ? new Date(match.completed_at).toLocaleDateString(undefined, {

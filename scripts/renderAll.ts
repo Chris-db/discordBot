@@ -48,7 +48,7 @@ const result = (team: Player[], delta: number) =>
 
 const match = (id: number, winner: 'BLUE' | 'ORANGE', extra: Partial<Match> = {}): Match =>
   ({
-    match_id: id, guild_id: 'g', channel_id: 'c', team_size: 3, state: 'COMPLETED', winner,
+    match_id: id, match_number: id, guild_id: 'g', channel_id: 'c', team_size: 3, state: 'COMPLETED', winner,
     blue_team: blue.map(x => x.discord_id), orange_team: orange.map(x => x.discord_id),
     rl_name: 'RL42', rl_pass: '317', created_at: '2026-09-10 18:00:00',
     started_at: '2026-09-10T18:05:00.000Z', completed_at: '2026-09-10T18:31:00.000Z',

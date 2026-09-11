@@ -19,7 +19,8 @@ export interface GamblePlayerResult {
  */
 export async function generateGambleResultImage(
   client: Client,
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   wheelWinner: 'BLUE' | 'ORANGE',
   resultType: 'INVERTED' | 'DOUBLED',
   blueTeam: GamblePlayerResult[],
@@ -64,8 +65,8 @@ export async function generateGambleResultImage(
   ctx.fillStyle = resultType === 'INVERTED' ? P.gamble.invertedText : P.gamble.doubledText;
   const subText =
     resultType === 'INVERTED'
-      ? `MATCH #${matchId}  •  TEAM ${wheelWinner} WON THE 50/50 & STOLE THE MMR!`
-      : `MATCH #${matchId}  •  TEAM ${wheelWinner} WON THE 50/50 & DOUBLED THEIR MMR!`;
+      ? `MATCH #${matchNumber}  •  TEAM ${wheelWinner} WON THE 50/50 & STOLE THE MMR!`
+      : `MATCH #${matchNumber}  •  TEAM ${wheelWinner} WON THE 50/50 & DOUBLED THEIR MMR!`;
   ctx.fillText(subText, width / 2, 85);
 
   // 3. Render Team Columns

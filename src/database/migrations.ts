@@ -486,6 +486,27 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: 'per-guild match numbers',
+    up: db => {
+      // match_id is one AUTOINCREMENT sequence across every server, so a second server's
+      // first match would be "Match #47". match_number counts from 1 per guild and is
+      // what every human-facing surface shows (channel names, cards, embeds, /match
+      // list). match_id stays the key: foreign references, timers and the admin
+      // commands all resolve a number back to it.
+      addColumnIfMissing(db, 'matches', 'match_number', 'INTEGER');
+      db.exec(`
+        UPDATE matches SET match_number = (
+          SELECT COUNT(*) FROM matches AS earlier
+          WHERE earlier.guild_id = matches.guild_id AND earlier.match_id <= matches.match_id
+        )
+        WHERE match_number IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_guild_number
+          ON matches(guild_id, match_number);
+      `);
+    },
+  },
 ];
 
 /**

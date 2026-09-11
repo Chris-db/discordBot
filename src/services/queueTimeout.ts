@@ -118,13 +118,13 @@ export async function sweepStaleMatches(client: Client): Promise<void> {
 
     const ageMins = Math.round(age / 60_000);
     logger.warn(
-      `Match #${match.match_id} has been stuck in ${match.state} for ${ageMins} minutes. Auto-cancelling.`
+      `match id ${match.match_id} has been stuck in ${match.state} for ${ageMins} minutes. Auto-cancelling.`
     );
 
     try {
       await withGuildTheme(match.guild_id, () => cancelMatch(client, match.match_id, 'Automatic timeout'));
     } catch (err) {
-      logger.error(`Failed to auto-cancel stale Match #${match.match_id}:`, err);
+      logger.error(`Failed to auto-cancel stale match id ${match.match_id}:`, err);
     }
   }
 
@@ -178,7 +178,7 @@ export async function sweepOrphanedMatchChannels(client: Client, minAgeMs = 0): 
     if (standing.length === 0) continue;
 
     logger.warn(
-      `Match #${match.match_id} finished ${Math.round((now - finishedAt) / 60_000)}m ago but still owns channel(s) ${standing.join(', ')}. Removing.`
+      `match id ${match.match_id} finished ${Math.round((now - finishedAt) / 60_000)}m ago but still owns channel(s) ${standing.join(', ')}. Removing.`
     );
     await deleteMatchChannels(client, match.match_id);
     removed++;
@@ -211,10 +211,10 @@ export async function recoverStuckQueues(client: Client): Promise<void> {
     if (matchIsLive) {
       // Its timer died with the previous process — nothing will ever advance it.
       logger.warn(
-        `Match #${activeMatch!.match_id} was mid-${activeMatch!.state} at shutdown. Cancelling so its players are released.`
+        `match id ${activeMatch!.match_id} was mid-${activeMatch!.state} at shutdown. Cancelling so its players are released.`
       );
       const cancelled = await withGuildTheme(queue.guild_id, () => cancelMatch(client, activeMatch!.match_id, 'Bot restarted')).catch(err => {
-        logger.error(`Failed to cancel orphaned Match #${activeMatch!.match_id}:`, err);
+        logger.error(`Failed to cancel orphaned match id ${activeMatch!.match_id}:`, err);
         return undefined;
       });
       if (cancelled?.success) {
@@ -260,7 +260,7 @@ async function announceRestartCancellation(client: Client, match: Match): Promis
   const mentions = humans.map(id => `<@${id}>`).join(' ');
   const notice = await channel
     .send({
-      content: `${mentions ? `${mentions} ` : ''}Match #${match.match_id} was cancelled by a bot restart — re-queue to play.`,
+      content: `${mentions ? `${mentions} ` : ''}Match #${match.match_number} was cancelled by a bot restart — re-queue to play.`,
     })
     .catch(() => null);
   if (notice) {

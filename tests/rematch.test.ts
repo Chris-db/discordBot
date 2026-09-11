@@ -423,7 +423,7 @@ describe('rematch', () => {
 
       const res = await handleRequeue(fakeClient, match.match_id, 'b1');
 
-      expect(res.message).toContain(`Match #${next.match_id}`);
+      expect(res.message).toContain(`Match #${next.match_number}`);
       expect(res.success).toBe(false);
       expect(getQueue('queue_chan')).toBeUndefined();
     });

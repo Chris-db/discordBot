@@ -181,18 +181,18 @@ export async function startRematch(
   const targetChannelId = previous.text_channel_id || previous.channel_id;
   const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
   if (!channel) {
-    logger.warn(`Rematch #${next.match_id}: channel ${targetChannelId} is gone.`);
+    logger.warn(`Rematch match id ${next.match_id}: channel ${targetChannelId} is gone.`);
     return next;
   }
 
   const blueTeam = getPlayersByIds(next.guild_id, next.team_size, next.blue_team);
   const orangeTeam = getPlayersByIds(next.guild_id, next.team_size, next.orange_team);
 
-  const vsBuffer = await generateMatchVsImage(client, next.match_id, blueTeam, orangeTeam);
+  const vsBuffer = await generateMatchVsImage(client, next.match_number, blueTeam, orangeTeam);
   const attachment = new AttachmentBuilder(vsBuffer, { name: 'match_vs.png' });
 
   const embed = buildActiveMatchEmbed(
-    next.match_id,
+    next.match_number,
     blueTeam,
     orangeTeam,
     rlName,
@@ -218,7 +218,7 @@ export async function startRematch(
   await broadcastMatchToFeed(client, next.match_id);
 
   logger.info(
-    `Rematch: Match #${next.match_id} is game ${seriesGame} of series ${seriesId} (from #${previousMatchId}).`
+    `Rematch: match id ${next.match_id} is game ${seriesGame} of series ${seriesId} (from match id ${previousMatchId}).`
   );
   return next;
 }
@@ -260,7 +260,7 @@ export async function handleRequeue(
   // live match, and joining a queue on top of that is what creates the second lobby.
   const live = getActiveMatchForPlayer(match.guild_id, userId);
   if (live) {
-    return { success: false, message: `You are already in Match #${live.match_id}.` };
+    return { success: false, message: `You are already in Match #${live.match_number}.` };
   }
 
   if (match.report_status.requeued?.includes(userId)) {

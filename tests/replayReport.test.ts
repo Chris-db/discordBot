@@ -16,7 +16,8 @@ const game = (overrides: Partial<ReplayHeader>): ReplayHeader => ({
 
 const match = (overrides: Partial<Match> = {}): Match =>
   ({
-    match_id: 42,
+    match_id: 4200,
+    match_number: 42,
     guild_id: 'g',
     channel_id: 'c',
     team_size: 3,
@@ -90,7 +91,7 @@ describe('formatSeries', () => {
     expect(text).toContain('**Game 1** — 🔵 **3** – **1** 🟠 · 5:02');
     expect(text).toMatch(/Zeph\s+2g\s+1a\s+0s\s+500/);
     expect(text).toContain('**Series:** 🔵 2 – 0 🟠');
-    expect(text).toContain('/match report match_id:42');
+    expect(text).toContain('/match report match:42');
   });
 
   it('stays under the Discord message cap for five full 4v4 games', () => {

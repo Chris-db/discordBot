@@ -8,11 +8,12 @@ import {
 } from 'discord.js';
 import {
   getActiveMatches,
-  getMatch,
+  getMatchByNumber,
   getMatchByTextChannel,
   cancelAllActiveMatches,
   updateMatch,
 } from '../database/queries';
+import type { Match } from '../database/queries';
 import { formatTeamSize } from '../ui/teamSize';
 import { forceReportMatch, cancelMatch } from '../services/matchService';
 import { deleteMatchChannels } from '../services/channelService';
@@ -20,7 +21,7 @@ import { autoDeleteReply } from '../utils/autoDelete';
 import { RL_COLORS } from '../ui/embeds';
 
 const NO_MATCH_HERE =
-  '❌ No match in this channel — run this inside a #match channel, or pass `match_id`.';
+  '❌ No match in this channel — run this inside a #match channel, or pass `match`.';
 
 /**
  * The match an admin means: the one they named, else the one whose channel they are in.
@@ -28,11 +29,19 @@ const NO_MATCH_HERE =
  * This replaced the Mod Override button, which sat on every match card. Standing in the
  * match channel and typing the command is the same gesture as clicking the button, as
  * long as nobody has to go and look up the id first.
+ *
+ * The number an admin types is the per-server one they see everywhere (#match-12), and
+ * it is resolved inside their own guild -- so it cannot name another server's match.
+ * Returns `null` when a number was given but matches nothing.
  */
-function resolveMatchId(interaction: ChatInputCommandInteraction): number | undefined {
-  const given = interaction.options.getInteger('match_id');
-  if (given !== null) return given;
-  return getMatchByTextChannel(interaction.channelId)?.match_id;
+function resolveMatch(interaction: ChatInputCommandInteraction): Match | undefined | null {
+  const given = interaction.options.getInteger('match');
+  if (given !== null) return getMatchByNumber(interaction.guildId!, given) ?? null;
+  return getMatchByTextChannel(interaction.channelId);
+}
+
+function noSuchMatch(interaction: ChatInputCommandInteraction): string {
+  return `❌ Match #${interaction.options.getInteger('match')} does not exist in this server.`;
 }
 
 export const matchCommand = {
@@ -64,7 +73,7 @@ export const matchCommand = {
             )
         )
         .addIntegerOption(opt =>
-          opt.setName('match_id').setDescription('Defaults to the match in this channel').setRequired(false)
+          opt.setName('match').setDescription('Match number (the N in #match-N); defaults to the match in this channel').setRequired(false)
         )
     )
     .addSubcommand(sub =>
@@ -72,7 +81,7 @@ export const matchCommand = {
         .setName('cancel')
         .setDescription('Force cancel an active match')
         .addIntegerOption(opt =>
-          opt.setName('match_id').setDescription('Defaults to the match in this channel').setRequired(false)
+          opt.setName('match').setDescription('Match number (the N in #match-N); defaults to the match in this channel').setRequired(false)
         )
     )
     .addSubcommand(sub =>
@@ -80,7 +89,7 @@ export const matchCommand = {
         .setName('cleanup')
         .setDescription('Clean up temporary match text and voice channels (Admin/Mod)')
         .addIntegerOption(opt =>
-          opt.setName('match_id').setDescription('Optional match ID to clean up specifically').setRequired(false)
+          opt.setName('match').setDescription('Match number (the N in #match-N) to clean up specifically').setRequired(false)
         )
     )
     .addSubcommand(sub =>
@@ -124,13 +133,13 @@ export const matchCommand = {
                 ? ` · started <t:${Math.floor(new Date(m.started_at).getTime() / 1000)}:R>`
                 : '';
               return (
-                `**Match #${m.match_id}** · ${m.state.replace('_', ' ')} · ${ladder} · ${where}${since}\n` +
+                `**Match #${m.match_number}** · ${m.state.replace('_', ' ')} · ${ladder} · ${where}${since}\n` +
                 `🔵 ${blueMentions || '—'}\n🟠 ${orangeMentions || '—'}\n`
               );
             })
             .join('\n')
         )
-        .setFooter({ text: '/match report · /match cancel — both take match_id from anywhere' })
+        .setFooter({ text: '/match report · /match cancel — both take the match number from anywhere' })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -144,16 +153,19 @@ export const matchCommand = {
         });
       }
 
-      const matchId = resolveMatchId(interaction);
-      if (matchId === undefined) {
+      const match = resolveMatch(interaction);
+      if (match === undefined) {
         return interaction.reply({ content: NO_MATCH_HERE, flags: MessageFlags.Ephemeral });
+      }
+      if (match === null) {
+        return interaction.reply({ content: noSuchMatch(interaction), flags: MessageFlags.Ephemeral });
       }
       const winner = interaction.options.getString('winner', true) as 'BLUE' | 'ORANGE';
 
       // Completing a match does a lot of Discord I/O (result image, channel sends, VC
       // teardown) — well past the 3s interaction window.
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const res = await forceReportMatch(interaction.client, matchId, winner);
+      const res = await forceReportMatch(interaction.client, match.match_id, winner);
       return interaction.editReply({
         content: res.success ? `✅ ${res.message}` : `❌ ${res.message}`,
       });
@@ -167,13 +179,16 @@ export const matchCommand = {
         });
       }
 
-      const matchId = resolveMatchId(interaction);
-      if (matchId === undefined) {
+      const match = resolveMatch(interaction);
+      if (match === undefined) {
         return interaction.reply({ content: NO_MATCH_HERE, flags: MessageFlags.Ephemeral });
+      }
+      if (match === null) {
+        return interaction.reply({ content: noSuchMatch(interaction), flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const res = await cancelMatch(interaction.client, matchId, interaction.user.tag);
+      const res = await cancelMatch(interaction.client, match.match_id, interaction.user.tag);
       // cancelMatch already posts a public notice in the match channel — keep this one
       // terse so the admin doesn't see the same thing announced twice.
       return interaction.editReply({
@@ -189,16 +204,20 @@ export const matchCommand = {
         });
       }
 
-      const matchId = interaction.options.getInteger('match_id');
-      if (matchId) {
-        await deleteMatchChannels(interaction.client, matchId);
-        updateMatch(matchId, {
+      const number = interaction.options.getInteger('match');
+      if (number !== null) {
+        const match = getMatchByNumber(guildId, number);
+        if (!match) {
+          return interaction.reply({ content: noSuchMatch(interaction), flags: MessageFlags.Ephemeral });
+        }
+        await deleteMatchChannels(interaction.client, match.match_id);
+        updateMatch(match.match_id, {
           state: 'CANCELLED',
           winner: 'NONE',
           completed_at: new Date().toISOString(),
         });
         return interaction.reply({
-          content: `✅ Cleaned up temporary channels and cancelled DB record for Match #${matchId}.`,
+          content: `✅ Cleaned up temporary channels and cancelled DB record for Match #${match.match_number}.`,
           flags: MessageFlags.Ephemeral,
         });
       } else {

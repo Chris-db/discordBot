@@ -12,7 +12,8 @@ import { P, overlay } from '../ui/palette';
  */
 export async function generateMatchVsImage(
   client: Client,
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   blueTeam: Player[],
   orangeTeam: Player[]
 ): Promise<Buffer> {
@@ -59,7 +60,7 @@ export async function generateMatchVsImage(
 
   ctx.fillStyle = P.textMuted;
   ctx.font = `bold 16px ${FONT_STACK}`;
-  ctx.fillText(`MATCH #${matchId}`, width / 2, 230);
+  ctx.fillText(`MATCH #${matchNumber}`, width / 2, 230);
   ctx.fillStyle = P.textFaint;
   ctx.font = `bold 13px ${FONT_STACK}`;
   ctx.fillText('ROCKET LEAGUE 6MANS', width / 2, 252);

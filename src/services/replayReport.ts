@@ -47,12 +47,12 @@ export function summariseSeries(replays: ReplayHeader[], match?: Match): SeriesS
       warnings.push(`${label} is a **${g.matchType}** match, not a private lobby.`);
     }
     if (match && g.teamSize !== match.team_size) {
-      warnings.push(`${label} is ${g.teamSize}v${g.teamSize}; Match #${match.match_id} is ${match.team_size}v${match.team_size}.`);
+      warnings.push(`${label} is ${g.teamSize}v${g.teamSize}; Match #${match.match_number} is ${match.team_size}v${match.team_size}.`);
     }
     if (match?.started_at && gameStart(g) > 0) {
       const started = parseDbTimestamp(match.started_at);
       if (gameStart(g) < started - 10 * 60_000) {
-        warnings.push(`${label} was played before Match #${match.match_id} started.`);
+        warnings.push(`${label} was played before Match #${match.match_number} started.`);
       }
     }
     if (g.winner === 'DRAW') warnings.push(`${label} has no winner (level score, no forfeit).`);
@@ -96,7 +96,7 @@ export function formatSeries(
   if (match) {
     const names = (team: Player[]) => team.map(p => p.username).join(', ') || '—';
     parts.push(
-      `**Match #${match.match_id}** · ${match.state.replace('_', ' ')}` +
+      `**Match #${match.match_number}** · ${match.state.replace('_', ' ')}` +
         (match.winner && match.winner !== 'NONE' ? ` · reported winner **${match.winner}**` : '') +
         (rosters ? `\n🔵 ${names(rosters.blue)}\n🟠 ${names(rosters.orange)}` : '') +
         `\n-# Blue and Orange below are the lobby's teams. If everyone joined the side the bot gave them, they match; check the names either way.`
@@ -120,7 +120,7 @@ export function formatSeries(
   }
 
   if (match && match.state === 'IN_PROGRESS') {
-    parts.push(`-# To settle it: \`/match report match_id:${match.match_id} winner:…\``);
+    parts.push(`-# To settle it: \`/match report match:${match.match_number} winner:…\``);
   }
 
   return parts.join('\n\n');

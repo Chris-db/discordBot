@@ -5,7 +5,7 @@ import {
   MessageFlags,
   Attachment,
 } from 'discord.js';
-import { getMatch, getMatchByTextChannel, getPlayersByIds } from '../database/queries';
+import { getMatchByNumber, getMatchByTextChannel, getPlayersByIds } from '../database/queries';
 import { parseReplayHeader, ReplayHeader } from '../utils/replayHeader';
 import { summariseSeries, formatSeries } from '../services/replayReport';
 import { logger } from '../utils/logger';
@@ -54,7 +54,7 @@ export const replayCommand = {
         );
       }
       sub.addIntegerOption(opt =>
-        opt.setName('match_id').setDescription('Compare against this match (defaults to the match in this channel, if any)').setRequired(false)
+        opt.setName('match').setDescription('Match number (the N in #match-N) to compare against; defaults to the match in this channel').setRequired(false)
       );
       return sub;
     }),
@@ -95,8 +95,11 @@ export const replayCommand = {
       });
     }
 
-    const matchId = interaction.options.getInteger('match_id') ?? getMatchByTextChannel(interaction.channelId)?.match_id;
-    const match = matchId !== undefined ? getMatch(matchId) : undefined;
+    const number = interaction.options.getInteger('match');
+    const match =
+      number !== null
+        ? getMatchByNumber(interaction.guildId!, number)
+        : getMatchByTextChannel(interaction.channelId);
     const rosters = match
       ? {
           blue: getPlayersByIds(match.guild_id, match.team_size, match.blue_team),
@@ -105,8 +108,8 @@ export const replayCommand = {
       : undefined;
 
     const summary = summariseSeries(parsed, match);
-    if (matchId !== undefined && !match) {
-      summary.warnings.unshift(`Match #${matchId} does not exist.`);
+    if (number !== null && !match) {
+      summary.warnings.unshift(`Match #${number} does not exist in this server.`);
     }
     for (const f of failures) summary.warnings.push(`Could not read ${f}`);
 

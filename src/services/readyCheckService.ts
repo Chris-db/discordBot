@@ -239,7 +239,7 @@ export async function startReadyCheckPhase(
   const { textChannelId } = await createMatchChannels(
     client,
     guildId,
-    match.match_id,
+    match,
     queue.player_ids,
     channelId
   );
@@ -247,7 +247,7 @@ export async function startReadyCheckPhase(
   let readyCheckVc;
   try {
     readyCheckVc = await guild.channels.create({
-      name: `🔊 Ready Check #${match.match_id}`,
+      name: `🔊 Ready Check #${match.match_number}`,
       type: ChannelType.GuildVoice,
       parent: categoryId,
       userLimit: rosterSize,
@@ -277,7 +277,7 @@ export async function startReadyCheckPhase(
       for (const member of oldVc.members.values()) {
         if (!queue.player_ids.includes(member.id)) continue;
         await member.voice.setChannel(readyCheckVc, 'Ready check re-popped').catch(err =>
-          logger.warn(`Could not move ${member.user.tag} into Ready Check #${match.match_id}:`, err)
+          logger.warn(`Could not move ${member.user.tag} into Ready Check (match id ${match.match_id}):`, err)
         );
       }
     }
@@ -360,7 +360,7 @@ export async function startReadyCheckPhase(
   // outcome is edited onto this same message. Announcing the pop and then posting a
   // separate "it failed" message put two notices in the queue channel for one event.
   const popNotice = await queueChannel.send({
-    content: `Match #${match.match_id} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · closes ${closesAt}`,
+    content: `Match #${match.match_number} → <#${textChannelId}> · Ready check in <#${readyCheckVc.id}> · closes ${closesAt}`,
   }).catch(() => null);
 
   /** Replaces the pop notice with how it ended, then clears it shortly after. */
@@ -432,8 +432,8 @@ export async function startReadyCheckPhase(
     const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
     await closePopNotice(
       rePopped
-        ? `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}.${cooldownNote} Queue re-popped (${rosterSize}/${rosterSize}).`
-        : `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}.${cooldownNote} Queue is ${waiting}/${rosterSize}.`
+        ? `❌ Match #${match.match_number} ready check failed — removed ${afkMentions}.${cooldownNote} Queue re-popped (${rosterSize}/${rosterSize}).`
+        : `❌ Match #${match.match_number} ready check failed — removed ${afkMentions}.${cooldownNote} Queue is ${waiting}/${rosterSize}.`
     );
 
     setTimeout(() => {
@@ -524,7 +524,7 @@ export async function startReadyCheckPhase(
     try {
       await tick();
     } catch (err) {
-      logger.error(`Ready check tick for Match #${match.match_id} failed:`, err);
+      logger.error(`Ready check tick for match id ${match.match_id} failed:`, err);
     } finally {
       ticking = false;
     }

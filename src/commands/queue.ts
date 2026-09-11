@@ -285,7 +285,7 @@ export const queueCommand = {
       const liveMatch = getMatchByTextChannel(channelId);
       if (liveMatch) {
         return interaction.reply({
-          content: `❌ This is the channel for Match #${liveMatch.match_id}. Use \`/match cancel\` to end it.`,
+          content: `❌ This is the channel for Match #${liveMatch.match_number}. Use \`/match cancel\` to end it.`,
           flags: MessageFlags.Ephemeral,
         });
       }

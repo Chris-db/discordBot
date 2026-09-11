@@ -38,7 +38,7 @@ export async function createMatchVoiceChannels(
       orangeVoiceId: orangeChannel.id,
     };
   } catch (error) {
-    logger.error(`Failed to create voice channels for Match #${matchId}:`, error);
+    logger.error(`Failed to create voice channels for match id ${matchId}:`, error);
     return {};
   }
 }

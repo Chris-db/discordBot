@@ -154,7 +154,7 @@ export const banCommand = {
       if (activeMatch) {
         embed.addFields({
           name: '⚠️ Currently In A Match',
-          value: `Still in Match #${activeMatch.match_id}. Run \`/match cancel ${activeMatch.match_id}\` if they should be pulled out of it.`,
+          value: `Still in Match #${activeMatch.match_number}. Run \`/match cancel match:${activeMatch.match_number}\` if they should be pulled out of it.`,
           inline: false,
         });
       }

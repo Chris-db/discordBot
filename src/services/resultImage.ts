@@ -21,7 +21,8 @@ export interface MatchPlayerResult {
  */
 export async function generateMatchResultImage(
   client: Client,
-  matchId: number,
+  /** The per-server display number, not the database match_id. */
+  matchNumber: number,
   winner: 'BLUE' | 'ORANGE',
   blueTeam: MatchPlayerResult[],
   orangeTeam: MatchPlayerResult[],
@@ -57,8 +58,8 @@ export async function generateMatchResultImage(
   ctx.font = `600 16px ${FONT_STACK}`;
   ctx.fillStyle = P.textMuted;
   const subtitle = durationStr
-    ? `MATCH #${matchId}  •  OFFICIAL 6MANS RESULT  •  ⏱️ ${durationStr}`
-    : `MATCH #${matchId}  •  OFFICIAL 6MANS RESULT`;
+    ? `MATCH #${matchNumber}  •  OFFICIAL 6MANS RESULT  •  ⏱️ ${durationStr}`
+    : `MATCH #${matchNumber}  •  OFFICIAL 6MANS RESULT`;
   ctx.fillText(subtitle, width / 2, 85);
 
   // 3. Render 2 team columns (Blue left, Orange right)

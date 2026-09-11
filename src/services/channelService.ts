@@ -10,7 +10,7 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { logger } from '../utils/logger';
-import { getMatch, updateMatch, getPlayersByIds, getQueue } from '../database/queries';
+import { getMatch, updateMatch, getPlayersByIds, getQueue, Match } from '../database/queries';
 import { tryMovePlayersToVoice } from './voiceService';
 import { buildPublicFeedCardEmbed } from '../ui/embeds';
 import { generateMatchResultImage } from './resultImage';
@@ -88,10 +88,11 @@ export async function checkBotGuildPermissions(guild: Guild): Promise<void> {
 export async function createMatchChannels(
   client: Client,
   guildId: string,
-  matchId: number,
+  match: Pick<Match, 'match_id' | 'match_number'>,
   playerIds: string[],
   parentChannelId?: string
 ): Promise<{ textChannelId: string; blueVoiceId?: string; orangeVoiceId?: string }> {
+  const matchId = match.match_id;
   const guild = await client.guilds.fetch(guildId);
   if (!guild) {
     throw new Error(`Guild ${guildId} not found`);
@@ -153,11 +154,11 @@ export async function createMatchChannels(
 
   // Create temporary private text channel
   const textChan = await guild.channels.create({
-    name: `match-${matchId}`,
+    name: `match-${match.match_number}`,
     type: ChannelType.GuildText,
     parent: categoryId,
     permissionOverwrites: textOverrides,
-    topic: `Rocket League 6mans | Match #${matchId} | Private Lobby`,
+    topic: `Rocket League 6mans | Match #${match.match_number} | Private Lobby`,
   });
 
   const voiceOverrides: any[] = [
@@ -186,7 +187,7 @@ export async function createMatchChannels(
     text_channel_id: textChan.id,
   });
 
-  logger.info(`Created match text channel for Match #${matchId} in category ${categoryId}: #${textChan.name}`);
+  logger.info(`Created match text channel for match id ${matchId} in category ${categoryId}: #${textChan.name}`);
 
   return {
     textChannelId: textChan.id,
@@ -201,11 +202,12 @@ export async function createMatchChannels(
 export async function createTeamVoiceChannels(
   client: Client,
   guildId: string,
-  matchId: number,
+  match: Pick<Match, 'match_id' | 'match_number'>,
   blueTeamIds: string[],
   orangeTeamIds: string[],
   parentChannelId?: string
 ): Promise<{ blueVoiceId: string; orangeVoiceId: string }> {
+  const matchId = match.match_id;
   const guild = await client.guilds.fetch(guildId);
   if (!guild) {
     throw new Error(`Guild ${guildId} not found`);
@@ -262,7 +264,7 @@ export async function createTeamVoiceChannels(
   }
 
   const blueVoice = await guild.channels.create({
-    name: `🔵 Team Blue [Match #${matchId}]`,
+    name: `🔵 Team Blue [Match #${match.match_number}]`,
     type: ChannelType.GuildVoice,
     parent: categoryId,
     userLimit: 3,
@@ -270,7 +272,7 @@ export async function createTeamVoiceChannels(
   });
 
   const orangeVoice = await guild.channels.create({
-    name: `🟠 Team Orange [Match #${matchId}]`,
+    name: `🟠 Team Orange [Match #${match.match_number}]`,
     type: ChannelType.GuildVoice,
     parent: categoryId,
     userLimit: 3,
@@ -282,7 +284,7 @@ export async function createTeamVoiceChannels(
     orange_voice_id: orangeVoice.id,
   });
 
-  logger.info(`Created Team Blue & Orange VCs for Match #${matchId} in category ${categoryId}`);
+  logger.info(`Created Team Blue & Orange VCs for match id ${matchId} in category ${categoryId}`);
 
   await tryMovePlayersToVoice(guild, blueTeamIds, orangeTeamIds, blueVoice.id, orangeVoice.id);
 
@@ -314,7 +316,7 @@ export async function grantTeamVoiceAccessAndMove(
       const vcs = await createTeamVoiceChannels(
         client,
         guildId,
-        matchId,
+        match,
         blueTeamIds,
         orangeTeamIds,
         match.text_channel_id || match.channel_id
@@ -351,7 +353,7 @@ export async function grantTeamVoiceAccessAndMove(
     await tryMovePlayersToVoice(guild, blueTeamIds, orangeTeamIds, match.blue_voice_id, match.orange_voice_id);
     return { blueVoiceId: match.blue_voice_id, orangeVoiceId: match.orange_voice_id };
   } catch (err) {
-    logger.warn(`Could not update team voice permissions for Match #${matchId}:`, err);
+    logger.warn(`Could not update team voice permissions for match id ${matchId}:`, err);
     return {};
   }
 }
@@ -380,9 +382,9 @@ export async function deleteMatchChannels(client: Client, matchId: number): Prom
         await chan.delete().catch(() => null);
       }
     }
-    logger.info(`Deleted temporary channels for Match #${matchId}.`);
+    logger.info(`Deleted temporary channels for match id ${matchId}.`);
   } catch (error) {
-    logger.warn(`Error deleting channels for Match #${matchId}:`, error);
+    logger.warn(`Error deleting channels for match id ${matchId}:`, error);
   }
 }
 
@@ -451,7 +453,7 @@ export async function broadcastMatchToFeed(client: Client, matchId: number): Pro
     const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
-      matchId,
+      match.match_number,
       match.state as any,
       bluePlayers,
       orangePlayers,
@@ -464,7 +466,7 @@ export async function broadcastMatchToFeed(client: Client, matchId: number): Pro
       feed_message_id: msg.id,
     });
   } catch (error) {
-    logger.warn(`Could not broadcast Match #${matchId} to feed channel:`, error);
+    logger.warn(`Could not broadcast match id ${matchId} to feed channel:`, error);
   }
 }
 
@@ -489,7 +491,7 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
     const orangePlayers = getPlayersByIds(match.guild_id, match.team_size, match.orange_team);
 
     const embed = buildPublicFeedCardEmbed(
-      matchId,
+      match.match_number,
       match.state as any,
       bluePlayers,
       orangePlayers,
@@ -511,7 +513,7 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
       const blueResults = bluePlayers.map(p => ({ player: p, delta: blueDelta, newMmr: p.mmr }));
       const orangeResults = orangePlayers.map(p => ({ player: p, delta: orangeDelta, newMmr: p.mmr }));
 
-      const imageBuffer = await generateMatchResultImage(client, matchId, match.winner, blueResults, orangeResults);
+      const imageBuffer = await generateMatchResultImage(client, match.match_number, match.winner, blueResults, orangeResults);
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'match_result.png' });
 
       // The result image already names the match, the winner and every delta, so the
@@ -521,6 +523,6 @@ export async function updateMatchFeedCard(client: Client, matchId: number): Prom
       await msg.edit({ embeds: [embed] });
     }
   } catch (error) {
-    logger.warn(`Could not update feed card for Match #${matchId}:`, error);
+    logger.warn(`Could not update feed card for match id ${matchId}:`, error);
   }
 }
