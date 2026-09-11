@@ -37,7 +37,7 @@ export async function generateQueuePanelImage(
   const tier = division ? getDivisionTier(division) : undefined;
   const accent = isFull ? '#00e676' : tier?.color ?? '#00b0ff';
   const title = tier
-    ? `${tier.emoji} ${tier.name.toUpperCase()} · ${teamSize}V${teamSize} QUEUE`
+    ? `${tier.name.toUpperCase()} ${teamSize}V${teamSize} QUEUE`
     : `🚀 ${teamSize}V${teamSize} MATCH QUEUE`;
   const badgeText = isFull
     ? `QUEUE FULL  •  ${capacity} / ${capacity} READY!`
