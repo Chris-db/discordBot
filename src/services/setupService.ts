@@ -26,7 +26,7 @@ import { logger } from '../utils/logger';
  * a second run repairs what is missing and touches nothing that exists.
  *
  * What one division gets:
- *   - a category called `Rank C` (the division's display name), where its match channels
+ *   - a category called `━━━━━  Rank C  ━━━━━` (a plain `Rank C` is recognised too), where its match channels
  *     will also be created -- match channels go in the queue channel's category;
  *   - a text channel `rank-c-3v3` inside it, registered as that ladder's queue channel,
  *     with the queue panel posted;
@@ -36,7 +36,8 @@ import { logger } from '../utils/logger';
  *
  * Which divisions: a six-man server does not want five ladders. `one` gives a single
  * ladder (Rank C, the entry division, so promotion never fires), `three` gives C/B/A,
- * `all` gives C/B/A/X/S.
+ * `all` gives C/B/A/X/S. Categories and roles are made highest rank first so the sidebar
+ * reads S -> C, and existing rank categories are re-sorted into that order as a block.
  */
 
 export type DivisionPreset = 'one' | 'three' | 'all';
@@ -80,6 +81,16 @@ export function missingBotPermissions(guild: Guild, roles: boolean): string[] {
   return needed.filter(([flag]) => !me.permissions.has(flag)).map(([, name]) => name);
 }
 
+/** `━━━━━  Rank S  ━━━━━` -- Chris's sidebar style. The plain name is still recognised. */
+export function categoryName(d: Pick<GuildDivision, 'display_name'>): string {
+  return `━━━━━  ${d.display_name}  ━━━━━`;
+}
+
+/** True for both the decorated and the plain spelling of a division's category. */
+export function isCategoryFor(name: string, d: Pick<GuildDivision, 'display_name'>): boolean {
+  return name.replace(/━/g, '').trim().toLowerCase() === d.display_name.toLowerCase();
+}
+
 export function queueChannelName(d: Pick<GuildDivision, 'display_name'>, teamSize: number): string {
   return `${d.display_name}-${formatTeamSize(teamSize)}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
@@ -102,6 +113,11 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
     return report;
   }
 
+  // Highest rank first: Discord appends new categories at the bottom, so creating S before
+  // X before A ... lands them in sidebar order, and the roles list reads the same way.
+  divisions.sort((a, b) => b.sort_order - a.sort_order);
+  const categories: CategoryChannel[] = [];
+
   for (const d of divisions) {
     // Role first, so the category can be locked to it as it is created.
     let role: Role | undefined;
@@ -120,18 +136,19 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
     // Category: by name. Match channels are created inside the queue channel's category,
     // so this is where a division's games live too.
     let category = guild.channels.cache.find(
-      c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === d.display_name.toLowerCase()
+      c => c.type === ChannelType.GuildCategory && isCategoryFor(c.name, d)
     ) as CategoryChannel | undefined;
     if (category) {
       note(false, `category **${category.name}**`);
     } else {
       category = (await guild.channels.create({
-        name: d.display_name,
+        name: categoryName(d),
         type: ChannelType.GuildCategory,
         reason: '6mans /setup',
       })) as CategoryChannel;
       note(true, `category **${category.name}**`);
     }
+    categories.push(category);
 
     if (role) {
       // Only the division's role (and the bot) sees the category; children inherit unless
@@ -175,6 +192,18 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
     }
 
     await registerQueueChannel(client, guild.id, channel.id, opts.teamSize, d.division);
+  }
+
+  // Existing categories keep whatever order an admin left them in, which after a partial
+  // run can be C above S. Put the rank block back in S -> C order, starting from wherever
+  // the block's topmost category already sits, so nothing else in the sidebar moves.
+  if (categories.length > 1) {
+    const top = Math.min(...categories.map(c => c.position ?? 0));
+    await guild.channels
+      .setPositions(categories.map((c, i) => ({ channel: c.id, position: top + i })))
+      .catch(err => {
+        report.warnings.push(`Could not reorder the rank categories: ${describe(err)}`);
+      });
   }
 
   if (opts.feed) {
