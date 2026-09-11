@@ -41,3 +41,31 @@ describe('Avatar Cache Utility', () => {
     expect(fetchCount).toBe(1); // Second call served from cache without calling fetch()
   });
 });
+
+describe('avatar fetch deadline', () => {
+  beforeEach(() => clearAvatarCache());
+
+  const hangingClient = {
+    users: { fetch: () => new Promise(() => {}) }, // never resolves, like a stalled CDN route
+  } as any;
+
+  it('gives up after the deadline and draws initials instead of hanging the card', async () => {
+    const started = Date.now();
+    const img = await getCachedAvatarImage(hangingClient, 'slow_user', 128, 50);
+    expect(img).toBeNull();
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('remembers the miss so the next card does not pay the wait again', async () => {
+    await getCachedAvatarImage(hangingClient, 'slow_user', 128, 50);
+    const started = Date.now();
+    const again = await getCachedAvatarImage(hangingClient, 'slow_user', 128, 5000);
+    expect(again).toBeNull();
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  it('a failed user lookup is a miss, not a crash', async () => {
+    const client = { users: { fetch: async () => { throw new Error('Unknown User'); } } } as any;
+    expect(await getCachedAvatarImage(client, 'gone_user', 128, 500)).toBeNull();
+  });
+});

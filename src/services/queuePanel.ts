@@ -27,6 +27,7 @@ import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import db from '../database/db';
 import config from '../config';
 import { createMatchChannels } from './channelService';
+import { prefetchAvatar } from '../utils/avatarCache';
 import { getQueuePanelButtons } from '../ui/buttons';
 import {
   createBalancedTeams,
@@ -307,6 +308,10 @@ export async function handleJoinQueue(
   // panel re-render and, on a full queue, the whole ready-check setup -- several Discord
   // round trips the clicker does not need to wait for. It is handed back as a promise so
   // the caller can answer them first and only then wait for the rest.
+  // Start the avatar download now, in the background, so the cards drawn at pop time
+  // find it cached instead of each waiting on Discord's CDN.
+  prefetchAvatar(client, user.id);
+
   const settled = (async () => {
     await refreshQueuePanel(client, channelId);
 

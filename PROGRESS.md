@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (first bot trial run)
+Last updated: 2026-09-11 (avatar fetch deadline)
 
 ---
 
@@ -88,7 +88,7 @@ Everything else worked, but these have never been run against the real API:
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **311 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **314 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -349,6 +349,26 @@ and Double or Nothing all worked.** Two findings, fixed on `main`:
   (`#00e676`, same as a positive delta). Verified by rendering a lobby with players on
   both sides of Rank B's lines — `scripts/renderAll.ts`'s fixture never triggers a zone,
   so a byte-diff cannot see this change; look at the card.
+
+## Slow cards on a slow evening (2026-09-11, 2v2 run)
+
+Chris saw cards arrive slowly or not at all on the 2v2 run: the queue panel after his
+join, and the ready-check card, while the mode-vote card was instant and the match card
+normal. The pattern is avatars: the two slow cards draw **his** avatar cold, the vote card
+draws none, and by the match card his avatar was cached. `loadImage(url)` downloaded from
+Discord's CDN with **no timeout**, so a slow route from the Pi held every card that needed
+a fresh avatar for as long as the CDN took; test bots skip the fetch, so bot-only cards
+never showed it. The 15-minute cache TTL is why it came back.
+
+Fixed on `main`:
+- **4s deadline** on the whole avatar fetch (`AVATAR_FETCH_TIMEOUT_MS`); past it the card
+  draws the player's initial. A miss is remembered for 60s so one bad CDN costs one wait,
+  not one per card.
+- **Prefetch on Join** (`prefetchAvatar`): the download starts when a player clicks Join,
+  so pop-time cards find it cached.
+
+If it happens again, `journalctl -u 6mans | grep "Avatar for user"` says which fetches
+timed out. If nothing is logged and it is still slow, it is not avatars.
 
 ## Next
 
