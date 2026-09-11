@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P } from '../ui/palette';
 
 /**
  * Generates the Captains Draft Visual Scoreboard.
@@ -36,19 +37,19 @@ export async function generateCaptainsDraftImage(
 
   // 1. Dark background
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a');
-  bgGradient.addColorStop(1, '#1e293b');
+  bgGradient.addColorStop(0, P.bgTop);
+  bgGradient.addColorStop(1, P.bgBottom);
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Top accent bar by current turn
-  const turnColor = turn === 'BLUE' ? '#00b0ff' : '#ff9100';
+  const turnColor = turn === 'BLUE' ? P.team.blue : P.team.orange;
   ctx.fillStyle = turnColor;
   ctx.fillRect(0, 0, width, 5);
 
   // 2. Title & Turn Header
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText(`👑 CAPTAINS ${teamSize}V${teamSize} DRAFT IN PROGRESS`, width / 2, 45);
 
@@ -67,7 +68,7 @@ export async function generateCaptainsDraftImage(
     borderColor: string,
     label?: string
   ) => {
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = P.card;
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = borderColor;
     ctx.lineWidth = 1.5;
@@ -90,9 +91,9 @@ export async function generateCaptainsDraftImage(
         throw new Error('Avatar fallback');
       }
     } catch {
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = P.surface;
       ctx.fillRect(ax - radius, ay - radius, radius * 2, radius * 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = P.white;
       ctx.font = `bold 14px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(player.username.charAt(0).toUpperCase() || '?', ax, ay + 5);
@@ -100,13 +101,13 @@ export async function generateCaptainsDraftImage(
     ctx.restore();
 
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = P.text;
     ctx.font = `bold 16px ${FONT_STACK}`;
     const shortName = player.username.length > 10 ? player.username.substring(0, 9) + '…' : player.username;
     ctx.fillText(shortName, x + 60, y + 26);
 
     ctx.font = `600 13px ${FONT_STACK}`;
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = P.textMuted;
     const tier = getDivisionTier(player.division);
     ctx.fillText(`${player.mmr} MMR (${tier.name})`, x + 60, y + 46);
 
@@ -121,7 +122,7 @@ export async function generateCaptainsDraftImage(
   // 4. Left Column: Blue Team (x=30, w=250)
   ctx.textAlign = 'left';
   ctx.font = `bold 18px ${FONT_STACK}`;
-  ctx.fillStyle = '#00b0ff';
+  ctx.fillStyle = P.team.blue;
   ctx.fillText('🔵 TEAM BLUE', 30, 115);
 
   const fullBlue = [blueCaptain, ...blueTeam.filter(p => p.discord_id !== blueCaptain.discord_id)];
@@ -129,15 +130,15 @@ export async function generateCaptainsDraftImage(
     const p = fullBlue[i];
     const cardY = gridTop + i * rowPitch;
     if (p) {
-      await drawPlayerCard(p, 30, cardY, 250, cardH, '#00b0ff', i === 0 ? '👑 CAPTAIN' : undefined);
+      await drawPlayerCard(p, 30, cardY, 250, cardH, P.team.blue, i === 0 ? '👑 CAPTAIN' : undefined);
     } else {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = P.cardEmpty;
       ctx.fillRect(30, cardY, 250, cardH);
-      ctx.strokeStyle = '#334155';
+      ctx.strokeStyle = P.surface;
       ctx.strokeRect(30, cardY, 250, cardH);
       ctx.textAlign = 'center';
       ctx.font = `600 14px ${FONT_STACK}`;
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = P.textDim;
       ctx.fillText('[ EMPTY SLOT ]', 30 + 125, cardY + 40);
     }
   }
@@ -145,7 +146,7 @@ export async function generateCaptainsDraftImage(
   // 5. Right Column: Orange Team (x=600, w=250)
   ctx.textAlign = 'left';
   ctx.font = `bold 18px ${FONT_STACK}`;
-  ctx.fillStyle = '#ff9100';
+  ctx.fillStyle = P.team.orange;
   ctx.fillText('🟠 TEAM ORANGE', 600, 115);
 
   const fullOrange = [orangeCaptain, ...orangeTeam.filter(p => p.discord_id !== orangeCaptain.discord_id)];
@@ -153,15 +154,15 @@ export async function generateCaptainsDraftImage(
     const p = fullOrange[i];
     const cardY = gridTop + i * rowPitch;
     if (p) {
-      await drawPlayerCard(p, 600, cardY, 250, cardH, '#ff9100', i === 0 ? '👑 CAPTAIN' : undefined);
+      await drawPlayerCard(p, 600, cardY, 250, cardH, P.team.orange, i === 0 ? '👑 CAPTAIN' : undefined);
     } else {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = P.cardEmpty;
       ctx.fillRect(600, cardY, 250, cardH);
-      ctx.strokeStyle = '#334155';
+      ctx.strokeStyle = P.surface;
       ctx.strokeRect(600, cardY, 250, cardH);
       ctx.textAlign = 'center';
       ctx.font = `600 14px ${FONT_STACK}`;
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = P.textDim;
       ctx.fillText('[ EMPTY SLOT ]', 600 + 125, cardY + 40);
     }
   }
@@ -169,13 +170,13 @@ export async function generateCaptainsDraftImage(
   // 6. Center Column: Available Pool (x=305, w=270)
   ctx.textAlign = 'center';
   ctx.font = `bold 18px ${FONT_STACK}`;
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.fillText('📋 AVAILABLE DRAFT POOL', 440, 115);
 
   for (let i = 0; i < remaining.length; i++) {
     const p = remaining[i];
     const cardY = gridTop + i * rowPitch;
-    await drawPlayerCard(p, 305, cardY, 270, cardH, '#aa00ff', `AVAILABLE`);
+    await drawPlayerCard(p, 305, cardY, 270, cardH, P.purple, `AVAILABLE`);
   }
 
   return canvas.toBuffer('image/png');

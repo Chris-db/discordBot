@@ -5,6 +5,7 @@ import { getDivisionTier, getStreakChip } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 /**
  * Generates the Lobby Queue Panel graphic: teamSize columns by 2 rows.
@@ -35,7 +36,7 @@ export async function generateQueuePanelImage(
   // agrees with the cards under it. A full queue goes emerald whatever the division: the
   // badge text says QUEUE FULL, and the colour change is what catches the eye.
   const tier = division ? getDivisionTier(division) : undefined;
-  const accent = isFull ? '#00e676' : tier?.color ?? '#00b0ff';
+  const accent = isFull ? P.positive : tier?.color ?? P.accent;
   const title = tier
     ? `${tier.name.toUpperCase()} ${teamSize}V${teamSize} QUEUE`
     : `🚀 ${teamSize}V${teamSize} MATCH QUEUE`;
@@ -64,8 +65,8 @@ export async function generateQueuePanelImage(
 
   // 1. Dark background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0b0f19'); // deep dark slate
-  bgGradient.addColorStop(1, '#111827');
+  bgGradient.addColorStop(0, P.queueBg.top); // deep dark slate
+  bgGradient.addColorStop(1, P.queueBg.bottom);
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
@@ -75,7 +76,7 @@ export async function generateQueuePanelImage(
 
   // 2. Title & Status Header
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 26px ${FONT_STACK}`;
   ctx.fillText(title, 40, 50);
 
@@ -111,7 +112,7 @@ export async function generateQueuePanelImage(
       const tier = getDivisionTier(player.division);
 
       // Card Background
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = P.card;
       ctx.fillRect(cardX, cardY, cardW, cardH);
 
       // Card Border & Top Stripe
@@ -123,7 +124,7 @@ export async function generateQueuePanelImage(
 
       // Slot Number
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#64748b';
+      ctx.fillStyle = P.textFaint;
       ctx.font = `bold 12px ${FONT_STACK}`;
       ctx.fillText(`#${i + 1}`, cardX + cardW - 12, cardY + 24);
 
@@ -146,9 +147,9 @@ export async function generateQueuePanelImage(
         }
       } catch {
         // Fallback initials
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = P.surface;
         ctx.fillRect(avatarCenterX - avatarRadius, avatarCenterY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = P.white;
         ctx.font = `bold 20px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(player.username.charAt(0).toUpperCase() || '?', avatarCenterX, avatarCenterY + 7);
@@ -164,14 +165,14 @@ export async function generateQueuePanelImage(
 
       // Username
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = P.text;
       ctx.font = `bold 18px ${FONT_STACK}`;
       const shortName = player.username.length > 11 ? player.username.substring(0, 10) + '…' : player.username;
       ctx.fillText(shortName, cardX + 85, cardY + 54);
 
       // MMR & Rating
       ctx.font = `bold 16px ${FONT_STACK}`;
-      ctx.fillStyle = '#00b0ff';
+      ctx.fillStyle = P.accent;
       ctx.fillText(`${player.mmr} MMR`, cardX + 85, cardY + 84);
 
       // Hot streak, next to the MMR. Someone on a run is worth knowing about before
@@ -184,35 +185,35 @@ export async function generateQueuePanelImage(
         const chipW = ctx.measureText(chip).width + 10;
 
         if (chipX + chipW < cardX + cardW - 8) {
-          ctx.fillStyle = '#ffab00';
+          ctx.fillStyle = P.streak.hot;
           ctx.fillRect(chipX, cardY + 71, chipW, 18);
-          ctx.fillStyle = '#000000';
+          ctx.fillStyle = P.black;
           ctx.fillText(chip, chipX + 5, cardY + 84);
         }
       }
     } else {
       // EMPTY SLOT
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = P.cardEmpty;
       ctx.fillRect(cardX, cardY, cardW, cardH);
 
       // Subtle Border
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeStyle = overlay(0.1);
       ctx.lineWidth = 1;
       ctx.strokeRect(cardX, cardY, cardW, cardH);
 
       // Slot Number
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = P.textDim;
       ctx.font = `bold 12px ${FONT_STACK}`;
       ctx.fillText(`#${i + 1}`, cardX + cardW - 12, cardY + 24);
 
       // Empty icon & text
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillStyle = overlay(0.08);
       ctx.font = `bold 28px ${FONT_STACK}`;
       ctx.fillText('+', cardX + cardW / 2, cardY + 55);
 
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = P.textDim;
       ctx.font = `bold 14px ${FONT_STACK}`;
       ctx.fillText('WAITING FOR PLAYER', cardX + cardW / 2, cardY + 85);
     }
@@ -220,7 +221,7 @@ export async function generateQueuePanelImage(
 
   // Footer text
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#475569';
+  ctx.fillStyle = P.textDim;
   ctx.font = `12px ${FONT_STACK}`;
   ctx.fillText('Click Join Queue below to claim your spot in the lobby', width / 2, height - 16);
 

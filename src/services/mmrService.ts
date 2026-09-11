@@ -1,4 +1,5 @@
 import { Player, getDivision } from '../database/queries';
+import { P } from '../ui/palette';
 
 export interface MmrCalculationResult {
   blueDelta: number;
@@ -64,11 +65,11 @@ export interface RankTier {
  * badge letter as well as the colour.
  */
 const DIVISION_TIERS: Record<string, RankTier> = {
-  C: { name: 'Rank C', emoji: '🟢', color: '#00e676' }, // Green  (Diamond / Champ 1)
-  B: { name: 'Rank B', emoji: '🔵', color: '#2979ff' }, // Blue   (Champ 2 / Champ 3)
-  A: { name: 'Rank A', emoji: '🟣', color: '#aa00ff' }, // Purple (GC1 / GC2)
-  X: { name: 'Rank X', emoji: '⚔️', color: '#ff8f00' }, // Amber  (GC3 / Low SSL)
-  S: { name: 'Rank S', emoji: '👑', color: '#ffd700' }, // Gold   (SSL / Pro)
+  C: { name: 'Rank C', emoji: '🟢', color: P.division.C },
+  B: { name: 'Rank B', emoji: '🔵', color: P.division.B },
+  A: { name: 'Rank A', emoji: '🟣', color: P.division.A },
+  X: { name: 'Rank X', emoji: '⚔️', color: P.division.X },
+  S: { name: 'Rank S', emoji: '👑', color: P.division.S },
 };
 
 /**
@@ -112,13 +113,13 @@ export function getPromotionStatus(
     // Crossing the line this match is the moment worth calling out; sitting above it
     // already is just a status.
     return wasAbovePromotion || previousMmr === undefined
-      ? { label: 'PROMOTION ZONE', emoji: '⬆️', color: '#ffd700' }
-      : { label: 'ENTERED PROMO ZONE', emoji: '⬆️', color: '#ffd700' };
+      ? { label: 'PROMOTION ZONE', emoji: '⬆️', color: P.zone.promotion }
+      : { label: 'ENTERED PROMO ZONE', emoji: '⬆️', color: P.zone.promotion };
   }
   if (config.relegate_below !== null && mmr < config.relegate_below) {
     return wasBelowRelegation || previousMmr === undefined
-      ? { label: 'RELEGATION ZONE', emoji: '⬇️', color: '#ff5252' }
-      : { label: 'ENTERED DROP ZONE', emoji: '⬇️', color: '#ff5252' };
+      ? { label: 'RELEGATION ZONE', emoji: '⬇️', color: P.zone.relegation }
+      : { label: 'ENTERED DROP ZONE', emoji: '⬇️', color: P.zone.relegation };
   }
   return null;
 }
@@ -146,9 +147,9 @@ export function getStreakBadge(streak: number): StreakBadge | null {
     color,
     full: `${emoji} ${streak} WIN STREAK`,
   });
-  if (streak >= 10) return badge('💀', '#ff1744');
-  if (streak >= 5) return badge('🔥🔥', '#ff6d00');
-  if (streak >= 3) return badge('🔥', '#ffab00');
+  if (streak >= 10) return badge('💀', P.streak.unstoppable);
+  if (streak >= 5) return badge('🔥🔥', P.streak.blazing);
+  if (streak >= 3) return badge('🔥', P.streak.hot);
   return null;
 }
 

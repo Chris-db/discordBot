@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier, getPromotionStatus } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 export interface GamblePlayerResult {
   player: Player;
@@ -35,23 +36,23 @@ export async function generateGambleResultImage(
   // 1. Dark Background Gradient
   const bgGradient = ctx.createLinearGradient(0, 0, width, height);
   if (resultType === 'INVERTED') {
-    bgGradient.addColorStop(0, '#1c1917'); // stone-900
-    bgGradient.addColorStop(1, '#292524'); // stone-800
+    bgGradient.addColorStop(0, P.gamble.stoneTop); // stone-900
+    bgGradient.addColorStop(1, P.gamble.stoneBottom); // stone-800
   } else {
-    bgGradient.addColorStop(0, '#450a0a'); // red-950
-    bgGradient.addColorStop(1, '#1e1b18');
+    bgGradient.addColorStop(0, P.gamble.redTop); // red-950
+    bgGradient.addColorStop(1, P.gamble.redBottom);
   }
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Top accent bar
-  const accentColor = resultType === 'INVERTED' ? '#ffd700' : '#ff1744';
+  const accentColor = resultType === 'INVERTED' ? P.gold : P.negative;
   ctx.fillStyle = accentColor;
   ctx.fillRect(0, 0, width, 6);
 
   // 2. Main Title & Subtitle
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 34px ${FONT_STACK}`;
   const titleText =
     resultType === 'INVERTED'
@@ -60,7 +61,7 @@ export async function generateGambleResultImage(
   ctx.fillText(titleText, width / 2, 55);
 
   ctx.font = `bold 16px ${FONT_STACK}`;
-  ctx.fillStyle = resultType === 'INVERTED' ? '#facc15' : '#ff6e40';
+  ctx.fillStyle = resultType === 'INVERTED' ? P.gamble.invertedText : P.gamble.doubledText;
   const subText =
     resultType === 'INVERTED'
       ? `MATCH #${matchId}  •  TEAM ${wheelWinner} WON THE 50/50 & STOLE THE MMR!`
@@ -88,9 +89,9 @@ export async function generateGambleResultImage(
       const cardY = 150 + i * (cardH + 12);
 
       // Card bg
-      ctx.fillStyle = isWinner ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)';
+      ctx.fillStyle = isWinner ? overlay(0.08) : overlay(0.03);
       ctx.fillRect(startX, cardY, cardW, cardH);
-      ctx.strokeStyle = isWinner ? teamColor : '#334155';
+      ctx.strokeStyle = isWinner ? teamColor : P.surface;
       ctx.lineWidth = isWinner ? 2 : 1;
       ctx.strokeRect(startX, cardY, cardW, cardH);
 
@@ -116,9 +117,9 @@ export async function generateGambleResultImage(
           throw new Error('Avatar fallback');
         }
       } catch {
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = P.surface;
         ctx.fillRect(avatarX - avatarRadius, avatarY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = P.white;
         ctx.font = `bold 18px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(item.player.username.charAt(0).toUpperCase() || '?', avatarX, avatarY + 6);
@@ -127,7 +128,7 @@ export async function generateGambleResultImage(
 
       // Username
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = P.text;
       ctx.font = `bold 20px ${FONT_STACK}`;
       const nameStr = item.player.username.length > 13 ? item.player.username.substring(0, 12) + '…' : item.player.username;
       ctx.fillText(nameStr, startX + 78, cardY + 34);
@@ -135,12 +136,12 @@ export async function generateGambleResultImage(
       // New MMR & Tier Name
       const tier = getDivisionTier(item.player.division);
       ctx.font = `600 15px ${FONT_STACK}`;
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = P.textMuted;
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
 
       // Delta Badge
       const deltaText = item.delta >= 0 ? `+${item.delta} MMR` : `${item.delta} MMR`;
-      const deltaColor = item.delta >= 0 ? '#00e676' : '#ff1744';
+      const deltaColor = item.delta >= 0 ? P.positive : P.negative;
       ctx.textAlign = 'right';
       ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = deltaColor;
@@ -165,14 +166,14 @@ export async function generateGambleResultImage(
 
         ctx.textAlign = 'center';
         ctx.font = `bold 11px ${FONT_STACK}`;
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = P.black;
         ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
       }
     }
   };
 
-  await drawTeamColumn('TEAM BLUE 🔵', '#00b0ff', blueTeam, 40, wheelWinner === 'BLUE');
-  await drawTeamColumn('TEAM ORANGE 🟠', '#ff9100', orangeTeam, 510, wheelWinner === 'ORANGE');
+  await drawTeamColumn('TEAM BLUE 🔵', P.team.blue, blueTeam, 40, wheelWinner === 'BLUE');
+  await drawTeamColumn('TEAM ORANGE 🟠', P.team.orange, orangeTeam, 510, wheelWinner === 'ORANGE');
 
   return canvas.toBuffer('image/png');
 }

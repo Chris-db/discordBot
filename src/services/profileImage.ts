@@ -5,6 +5,7 @@ import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 /**
  * Generates a custom Player Profile Banner graphic with Rank Tier badge,
@@ -23,8 +24,8 @@ export async function generatePlayerProfileImage(
 
   // 1. Dark Glassmorphism Background
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a'); // slate-900
-  bgGradient.addColorStop(1, '#1e293b'); // slate-800
+  bgGradient.addColorStop(0, P.bgTop); // slate-900
+  bgGradient.addColorStop(1, P.bgBottom); // slate-800
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
@@ -52,9 +53,9 @@ export async function generatePlayerProfileImage(
       throw new Error('Avatar fallback');
     }
   } catch {
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = P.surface;
     ctx.fillRect(avatarX, avatarY, radius * 2, radius * 2);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = P.white;
     ctx.font = `bold 36px ${FONT_STACK}`;
     ctx.textAlign = 'center';
     ctx.fillText(player.username.charAt(0).toUpperCase() || '?', avatarX + radius, avatarY + radius + 14);
@@ -70,12 +71,12 @@ export async function generatePlayerProfileImage(
 
   // Username & Rank Badge
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 32px ${FONT_STACK}`;
   ctx.fillText(player.username, 160, 65);
 
   // Rank Tier Pill
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fillStyle = overlay(0.08);
   ctx.fillRect(160, 80, 220, 36);
   ctx.strokeStyle = tier.color;
   ctx.lineWidth = 2;
@@ -88,7 +89,7 @@ export async function generatePlayerProfileImage(
   // Server Position
   const rankText = rank > 0 ? `#${rank} of ${totalPlayers} players` : 'Unranked';
   ctx.font = `600 18px ${FONT_STACK}`;
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = P.textMuted;
   ctx.fillText(`SERVER STANDING: ${rankText}`, 410, 104);
 
   // 3. MMR Progress Bar toward next rank
@@ -126,7 +127,7 @@ export async function generatePlayerProfileImage(
   const barWidth = 710;
   const barHeight = 22;
 
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = P.textFaint;
   ctx.font = `bold 15px ${FONT_STACK}`;
   ctx.textAlign = 'left';
   ctx.fillText(`MMR PROGRESS (${player.mmr} / ${nextTarget})`, barX, barY - 10);
@@ -134,7 +135,7 @@ export async function generatePlayerProfileImage(
   ctx.fillText(`Next: ${nextRankName}`, barX + barWidth, barY - 10);
 
   // Bar Background
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fillStyle = overlay(0.08);
   ctx.fillRect(barX, barY, barWidth, barHeight);
 
   // Progress Fill
@@ -151,15 +152,15 @@ export async function generatePlayerProfileImage(
     const cardH = 110;
     const cardY = 230;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fillStyle = overlay(0.04);
     ctx.fillRect(Number(x), cardY, cardW, cardH);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.strokeStyle = overlay(0.1);
     ctx.lineWidth = 1;
     ctx.strokeRect(Number(x), cardY, cardW, cardH);
 
     ctx.textAlign = 'center';
     ctx.font = `bold 13px ${FONT_STACK}`;
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = P.textMuted;
     ctx.fillText(title, Number(x) + cardW / 2, cardY + 30);
 
     ctx.font = `bold 26px ${FONT_STACK}`;
@@ -167,20 +168,20 @@ export async function generatePlayerProfileImage(
     ctx.fillText(value, Number(x) + cardW / 2, cardY + 70);
 
     ctx.font = `600 12px ${FONT_STACK}`;
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = P.textFaint;
     ctx.fillText(sub, Number(x) + cardW / 2, cardY + 95);
   };
 
-  drawStatCard('WIN RATE %', `${winRate}%`, `${totalGames} MATCHES`, 45, '#38bdf8');
-  drawStatCard('W - L RECORD', `${player.wins}W - ${player.losses}L`, `PLAYED: ${totalGames}`, 226, '#f8fafc');
+  drawStatCard('WIN RATE %', `${winRate}%`, `${totalGames} MATCHES`, 45, P.sky);
+  drawStatCard('W - L RECORD', `${player.wins}W - ${player.losses}L`, `PLAYED: ${totalGames}`, 226, P.text);
 
   const streakVal = player.streak > 0 ? `+${player.streak}` : player.streak < 0 ? `${player.streak}` : '0';
-  const streakColor = player.streak > 0 ? '#00e676' : player.streak < 0 ? '#ff1744' : '#94a3b8';
+  const streakColor = player.streak > 0 ? P.positive : player.streak < 0 ? P.negative : P.textMuted;
   drawStatCard('STREAK', streakVal, player.streak > 0 ? 'WIN STREAK 🔥' : 'LOSS STREAK ❄️', 407, streakColor);
 
   const avgSecs = getAverageMatchDuration(player.discord_id);
   const avgTimeStr = avgSecs > 0 ? `${Math.floor(avgSecs / 60)}m ${avgSecs % 60}s` : 'N/A';
-  drawStatCard('AVG TIME', avgTimeStr, 'PER MATCH ⏱️', 588, '#f59e0b', 167);
+  drawStatCard('AVG TIME', avgTimeStr, 'PER MATCH ⏱️', 588, P.amber, 167);
 
   return canvas.toBuffer('image/png');
 }

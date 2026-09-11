@@ -4,6 +4,7 @@ import { Match, getPlayersByIds, getSeriesScore } from '../database/queries';
 import { RL_COLORS } from '../ui/embeds';
 import { FONT_STACK } from '../utils/fonts';
 import { formatMatchDuration } from '../utils/duration';
+import { P, alpha, overlay } from '../ui/palette';
 
 /**
  * Generates an 880x420 Match History Canvas Graphic.
@@ -34,18 +35,18 @@ export async function generateMatchHistoryImage(
 
   // 1. Dark background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-  bgGradient.addColorStop(0, '#0f172a'); // slate-900
-  bgGradient.addColorStop(1, '#1e293b'); // slate-800
+  bgGradient.addColorStop(0, P.bgTop); // slate-900
+  bgGradient.addColorStop(1, P.bgBottom); // slate-800
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Top accent line
-  ctx.fillStyle = '#00b0ff';
+  ctx.fillStyle = P.accent;
   ctx.fillRect(0, 0, width, 5);
 
   // 2. Header
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 26px ${FONT_STACK}`;
   const titleText = targetUser
     ? `📜 ${targetUser.username.toUpperCase()}'S MATCH HISTORY`
@@ -53,12 +54,12 @@ export async function generateMatchHistoryImage(
   ctx.fillText(titleText, 40, 50);
 
   ctx.font = `600 14px ${FONT_STACK}`;
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = P.textMuted;
   ctx.fillText('RECENT COMPLETED GAMES • OFFICIAL RECORD', 40, 75);
 
   if (matches.length === 0) {
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = P.textFaint;
     ctx.font = `bold 22px ${FONT_STACK}`;
     ctx.fillText('No completed matches found yet!', width / 2, height / 2);
     ctx.font = `16px ${FONT_STACK}`;
@@ -74,12 +75,12 @@ export async function generateMatchHistoryImage(
     const cardY = startY + i * (cardH + cardGap);
 
     const isBlueWin = match.winner === 'BLUE';
-    const winColor = isBlueWin ? '#00b0ff' : '#ff9100';
+    const winColor = isBlueWin ? P.team.blue : P.team.orange;
 
     // Card background
-    ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+    ctx.fillStyle = P.history.row;
     ctx.fillRect(startX, cardY, cardW, cardH);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = overlay(0.08);
     ctx.lineWidth = 1;
     ctx.strokeRect(startX, cardY, cardW, cardH);
 
@@ -89,7 +90,7 @@ export async function generateMatchHistoryImage(
 
     // Match ID & Date
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = P.text;
     ctx.font = `bold 18px ${FONT_STACK}`;
     ctx.fillText(`MATCH #${match.match_id}`, startX + 25, cardY + 30);
 
@@ -100,7 +101,7 @@ export async function generateMatchHistoryImage(
         })
       : 'Recent';
     ctx.font = `13px ${FONT_STACK}`;
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = P.textFaint;
     ctx.fillText(`${dateStr}  •  ${match.team_size}v${match.team_size}`, startX + 25, cardY + 52);
 
     // Winner pill
@@ -110,7 +111,7 @@ export async function generateMatchHistoryImage(
     const pillX = startX + 145;
     const pillY = cardY + 24;
 
-    ctx.fillStyle = isBlueWin ? 'rgba(0, 176, 255, 0.15)' : 'rgba(255, 145, 0, 0.15)';
+    ctx.fillStyle = isBlueWin ? alpha(P.team.blue, 0.15) : alpha(P.team.orange, 0.15);
     ctx.fillRect(pillX, pillY, pillW, pillH);
     ctx.strokeStyle = winColor;
     ctx.lineWidth = 1.5;
@@ -127,7 +128,7 @@ export async function generateMatchHistoryImage(
       const { blueWins, orangeWins } = getSeriesScore(match.series_id, match.series_game ?? 1);
       ctx.textAlign = 'left';
       ctx.font = `bold 11px ${FONT_STACK}`;
-      ctx.fillStyle = '#a78bfa';
+      ctx.fillStyle = P.history.series;
       ctx.fillText(
         `GAME ${match.series_game ?? 1}  •  🔵 ${blueWins}–${orangeWins} 🟠`,
         pillX,
@@ -144,18 +145,18 @@ export async function generateMatchHistoryImage(
 
     ctx.textAlign = 'left';
     ctx.font = `bold 13px ${FONT_STACK}`;
-    ctx.fillStyle = '#00b0ff';
+    ctx.fillStyle = P.team.blue;
     ctx.fillText(`🔵 Blue:`, startX + 290, cardY + 30);
     ctx.font = `13px ${FONT_STACK}`;
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = P.history.teamText;
     const shortBlue = blueNames.length > 28 ? blueNames.substring(0, 26) + '…' : blueNames;
     ctx.fillText(shortBlue, startX + 345, cardY + 30);
 
     ctx.font = `bold 13px ${FONT_STACK}`;
-    ctx.fillStyle = '#ff9100';
+    ctx.fillStyle = P.team.orange;
     ctx.fillText(`🟠 Orange:`, startX + 290, cardY + 54);
     ctx.font = `13px ${FONT_STACK}`;
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = P.history.teamText;
     const shortOrange = orangeNames.length > 28 ? orangeNames.substring(0, 26) + '…' : orangeNames;
     ctx.fillText(shortOrange, startX + 360, cardY + 54);
 
@@ -166,7 +167,7 @@ export async function generateMatchHistoryImage(
       const isWin = (isBluePlayer && isBlueWin) || (isOrangePlayer && !isBlueWin);
 
       const resText = isWin ? 'WIN  🏆' : 'LOSS';
-      const resColor = isWin ? '#00e676' : '#ff1744';
+      const resColor = isWin ? P.positive : P.negative;
 
       ctx.textAlign = 'right';
       ctx.font = `bold 20px ${FONT_STACK}`;
@@ -181,7 +182,7 @@ export async function generateMatchHistoryImage(
       if (durationStr) {
         ctx.textAlign = 'right';
         ctx.font = `bold 16px ${FONT_STACK}`;
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = P.textMuted;
         ctx.fillText(`⏱️ ${durationStr}`, startX + cardW - 25, cardY + 44);
       }
     }
@@ -189,7 +190,7 @@ export async function generateMatchHistoryImage(
 
   // Footer text
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#475569';
+  ctx.fillStyle = P.textDim;
   ctx.font = `12px ${FONT_STACK}`;
   ctx.fillText('Rocket League 6mans • Match History System', width / 2, height - 16);
 

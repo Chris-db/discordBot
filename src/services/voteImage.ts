@@ -1,6 +1,7 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { Player } from '../database/queries';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 export interface VoteCounts {
   captains: number;
@@ -25,23 +26,23 @@ export async function generateModeVoteImage(
 
   // 1. Dark background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a'); // slate-900
-  bgGradient.addColorStop(1, '#1e293b'); // slate-800
+  bgGradient.addColorStop(0, P.bgTop); // slate-900
+  bgGradient.addColorStop(1, P.bgBottom); // slate-800
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Top accent bar
-  ctx.fillStyle = '#aa00ff';
+  ctx.fillStyle = P.purple;
   ctx.fillRect(0, 0, width, 5);
 
   // 2. Title & Subtitle
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText('🗳️ VOTE: TEAM SELECTION MODE', width / 2, 45);
 
   ctx.font = `600 15px ${FONT_STACK}`;
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = P.textMuted;
   // The threshold is a majority of this lobby -- 3 of 4, 4 of 6, 5 of 8 -- not a fixed 4.
   // The deadline is not painted here: a PNG cannot tick, so "closes in 30s" read as a
   // stuck clock and went stale the moment the timeout became configurable. The message
@@ -62,9 +63,9 @@ export async function generateModeVoteImage(
     const cardY = 95;
 
     // Background
-    ctx.fillStyle = votes > 0 ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)';
+    ctx.fillStyle = votes > 0 ? overlay(0.08) : overlay(0.03);
     ctx.fillRect(x, cardY, cardW, cardH);
-    ctx.strokeStyle = votes > 0 ? colorHex : '#334155';
+    ctx.strokeStyle = votes > 0 ? colorHex : P.surface;
     ctx.lineWidth = votes > 0 ? 2 : 1;
     ctx.strokeRect(x, cardY, cardW, cardH);
 
@@ -79,12 +80,12 @@ export async function generateModeVoteImage(
     ctx.fillText(icon, x + cardW / 2, cardY + 48);
 
     // Title
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = P.text;
     ctx.font = `bold 18px ${FONT_STACK}`;
     ctx.fillText(title, x + cardW / 2, cardY + 80);
 
     // Description
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = P.textMuted;
     ctx.font = `13px ${FONT_STACK}`;
     ctx.fillText(desc, x + cardW / 2, cardY + 105);
 
@@ -95,7 +96,7 @@ export async function generateModeVoteImage(
     const barW = cardW - 50;
     const barH = 14;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillStyle = overlay(0.1);
     ctx.fillRect(barX, barY, barW, barH);
 
     if (progress > 0) {
@@ -105,19 +106,19 @@ export async function generateModeVoteImage(
 
     // Vote count badge text
     ctx.font = `bold 16px ${FONT_STACK}`;
-    ctx.fillStyle = votes > 0 ? colorHex : '#64748b';
+    ctx.fillStyle = votes > 0 ? colorHex : P.textFaint;
     ctx.fillText(`${votes} / ${votesRequired} VOTES`, x + cardW / 2, cardY + 163);
   };
 
-  drawModeCard('CAPTAINS DRAFT', '👑', 'Captains Snake Draft', voteCounts.captains, 40, '#ffd700');
-  drawModeCard('BALANCED MMR', '⚖️', 'Fair auto-balanced teams', voteCounts.balanced, 300, '#00b0ff');
+  drawModeCard('CAPTAINS DRAFT', '👑', 'Captains Snake Draft', voteCounts.captains, 40, P.gold);
+  drawModeCard('BALANCED MMR', '⚖️', 'Fair auto-balanced teams', voteCounts.balanced, 300, P.accent);
   drawModeCard(
     'RANDOM TEAMS',
     '🎲',
     `Completely randomized ${teamSize}v${teamSize}`,
     voteCounts.random,
     560,
-    '#00e676'
+    P.positive
   );
 
   return canvas.toBuffer('image/png');

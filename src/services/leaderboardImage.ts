@@ -5,6 +5,7 @@ import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 /**
  * Generates a stunning Canvas leaderboard image graphic with one row per player:
@@ -28,18 +29,18 @@ export async function generateLeaderboardImage(
 
   // 1. Background (Sleek Dark Modern Theme)
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a'); // slate-900
-  bgGradient.addColorStop(1, '#1e293b'); // slate-800
+  bgGradient.addColorStop(0, P.bgTop); // slate-900
+  bgGradient.addColorStop(1, P.bgBottom); // slate-800
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Subtle top border glow
-  ctx.fillStyle = '#f59e0b'; // amber/gold accent
+  ctx.fillStyle = P.amber; // amber/gold accent
   ctx.fillRect(0, 0, width, 4);
 
   // 2. Table Header
   ctx.font = `bold 15px ${FONT_STACK}`;
-  ctx.fillStyle = '#64748b'; // slate-500
+  ctx.fillStyle = P.textFaint; // slate-500
   ctx.textAlign = 'left';
   ctx.fillText('POS', 40, 42);
   ctx.fillText('PLAYER', 170, 42);
@@ -48,10 +49,10 @@ export async function generateLeaderboardImage(
   const ladderLabel = teamSize ?? players[0]?.team_size;
   if (ladderLabel) {
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#f59e0b';
+    ctx.fillStyle = P.amber;
     ctx.font = `bold 15px ${FONT_STACK}`;
     ctx.fillText(`${ladderLabel}V${ladderLabel}`, width / 2, 42);
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = P.textFaint;
     ctx.font = `bold 15px ${FONT_STACK}`;
   }
 
@@ -59,7 +60,7 @@ export async function generateLeaderboardImage(
   ctx.fillText('MMR RATING', 860, 42);
 
   // Divider line under header
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.strokeStyle = overlay(0.08);
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(40, 54);
@@ -68,7 +69,7 @@ export async function generateLeaderboardImage(
 
   if (players.length === 0) {
     ctx.font = `bold 20px ${FONT_STACK}`;
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = P.textMuted;
     ctx.textAlign = 'center';
     ctx.fillText('No players found on the leaderboard yet.', width / 2, height / 2 + 10);
     return canvas.toBuffer('image/png');
@@ -90,7 +91,7 @@ export async function generateLeaderboardImage(
 
     // Alternating row background
     if (idx % 2 === 1) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+      ctx.fillStyle = overlay(0.025);
       ctx.fillRect(20, y, width - 40, rowHeight);
     }
 
@@ -102,13 +103,13 @@ export async function generateLeaderboardImage(
     ctx.textAlign = 'left';
     ctx.font = `bold 22px ${FONT_STACK}`;
     if (overallRank === 1) {
-      ctx.fillStyle = '#fbbf24'; // Gold
+      ctx.fillStyle = P.leaderboard.medalGold; // Gold
     } else if (overallRank === 2) {
-      ctx.fillStyle = '#e2e8f0'; // Silver
+      ctx.fillStyle = P.leaderboard.medalSilver; // Silver
     } else if (overallRank === 3) {
-      ctx.fillStyle = '#d97706'; // Bronze
+      ctx.fillStyle = P.leaderboard.medalBronze; // Bronze
     } else {
-      ctx.fillStyle = '#94a3b8'; // Slate-400
+      ctx.fillStyle = P.textMuted; // Slate-400
     }
     ctx.fillText(`#${overallRank}`, 40, y + 40);
 
@@ -128,9 +129,9 @@ export async function generateLeaderboardImage(
       ctx.drawImage(avatarImg, avatarX, avatarY, radius * 2, radius * 2);
     } else {
       // Fallback initial circle
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = P.surface;
       ctx.fillRect(avatarX, avatarY, radius * 2, radius * 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = P.white;
       ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(
@@ -142,7 +143,7 @@ export async function generateLeaderboardImage(
     ctx.restore();
 
     // Subtle border around avatar
-    ctx.strokeStyle = overallRank <= 3 ? '#fbbf24' : 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = overallRank <= 3 ? P.leaderboard.medalGold : overlay(0.15);
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(avatarX + radius, avatarY + radius, radius, 0, Math.PI * 2, true);
@@ -151,17 +152,17 @@ export async function generateLeaderboardImage(
     // C. NAME (X=170)
     ctx.textAlign = 'left';
     ctx.font = overallRank <= 3 ? `bold 22px ${FONT_STACK}` : `600 20px ${FONT_STACK}`;
-    ctx.fillStyle = '#f8fafc'; // Crisp white
+    ctx.fillStyle = P.text; // Crisp white
     ctx.fillText(player.username, 170, y + 40);
 
     // D. MMR RATING (Far Right, X=860)
     ctx.textAlign = 'right';
     ctx.font = `bold 22px ${FONT_STACK}`;
-    ctx.fillStyle = '#38bdf8'; // Sky-400 cyan
+    ctx.fillStyle = P.sky; // Sky-400 cyan
     ctx.fillText(`${player.mmr} MMR`, 860, y + 40);
 
     // Subtle bottom border for row
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.strokeStyle = overlay(0.04);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(40, y + rowHeight);

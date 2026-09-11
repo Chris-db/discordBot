@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier, getPromotionStatus, getStreakBadge } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, overlay } from '../ui/palette';
 
 export interface MatchPlayerResult {
   /** Post-match row, so `streak` is the streak this result just produced. */
@@ -36,25 +37,25 @@ export async function generateMatchResultImage(
 
   // 1. Dark Background Gradient
   const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-  bgGradient.addColorStop(0, '#0f172a'); // slate-900
-  bgGradient.addColorStop(1, '#1e293b'); // slate-800
+  bgGradient.addColorStop(0, P.bgTop); // slate-900
+  bgGradient.addColorStop(1, P.bgBottom); // slate-800
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Winner color accent bar at the top
-  const winColor = winner === 'BLUE' ? '#00b0ff' : '#ff9100';
+  const winColor = winner === 'BLUE' ? P.team.blue : P.team.orange;
   ctx.fillStyle = winColor;
   ctx.fillRect(0, 0, width, 6);
 
   // 2. Victory Header
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 34px ${FONT_STACK}`;
   const winTitle = winner === 'BLUE' ? '🔵  BLUE TEAM VICTORIOUS!  🔵' : '🟠  ORANGE TEAM VICTORIOUS!  🟠';
   ctx.fillText(winTitle, width / 2, 55);
 
   ctx.font = `600 16px ${FONT_STACK}`;
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = P.textMuted;
   const subtitle = durationStr
     ? `MATCH #${matchId}  •  OFFICIAL 6MANS RESULT  •  ⏱️ ${durationStr}`
     : `MATCH #${matchId}  •  OFFICIAL 6MANS RESULT`;
@@ -82,9 +83,9 @@ export async function generateMatchResultImage(
       const cardY = 150 + i * (cardH + 12);
 
       // Card bg
-      ctx.fillStyle = isWinner ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)';
+      ctx.fillStyle = isWinner ? overlay(0.08) : overlay(0.03);
       ctx.fillRect(startX, cardY, cardW, cardH);
-      ctx.strokeStyle = isWinner ? teamColor : '#334155';
+      ctx.strokeStyle = isWinner ? teamColor : P.surface;
       ctx.lineWidth = isWinner ? 2 : 1;
       ctx.strokeRect(startX, cardY, cardW, cardH);
 
@@ -110,9 +111,9 @@ export async function generateMatchResultImage(
           throw new Error('Avatar fallback');
         }
       } catch {
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = P.surface;
         ctx.fillRect(avatarX - avatarRadius, avatarY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = P.white;
         ctx.font = `bold 18px ${FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(item.player.username.charAt(0).toUpperCase() || '?', avatarX, avatarY + 6);
@@ -122,7 +123,7 @@ export async function generateMatchResultImage(
       // Username. Shortened when a streak badge needs to sit beside it.
       const streak = getStreakBadge(item.player.streak);
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = P.text;
       ctx.font = `bold 20px ${FONT_STACK}`;
       const maxNameChars = streak ? 9 : 13;
       const nameStr =
@@ -142,7 +143,7 @@ export async function generateMatchResultImage(
         if (badgeX + badgeW < startX + cardW - 110) {
           ctx.fillStyle = streak.color;
           ctx.fillRect(badgeX, cardY + 19, badgeW, 20);
-          ctx.fillStyle = '#000000';
+          ctx.fillStyle = P.black;
           ctx.textAlign = 'left';
           ctx.fillText(streak.full, badgeX + 7, cardY + 33);
         }
@@ -152,12 +153,12 @@ export async function generateMatchResultImage(
       const tier = getDivisionTier(item.player.division);
       ctx.textAlign = 'left';
       ctx.font = `600 15px ${FONT_STACK}`;
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = P.textMuted;
       ctx.fillText(`${item.newMmr} MMR (${tier.name})`, startX + 78, cardY + 60);
 
       // Delta Badge (+15 or -15) on the right
       const deltaText = item.delta >= 0 ? `+${item.delta} MMR` : `${item.delta} MMR`;
-      const deltaColor = item.delta >= 0 ? '#00e676' : '#ff1744';
+      const deltaColor = item.delta >= 0 ? P.positive : P.negative;
       ctx.textAlign = 'right';
       ctx.font = `bold 18px ${FONT_STACK}`;
       ctx.fillStyle = deltaColor;
@@ -185,14 +186,14 @@ export async function generateMatchResultImage(
 
         ctx.textAlign = 'center';
         ctx.font = `bold 11px ${FONT_STACK}`;
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = P.black;
         ctx.fillText(zone.label, pillX + pillW / 2, pillY + 15);
       }
     }
   };
 
-  await drawTeamColumn('TEAM BLUE 🔵', '#00b0ff', blueTeam, 40, winner === 'BLUE');
-  await drawTeamColumn('TEAM ORANGE 🟠', '#ff9100', orangeTeam, 510, winner === 'ORANGE');
+  await drawTeamColumn('TEAM BLUE 🔵', P.team.blue, blueTeam, 40, winner === 'BLUE');
+  await drawTeamColumn('TEAM ORANGE 🟠', P.team.orange, orangeTeam, 510, winner === 'ORANGE');
 
   return canvas.toBuffer('image/png');
 }

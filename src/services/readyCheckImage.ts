@@ -4,6 +4,7 @@ import { Player } from '../database/queries';
 import { getDivisionTier } from './mmrService';
 import { getCachedAvatarImage } from '../utils/avatarCache';
 import { FONT_STACK } from '../utils/fonts';
+import { P, alpha } from '../ui/palette';
 
 /**
  * Generates the AFK Voice Ready Check graphic: teamSize columns by 2 rows, matching the
@@ -44,24 +45,24 @@ export async function generateReadyCheckImage(
 
   // 1. Background gradient
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a');
-  bgGradient.addColorStop(1, '#1e293b');
+  bgGradient.addColorStop(0, P.bgTop);
+  bgGradient.addColorStop(1, P.bgBottom);
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
   // Top accent line
   const allReady = players.every(p => readyPlayerIds.includes(p.discord_id) || p.discord_id.startsWith('test_bot_'));
-  ctx.fillStyle = allReady ? '#00e676' : '#ff9100';
+  ctx.fillStyle = allReady ? P.positive : P.warning;
   ctx.fillRect(0, 0, width, 5);
 
   // 2. Header
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = P.text;
   ctx.font = `bold 28px ${FONT_STACK}`;
   ctx.fillText(`🔊 AFK VOICE READY CHECK (${capacity} / ${capacity})`, width / 2, 45);
 
   ctx.font = `bold 16px ${FONT_STACK}`;
-  ctx.fillStyle = allReady ? '#00e676' : '#ff9100';
+  ctx.fillStyle = allReady ? P.positive : P.warning;
   ctx.fillText(
     allReady ? '✅ ALL PLAYERS READY! LAUNCHING MODE VOTING...' : statusMsg,
     width / 2,
@@ -81,10 +82,10 @@ export async function generateReadyCheckImage(
     if (!p) continue;
 
     const isReady = readyPlayerIds.includes(p.discord_id) || p.discord_id.startsWith('test_bot_');
-    const colorHex = isReady ? '#00e676' : '#ff9100';
+    const colorHex = isReady ? P.positive : P.warning;
 
     // Card background
-    ctx.fillStyle = isReady ? 'rgba(0, 230, 118, 0.08)' : 'rgba(255, 145, 0, 0.08)';
+    ctx.fillStyle = isReady ? alpha(P.positive, 0.08) : alpha(P.warning, 0.08);
     ctx.fillRect(x, y, cardW, cardH);
     ctx.strokeStyle = colorHex;
     ctx.lineWidth = 1.5;
@@ -112,9 +113,9 @@ export async function generateReadyCheckImage(
         throw new Error('Avatar fallback');
       }
     } catch {
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = P.surface;
       ctx.fillRect(ax - radius, ay - radius, radius * 2, radius * 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = P.white;
       ctx.font = `bold 16px ${FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText(p.username.charAt(0).toUpperCase() || '?', ax, ay + 6);
@@ -130,7 +131,7 @@ export async function generateReadyCheckImage(
 
     // Username
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = P.text;
     ctx.font = `bold 18px ${FONT_STACK}`;
     const shortName = p.username.length > 11 ? p.username.substring(0, 10) + '…' : p.username;
     ctx.fillText(shortName, x + 74, y + 36);
