@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (themes)
+Last updated: 2026-09-11 (off-site backups)
 
 ---
 
@@ -247,6 +247,25 @@ Not themed, on purpose: Discord embed side-bars (`RL_COLORS` in `ui/embeds.ts`, 
 `setColor` calls) — those are the messages, which Chris is happy with; and the
 card-specific groups (`matchVs`, `gamble`, `leaderboard` medals, `history`) which keep
 their defaults except that `queueBg` follows an overridden `bgTop`/`bgBottom`.
+
+## Off-site backups (2026-09-11)
+
+The bot's hourly `VACUUM INTO` backups in `data/backups/` are on the same SD card as the
+database, so they cover a bad write, not a dead card. The off-site layer:
+
+- **Where:** private repo `github.com/Chris-db/6mans-backups`, `daily/6mans-YYYY-MM-DD.sqlite.gz`
+  (~8KB gzipped today; git history keeps every snapshot, the working tree keeps 90 days).
+- **How:** `scripts/offsite-backup.sh` on the Pi, from Chris's user crontab at **03:30
+  SAST nightly**, logging to `~/6mans-backups.log`. Pushes over the Pi's existing
+  account-level SSH key. The clone lives at `~/6mans-backups`.
+- **Verified 2026-09-11:** the first snapshot was cloned back on Windows, `integrity_check`
+  ok, schema version 5, 10 players / 10 matches / 14 ladder rows.
+- **Restore:** on the Pi, `scripts/restore-backup.sh ~/6mans-backups/daily/<file>.sqlite.gz`
+  — stops the service, keeps the current DB as `*.replaced-<time>`, unpacks, starts. Needs
+  an interactive shell for sudo. If the Pi itself is gone: clone the repo anywhere,
+  `gunzip` the file to `data/6mans.sqlite` on the new host, deploy as usual.
+- **Check it is still running:** `tail ~/6mans-backups.log` on the Pi, or look at the
+  repo's commit list — one commit per night.
 
 ## Next
 
