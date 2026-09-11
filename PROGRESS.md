@@ -87,7 +87,6 @@ Everything else worked, but these have never been run against the real API:
 - `/replay check` against a real upload (parser verified on 260 local files, the Discord
   download path is not).
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
-- `/theme` against the real API (renders verified locally under every preset).
 
 Tests: **290 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
@@ -242,7 +241,7 @@ Two commits:
 **`/theme`** (Manage Server): `set token colour` (22 tokens as a dropdown, hex typed),
 `reset [token]`, `preset default|mono|midnight|ember`, `list`, `show`. Every mutating
 subcommand replies with a rendered queue panel + result card under the new theme.
-**Requires `npm run register`.**
+**Requires `npm run register`.** Verified live 2026-09-11: `/theme show` and `/theme set` both work on the Pi.
 
 Not themed, on purpose: Discord embed side-bars (`RL_COLORS` in `ui/embeds.ts`, a few
 `setColor` calls) — those are the messages, which Chris is happy with; and the
