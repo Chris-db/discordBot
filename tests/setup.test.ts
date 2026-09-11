@@ -23,11 +23,16 @@ interface FakeChannel {
   type: ChannelType;
   position: number;
   parentId?: string | null;
-  permissionOverwrites: { set: (o: any[]) => Promise<void>; last?: any[] };
+  permissionOverwrites: { set: (o: any[]) => Promise<void>; edit: (id: string, o: any) => Promise<void>; last?: any[]; edited?: any };
   setName: (n: string) => Promise<void>;
+  /** Set to make send() fail, like a channel the bot cannot see. */
+  sendFails?: boolean;
+  send: (o: any) => Promise<{ id: string }>;
+  messages: { edit: () => Promise<null>; delete: () => Promise<null> };
+  lastMessageId: string | null;
 }
 
-function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
+function fakeGuild(opts: { admin?: boolean; perms?: bigint[]; privateCategories?: boolean } = {}) {
   let nextId = 1;
   const channels = new Map<string, FakeChannel>();
   const roles = new Map<string, { id: string; name: string; setName: (n: string) => Promise<void> }>();
@@ -53,7 +58,7 @@ function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
     },
     channels: {
       cache: cacheOf(channels),
-      create: async ({ name, type, parent }: { name: string; type: ChannelType; parent?: string }) => {
+      create: async ({ name, type, parent, permissionOverwrites = [] }: { name: string; type: ChannelType; parent?: string; permissionOverwrites?: any[] }) => {
         const c: FakeChannel = {
           id: `chan_${nextId++}`,
           name,
@@ -64,8 +69,21 @@ function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
             set: async (o: any[]) => {
               c.permissionOverwrites.last = o;
             },
+            edit: async (id: string, o: any) => {
+              if (c.sendFails) throw new Error('Missing Access');
+              c.permissionOverwrites.edited = { id, ...o };
+            },
           },
           setName: async (n: string) => void (c.name = n),
+          // A private category makes its children unreachable unless the channel itself
+          // carries an overwrite for the bot -- which is what /setup must add.
+          sendFails: Boolean(opts.privateCategories && parent && !permissionOverwrites.some((o: any) => o.id === 'bot_1')),
+          send: async () => {
+            if (c.sendFails) throw new Error('Missing Access');
+            return { id: `msg_${nextId++}` };
+          },
+          messages: { edit: async () => null, delete: async () => null },
+          lastMessageId: null,
         };
         channels.set(c.id, c);
         created.push(`${type === ChannelType.GuildCategory ? 'category' : 'text'}:${name}`);
@@ -84,15 +102,14 @@ function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
       },
     },
   };
-  return { guild: guild as any, created, channels, roles, positions };
+  const client = {
+    user: { id: 'bot_1' },
+    channels: { fetch: async (id: string) => channels.get(id) ?? null },
+    guilds: { fetch: async () => null },
+    users: { fetch: async () => null },
+  } as any;
+  return { guild: guild as any, client, created, channels, roles, positions };
 }
-
-const client = {
-  user: { id: 'bot_1' },
-  channels: { fetch: async () => null },
-  guilds: { fetch: async () => null },
-  users: { fetch: async () => null },
-} as any;
 
 beforeEach(() => {
   clearDivisionNamesCache();
@@ -104,7 +121,7 @@ beforeEach(() => {
 
 describe('runSetup', () => {
   it('one ladder: a category, a registered queue channel with a queue row, and the feed', async () => {
-    const { guild, created } = fakeGuild();
+    const { guild, client, created } = fakeGuild();
     const report = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: true });
 
     expect(created).toEqual([`category:${categoryName({ display_name: '6mans' })}`, 'text:6mans-3v3', 'text:active-matches']);
@@ -120,7 +137,7 @@ describe('runSetup', () => {
   });
 
   it('is idempotent: a second run creates nothing and reports everything as reused', async () => {
-    const { guild, created } = fakeGuild();
+    const { guild, client, created } = fakeGuild();
     await runSetup(client, guild, { teamSize: 3, preset: 'three', roles: true, feed: true });
     const firstCount = created.length;
     expect(firstCount).toBe(3 * 3 + 1); // role + category + channel per division, plus feed
@@ -132,7 +149,7 @@ describe('runSetup', () => {
   });
 
   it('all five, with roles: each category is locked to its role and the role is stored', async () => {
-    const { guild, created, channels, roles } = fakeGuild();
+    const { guild, client, created, channels, roles } = fakeGuild();
     await runSetup(client, guild, { teamSize: 2, preset: 'all', roles: true, feed: false });
 
     // Highest rank first, so the sidebar and the role list read S -> C.
@@ -153,7 +170,7 @@ describe('runSetup', () => {
   });
 
   it('keeps a channel an admin already registered (and renamed) instead of making a new one', async () => {
-    const { guild, created, channels } = fakeGuild();
+    const { guild, client, created, channels } = fakeGuild();
     const custom = await guild.channels.create({ name: 'my-own-queue', type: ChannelType.GuildText });
     created.length = 0;
     const { ensureGuildDefaults } = await import('../src/services/guildSetup');
@@ -169,7 +186,7 @@ describe('runSetup', () => {
   });
 
   it('sizes are independent: 3v3 then 2v2 gives each its own channel and ladder', async () => {
-    const { guild, created } = fakeGuild();
+    const { guild, client, created } = fakeGuild();
     await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
     await runSetup(client, guild, { teamSize: 2, preset: 'one', roles: false, feed: false });
     expect(created).toEqual([`category:${categoryName({ display_name: '6mans' })}`, 'text:6mans-3v3', 'text:6mans-2v2']);
@@ -180,7 +197,7 @@ describe('runSetup', () => {
   });
 
   it('a role that cannot lock its category is a warning, not a failure', async () => {
-    const { guild, channels } = fakeGuild();
+    const { guild, client, channels } = fakeGuild();
     const origCreate = guild.channels.create;
     guild.channels.create = async (o: any) => {
       const c = await origCreate(o);
@@ -200,7 +217,7 @@ describe('runSetup', () => {
 
 describe('one-ladder naming', () => {
   it('names the ladder (default 6mans) on every size, and the cards pick it up', async () => {
-    const { guild } = fakeGuild();
+    const { guild, client } = fakeGuild();
     await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
     for (const size of [2, 3, 4]) expect(getDivisions(G, size).find(d => d.division === 'C')!.display_name).toBe('6mans');
     // Untouched divisions keep their names.
@@ -212,7 +229,7 @@ describe('one-ladder naming', () => {
 
   it('re-running with a name renames the category, channel and role it made, and makes nothing new', async () => {
     // Vanilla's: first run happened before the name option existed, under "Rank C".
-    const { guild, created, channels, roles } = fakeGuild();
+    const { guild, client, created, channels, roles } = fakeGuild();
     const { ensureGuildDefaults } = await import('../src/services/guildSetup');
     ensureGuildDefaults(G);
     for (const size of [2, 3, 4]) updateDivision(G, size, 'C', { display_name: 'Rank C' });
@@ -241,7 +258,7 @@ describe('one-ladder naming', () => {
 
 describe('category naming and order', () => {
   it('recognises a plain "Rank B" category made by hand, and does not make a second one', async () => {
-    const { guild, created, channels } = fakeGuild();
+    const { guild, client, created, channels } = fakeGuild();
     await guild.channels.create({ name: 'Rank B', type: ChannelType.GuildCategory });
     await guild.channels.create({ name: 'rank c', type: ChannelType.GuildCategory });
     created.length = 0;
@@ -253,7 +270,7 @@ describe('category naming and order', () => {
   });
 
   it('puts the rank categories in S -> C order as one block, from where the block already starts', async () => {
-    const { guild, channels, positions } = fakeGuild();
+    const { guild, client, channels, positions } = fakeGuild();
     await guild.channels.create({ name: 'General', type: ChannelType.GuildCategory }); // position 0, untouched
     await guild.channels.create({ name: 'Rank C', type: ChannelType.GuildCategory }); // 1: an old run left C on top
     await guild.channels.create({ name: 'Rank A', type: ChannelType.GuildCategory }); // 2
@@ -265,6 +282,34 @@ describe('category naming and order', () => {
     expect(byName('Rank B').position).toBe(2);
     expect(byName('Rank C').position).toBe(3);
     expect([...channels.values()].find(c => c.name === 'General')!.position).toBe(0);
+  });
+});
+
+describe('panel posting', () => {
+  it('gives the bot access on the channels it makes, so a private category cannot hide the panel', async () => {
+    const { guild, client, channels } = fakeGuild({ privateCategories: true });
+    const report = await runSetup(client, guild, { teamSize: 2, preset: 'one', roles: false, feed: false });
+    expect(report.warnings).toEqual([]);
+    const c = getDivisions(G, 2).find(d => d.division === 'C')!;
+    expect(getQueue(c.queue_channel_id!)!.message_id).toMatch(/^msg_/);
+    const chan = channels.get(c.queue_channel_id!)!;
+    expect(chan.permissionOverwrites.edited).toMatchObject({ id: 'bot_1', ViewChannel: true, SendMessages: true });
+  });
+
+  it('says so when the panel could not be posted, instead of reporting success', async () => {
+    const { guild, client, channels } = fakeGuild();
+    const { ensureGuildDefaults } = await import('../src/services/guildSetup');
+    ensureGuildDefaults(G);
+    // A pre-existing registered channel the bot has no access to (a category made private after the fact).
+    const hidden = await guild.channels.create({ name: '6mans-3v3', type: ChannelType.GuildText });
+    channels.get(hidden.id)!.sendFails = true;
+    updateDivision(G, 3, 'C', { queue_channel_id: hidden.id });
+
+    const report = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
+    expect(report.warnings).toHaveLength(1);
+    expect(report.warnings[0]).toContain(`<#${hidden.id}>`);
+    expect(report.warnings[0]).toContain('View Channel');
+    expect(getQueue(hidden.id)!.message_id).toBeUndefined();
   });
 });
 

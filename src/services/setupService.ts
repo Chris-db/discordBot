@@ -8,7 +8,7 @@ import {
   TextChannel,
   Role,
 } from 'discord.js';
-import { getDivisions, updateDivision, GuildDivision } from '../database/queries';
+import { getDivisions, updateDivision, getQueue, GuildDivision } from '../database/queries';
 import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { invalidateDivisionNames } from './divisionNames';
 import { ensureGuildDefaults } from './guildSetup';
@@ -66,6 +66,16 @@ export interface SetupOptions {
 }
 
 export const DEFAULT_LADDER_NAME = '6mans';
+
+/** What the bot needs in a queue channel: see it, post the panel (image + buttons), keep it re-posted. */
+const BOT_CHANNEL_PERMISSIONS = [
+  PermissionFlagsBits.ViewChannel,
+  PermissionFlagsBits.SendMessages,
+  PermissionFlagsBits.AttachFiles,
+  PermissionFlagsBits.EmbedLinks,
+  PermissionFlagsBits.ManageMessages,
+  PermissionFlagsBits.ReadMessageHistory,
+];
 
 export interface SetupReport {
   /** One line per thing, in the order it was handled. */
@@ -240,13 +250,34 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
           type: ChannelType.GuildText,
           parent: category.id,
           topic: `${d.display_name} ${formatTeamSize(opts.teamSize)} queue — click Join Queue on the panel`,
+          // The bot's own access, explicitly. A new channel inherits its category's
+          // overwrites, and on a server where an admin has made the category private the
+          // bot would otherwise create a channel it cannot post the panel in.
+          permissionOverwrites: [{ id: client.user!.id, type: OverwriteType.Member, allow: BOT_CHANNEL_PERMISSIONS }],
           reason: '6mans /setup',
         })) as TextChannel;
         note(true, `queue channel <#${channel.id}>`);
       }
     }
+    // Same for a channel that already existed: make sure the bot can post in it. Best
+    // effort -- a channel the bot cannot even see cannot be edited by it either, and
+    // that case is reported below when the panel fails to post.
+    await channel.permissionOverwrites
+      .edit(
+        client.user!.id,
+        { ViewChannel: true, SendMessages: true, AttachFiles: true, EmbedLinks: true, ManageMessages: true, ReadMessageHistory: true },
+        { reason: '6mans /setup' }
+      )
+      .catch(() => undefined);
 
     await registerQueueChannel(client, guild.id, channel.id, opts.teamSize, d.division);
+    // refreshQueuePanel logs and swallows a failed post; the stored message id is the proof.
+    if (!getQueue(channel.id)?.message_id) {
+      report.warnings.push(
+        `The panel could not be posted in <#${channel.id}> — the bot cannot see or send there. ` +
+          "Check the category's permissions, give the bot **View Channel** and **Send Messages**, then run `/setup` again."
+      );
+    }
   }
 
   // Existing categories keep whatever order an admin left them in, which after a partial
