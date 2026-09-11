@@ -13,6 +13,7 @@ import {
   cancelAllActiveMatches,
   updateMatch,
 } from '../database/queries';
+import { formatTeamSize } from '../ui/teamSize';
 import { forceReportMatch, cancelMatch } from '../services/matchService';
 import { deleteMatchChannels } from '../services/channelService';
 import { autoDeleteReply } from '../utils/autoDelete';
@@ -89,8 +90,11 @@ export const matchCommand = {
     ),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    autoDeleteReply(interaction, 6000);
     const subcommand = interaction.options.getSubcommand();
+    // The list is read, not glanced at -- an admin is copying a match id out of it. The
+    // one-line confirmations can go after a few seconds as before.
+    autoDeleteReply(interaction, subcommand === 'list' ? 120_000 : 6000);
+
     const guildId = interaction.guildId!;
     const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
 
@@ -107,14 +111,26 @@ export const matchCommand = {
         .setTitle('🎮 ACTIVE 6MANS MATCHES')
         .setColor(RL_COLORS.BLUE)
         .setDescription(
+          // Written to be acted on from an admin channel: the id for /match report or
+          // /match cancel, the state, and a link to the match's own channel -- it used
+          // to link the queue channel, which is not where the match is.
           active
             .map(m => {
               const blueMentions = m.blue_team.map(id => `<@${id}>`).join(', ');
               const orangeMentions = m.orange_team.map(id => `<@${id}>`).join(', ');
-              return `**Match #${m.match_id}** (Channel: <#${m.channel_id}>)\n🔵 **Blue:** ${blueMentions}\n🟠 **Orange:** ${orangeMentions}\n`;
+              const where = m.text_channel_id ? `<#${m.text_channel_id}>` : `queue <#${m.channel_id}>`;
+              const ladder = `${formatTeamSize(m.team_size)}${m.division ? ` · Rank ${m.division}` : ''}`;
+              const since = m.started_at
+                ? ` · started <t:${Math.floor(new Date(m.started_at).getTime() / 1000)}:R>`
+                : '';
+              return (
+                `**Match #${m.match_id}** · ${m.state.replace('_', ' ')} · ${ladder} · ${where}${since}\n` +
+                `🔵 ${blueMentions || '—'}\n🟠 ${orangeMentions || '—'}\n`
+              );
             })
-            .join('\n---\n')
+            .join('\n')
         )
+        .setFooter({ text: '/match report · /match cancel — both take match_id from anywhere' })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

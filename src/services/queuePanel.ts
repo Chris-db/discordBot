@@ -20,6 +20,7 @@ import {
   getActiveBan,
   getAllQueues,
   getDivisionByChannel,
+  getDivision,
   ActiveQueue,
 } from '../database/queries';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
@@ -275,7 +276,23 @@ export async function handleJoinQueue(
   // Ensure the player has a row on this channel's ladder. Their first 2v2 starts fresh
   // rather than inheriting their 3v3 rating.
   const teamSize = resolveTeamSize(guildId, channelId);
-  getOrCreatePlayer(guildId, teamSize, user.id, user.username);
+  const player = getOrCreatePlayer(guildId, teamSize, user.id, user.username);
+
+  // A registered channel is one division's queue, and a match played in it is rated as
+  // that division's game. Discord roles are meant to keep the wrong division out, but the
+  // bot never checked, so a Rank C player in the Rank A channel would have been rated on
+  // A games. Admins can still /queue add someone across the line on purpose.
+  const channelDivision = getDivisionByChannel(guildId, channelId);
+  if (channelDivision && channelDivision.division !== player.division) {
+    const home = getDivision(guildId, teamSize, player.division);
+    const homeHint = home?.queue_channel_id
+      ? ` Your queue is <#${home.queue_channel_id}>.`
+      : ` No ${home?.display_name ?? `Rank ${player.division}`} queue is set up yet.`;
+    return {
+      success: false,
+      message: `🚫 This is the **${channelDivision.display_name}** queue and you are placed in **${home?.display_name ?? `Rank ${player.division}`}**.${homeHint}`,
+    };
+  }
 
   // Atomically add player to queue inside a SQLite transaction
   const txResult = db.transaction(() => {
