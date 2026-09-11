@@ -7,6 +7,7 @@ import {
   resolvePalette,
   withPalette,
 } from '../ui/palette';
+import { getGuildDivisionNames, withDivisionNames } from './divisionNames';
 
 /**
  * Per-server colour themes for the image cards.
@@ -77,10 +78,13 @@ export function applyGuildPreset(guildId: string, name: string): boolean {
   return true;
 }
 
-/** Runs `fn` with the guild's palette current. A missing guild id means the default. */
+/**
+ * Runs `fn` with the guild's palette and division names current. A missing guild id
+ * means the defaults for both.
+ */
 export function withGuildTheme<T>(guildId: string | null | undefined, fn: () => T): T {
   if (!guildId) return fn();
-  return withPalette(getGuildPalette(guildId), fn);
+  return withPalette(getGuildPalette(guildId), () => withDivisionNames(getGuildDivisionNames(guildId), fn));
 }
 
 /** For tests and hot reloads. */

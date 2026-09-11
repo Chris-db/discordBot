@@ -9,6 +9,8 @@ import {
   Role,
 } from 'discord.js';
 import { getDivisions, updateDivision, GuildDivision } from '../database/queries';
+import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
+import { invalidateDivisionNames } from './divisionNames';
 import { ensureGuildDefaults } from './guildSetup';
 import { registerQueueChannel } from './queuePanel';
 import { findFeedChannel } from './channelService';
@@ -55,7 +57,15 @@ export interface SetupOptions {
   roles: boolean;
   /** Make a public #active-matches channel for the match feed. */
   feed: boolean;
+  /**
+   * One-ladder servers only: what to call the ladder. "Rank C" means nothing when there
+   * is no B. Applied to division C on every size, since such a server has one ladder per
+   * size and they should all read the same.
+   */
+  name?: string;
 }
+
+export const DEFAULT_LADDER_NAME = '6mans';
 
 export interface SetupReport {
   /** One line per thing, in the order it was handled. */
@@ -106,6 +116,21 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
   // A guild that joined after the seed ran has no division rows; the seed is idempotent.
   ensureGuildDefaults(guild.id);
 
+  // Renaming happens before anything is looked up, and the old name is kept so that a
+  // category or channel made under it can be found and renamed rather than duplicated.
+  const previousNames = new Map<string, string>();
+  if (opts.preset === 'one') {
+    const name = (opts.name ?? DEFAULT_LADDER_NAME).trim();
+    for (const size of SUPPORTED_TEAM_SIZES) {
+      const row = getDivisions(guild.id, size).find(d => d.division === 'C');
+      if (row && row.display_name !== name) {
+        if (size === opts.teamSize) previousNames.set('C', row.display_name);
+        updateDivision(guild.id, size, 'C', { display_name: name });
+      }
+    }
+    invalidateDivisionNames(guild.id);
+  }
+
   const wanted = PRESET_DIVISIONS[opts.preset];
   const divisions = getDivisions(guild.id, opts.teamSize).filter(d => wanted.includes(d.division));
   if (divisions.length === 0) {
@@ -119,13 +144,21 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
   const categories: CategoryChannel[] = [];
 
   for (const d of divisions) {
+    const previous = previousNames.get(d.division);
+    const wasCalled = (n: string) => previous !== undefined && isCategoryFor(n, { display_name: previous });
+
     // Role first, so the category can be locked to it as it is created.
     let role: Role | undefined;
     if (opts.roles) {
       const existing = (d.role_id && guild.roles.cache.get(d.role_id)) || guild.roles.cache.find(r => r.name === d.display_name);
       if (existing) {
         role = existing;
-        note(false, `role **${existing.name}**`);
+        if (previous !== undefined && existing.name === previous) {
+          await existing.setName(d.display_name, '6mans /setup rename');
+          note(false, `role **${existing.name}** (renamed from ${previous})`);
+        } else {
+          note(false, `role **${existing.name}**`);
+        }
       } else {
         role = await guild.roles.create({ name: d.display_name, mentionable: false, reason: '6mans /setup' });
         note(true, `role **${role.name}**`);
@@ -135,11 +168,26 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
 
     // Category: by name. Match channels are created inside the queue channel's category,
     // so this is where a division's games live too.
-    let category = guild.channels.cache.find(
-      c => c.type === ChannelType.GuildCategory && isCategoryFor(c.name, d)
-    ) as CategoryChannel | undefined;
+    // The category the registered queue channel sits in counts too: after a rename it is
+    // the one to keep, whatever it is called.
+    const registeredChannel = d.queue_channel_id ? guild.channels.cache.get(d.queue_channel_id) : undefined;
+    const registeredParent =
+      registeredChannel && 'parentId' in registeredChannel && registeredChannel.parentId
+        ? (guild.channels.cache.get(registeredChannel.parentId) as CategoryChannel | undefined)
+        : undefined;
+    let category =
+      (registeredParent && (isCategoryFor(registeredParent.name, d) || wasCalled(registeredParent.name)) ? registeredParent : undefined) ??
+      (guild.channels.cache.find(
+        c => c.type === ChannelType.GuildCategory && (isCategoryFor(c.name, d) || wasCalled(c.name))
+      ) as CategoryChannel | undefined);
     if (category) {
-      note(false, `category **${category.name}**`);
+      if (wasCalled(category.name) && !isCategoryFor(category.name, d)) {
+        const from = category.name;
+        await category.setName(categoryName(d), '6mans /setup rename');
+        note(false, `category **${category.name}** (renamed from ${from})`);
+      } else {
+        note(false, `category **${category.name}**`);
+      }
     } else {
       category = (await guild.channels.create({
         name: categoryName(d),
@@ -171,7 +219,14 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
     let channel: TextChannel | undefined;
     if (registered && registered.type === ChannelType.GuildText) {
       channel = registered as TextChannel;
-      note(false, `queue channel <#${channel.id}> (already registered)`);
+      // Only a channel still carrying the auto-generated old name is renamed; a name an
+      // admin chose is theirs.
+      if (previous !== undefined && channel.name === queueChannelName({ display_name: previous }, opts.teamSize)) {
+        await channel.setName(name, '6mans /setup rename');
+        note(false, `queue channel <#${channel.id}> (renamed)`);
+      } else {
+        note(false, `queue channel <#${channel.id}> (already registered)`);
+      }
     } else {
       const byName = guild.channels.cache.find(
         c => c.type === ChannelType.GuildText && c.name === name && (c as TextChannel).parentId === category!.id

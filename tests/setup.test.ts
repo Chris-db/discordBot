@@ -3,6 +3,9 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import db from '../src/database/db';
 import { getDivisions, getQueue, updateDivision } from '../src/database/queries';
 import { runSetup, missingBotPermissions, queueChannelName, categoryName, isCategoryFor, PRESET_DIVISIONS } from '../src/services/setupService';
+import { withGuildTheme } from '../src/services/themeService';
+import { getDivisionTier } from '../src/services/mmrService';
+import { clearDivisionNamesCache, invalidateDivisionNames } from '../src/services/divisionNames';
 import { setupCommand } from '../src/commands/setup';
 import { commands } from '../src/handlers/commandHandler';
 
@@ -21,12 +24,13 @@ interface FakeChannel {
   position: number;
   parentId?: string | null;
   permissionOverwrites: { set: (o: any[]) => Promise<void>; last?: any[] };
+  setName: (n: string) => Promise<void>;
 }
 
 function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
   let nextId = 1;
   const channels = new Map<string, FakeChannel>();
-  const roles = new Map<string, { id: string; name: string }>();
+  const roles = new Map<string, { id: string; name: string; setName: (n: string) => Promise<void> }>();
   const created: string[] = [];
   const positions: Array<{ channel: string; position: number }[]> = [];
   const cacheOf = <T>(m: Map<string, T>) => ({
@@ -41,7 +45,7 @@ function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
       everyone: { id: 'everyone' },
       cache: cacheOf(roles),
       create: async ({ name }: { name: string }) => {
-        const r = { id: `role_${nextId++}`, name };
+        const r = { id: `role_${nextId++}`, name, setName: async (n: string) => void (r.name = n) };
         roles.set(r.id, r);
         created.push(`role:${name}`);
         return r;
@@ -61,6 +65,7 @@ function fakeGuild(opts: { admin?: boolean; perms?: bigint[] } = {}) {
               c.permissionOverwrites.last = o;
             },
           },
+          setName: async (n: string) => void (c.name = n),
         };
         channels.set(c.id, c);
         created.push(`${type === ChannelType.GuildCategory ? 'category' : 'text'}:${name}`);
@@ -90,6 +95,7 @@ const client = {
 } as any;
 
 beforeEach(() => {
+  clearDivisionNamesCache();
   db.exec(
     `DELETE FROM active_queues WHERE guild_id = '${G}'; DELETE FROM guild_divisions WHERE guild_id = '${G}';
      DELETE FROM guild_config WHERE guild_id = '${G}'; DELETE FROM seasons WHERE guild_id = '${G}';`
@@ -101,7 +107,7 @@ describe('runSetup', () => {
     const { guild, created } = fakeGuild();
     const report = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: true });
 
-    expect(created).toEqual([`category:${categoryName({ display_name: 'Rank C' })}`, 'text:rank-c-3v3', 'text:active-matches']);
+    expect(created).toEqual([`category:${categoryName({ display_name: '6mans' })}`, 'text:6mans-3v3', 'text:active-matches']);
     expect(report.created).toBe(3);
     expect(report.reused).toBe(0);
     expect(report.warnings).toEqual([]);
@@ -155,7 +161,8 @@ describe('runSetup', () => {
     updateDivision(G, 3, 'C', { queue_channel_id: custom.id });
 
     const report = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
-    expect(created).toEqual([`category:${categoryName({ display_name: 'Rank C' })}`]);
+    expect(created).toEqual([`category:${categoryName({ display_name: '6mans' })}`]);
+    expect(channels.get(custom.id)!.name).toBe('my-own-queue'); // an admin's name is theirs
     expect(report.lines.join('\n')).toContain(`<#${custom.id}> (already registered)`);
     expect(getDivisions(G, 3).find(d => d.division === 'C')!.queue_channel_id).toBe(custom.id);
     expect(channels.size).toBe(2);
@@ -165,7 +172,7 @@ describe('runSetup', () => {
     const { guild, created } = fakeGuild();
     await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
     await runSetup(client, guild, { teamSize: 2, preset: 'one', roles: false, feed: false });
-    expect(created).toEqual([`category:${categoryName({ display_name: 'Rank C' })}`, 'text:rank-c-3v3', 'text:rank-c-2v2']);
+    expect(created).toEqual([`category:${categoryName({ display_name: '6mans' })}`, 'text:6mans-3v3', 'text:6mans-2v2']);
     const c3 = getDivisions(G, 3).find(d => d.division === 'C')!;
     const c2 = getDivisions(G, 2).find(d => d.division === 'C')!;
     expect(c3.queue_channel_id).not.toBe(c2.queue_channel_id);
@@ -188,6 +195,47 @@ describe('runSetup', () => {
     expect(report.warnings).toHaveLength(1);
     expect(report.warnings[0]).toContain('Missing Permissions');
     expect(channels.size).toBe(2);
+  });
+});
+
+describe('one-ladder naming', () => {
+  it('names the ladder (default 6mans) on every size, and the cards pick it up', async () => {
+    const { guild } = fakeGuild();
+    await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
+    for (const size of [2, 3, 4]) expect(getDivisions(G, size).find(d => d.division === 'C')!.display_name).toBe('6mans');
+    // Untouched divisions keep their names.
+    expect(getDivisions(G, 3).find(d => d.division === 'B')!.display_name).toBe('Rank B');
+    expect(withGuildTheme(G, () => getDivisionTier('C').name)).toBe('6mans');
+    expect(withGuildTheme(G, () => getDivisionTier('B').name)).toBe('Rank B');
+    expect(getDivisionTier('C').name).toBe('Rank C'); // outside any guild: the built-in name
+  });
+
+  it('re-running with a name renames the category, channel and role it made, and makes nothing new', async () => {
+    // Vanilla's: first run happened before the name option existed, under "Rank C".
+    const { guild, created, channels, roles } = fakeGuild();
+    const { ensureGuildDefaults } = await import('../src/services/guildSetup');
+    ensureGuildDefaults(G);
+    for (const size of [2, 3, 4]) updateDivision(G, size, 'C', { display_name: 'Rank C' });
+    invalidateDivisionNames(G);
+    const cat = await guild.channels.create({ name: categoryName({ display_name: 'Rank C' }), type: ChannelType.GuildCategory });
+    const chan = await guild.channels.create({ name: 'rank-c-3v3', type: ChannelType.GuildText, parent: cat.id });
+    const role = await guild.roles.create({ name: 'Rank C' });
+    updateDivision(G, 3, 'C', { queue_channel_id: chan.id, role_id: role.id });
+    created.length = 0;
+
+    const report = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: true, feed: false, name: 'Vanilla 6mans' });
+    expect(created).toEqual([]);
+    expect(report.created).toBe(0);
+    expect(channels.get(cat.id)!.name).toBe('━━━━━  Vanilla 6mans  ━━━━━');
+    expect(channels.get(chan.id)!.name).toBe('vanilla-6mans-3v3');
+    expect(roles.get(role.id)!.name).toBe('Vanilla 6mans');
+    expect(report.lines.filter(l => l.includes('renamed'))).toHaveLength(3);
+    expect(withGuildTheme(G, () => getDivisionTier('C').name)).toBe('Vanilla 6mans');
+
+    // And a third run with the same name is a no-op.
+    const again = await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: true, feed: false, name: 'Vanilla 6mans' });
+    expect(again.lines.filter(l => l.includes('renamed'))).toHaveLength(0);
+    expect(created).toEqual([]);
   });
 });
 

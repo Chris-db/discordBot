@@ -1,5 +1,6 @@
 import { Player, getDivision } from '../database/queries';
 import { P } from '../ui/palette';
+import { currentDivisionName } from './divisionNames';
 
 export interface MmrCalculationResult {
   blueDelta: number;
@@ -83,7 +84,8 @@ export function getDivisionTier(division: string): RankTier {
   // The colour is read here, not at import: it comes from whichever theme the current
   // request runs under, and a module-level table would freeze the default forever.
   const meta = DIVISION_META[division] || DIVISION_META.C;
-  return { name: meta.name, emoji: meta.emoji, color: P.division[meta.colorKey] };
+  // The server's own name for the division when we are inside a guild request.
+  return { name: currentDivisionName(division) ?? meta.name, emoji: meta.emoji, color: P.division[meta.colorKey] };
 }
 
 /**

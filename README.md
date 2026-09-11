@@ -17,7 +17,7 @@ If someone is hosting the bot for you, setup is three steps:
 
 1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles* (only if you want rank roles), *View Channels*, *Send Messages*, *Attach Files*, *Move Members*.
 2. Run **`/setup`** in any channel. Pick how many rank divisions you want:
-   - `One ladder` — everyone queues together. Right for most servers.
+   - `One ladder` — everyone queues together. Right for most servers. It is called **6mans** everywhere (sidebar, panel, cards); pass `name:` to call it something else.
    - `Three` (C/B/A) or `All five` (C/B/A/X/S) — separate ladders, players are placed by an admin with `/division place`.
    Add `roles:true` if you want each rank category visible only to its rank role. `/setup` is safe to run again — it only adds what is missing. Run it once per team size (`size:2v2`, `size:4v4`) if you want more than 3v3.
 3. Players click **Join Queue** on the panel in their rank channel. That is it.

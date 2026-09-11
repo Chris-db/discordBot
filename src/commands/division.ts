@@ -18,6 +18,7 @@ import { getDivisionTier } from '../services/mmrService';
 import { addTeamSizeOption, getTeamSizeOption, formatTeamSize } from '../ui/teamSize';
 import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { logger } from '../utils/logger';
+import { invalidateDivisionNames } from '../services/divisionNames';
 
 const DIVISION_CHOICES = [
   { name: 'Rank C', value: 'C' },
@@ -101,6 +102,14 @@ export const divisionCommand = {
               .setName('relegate-below')
               .setDescription('Season-end MMR that relegates')
               .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt
+              .setName('name')
+              .setDescription('What this division is called on the panel, cards and in lists')
+              .setRequired(false)
+              .setMinLength(2)
+              .setMaxLength(24)
           ),
         'Which ladder to configure (defaults to 3v3)'
       )
@@ -274,12 +283,14 @@ export const divisionCommand = {
       const defaultMmr = interaction.options.getInteger('default-mmr');
       const promoteAt = interaction.options.getInteger('promote-at');
       const relegateBelow = interaction.options.getInteger('relegate-below');
+      const name = interaction.options.getString('name');
 
       if (channel) updates.queue_channel_id = channel.id;
       if (role) updates.role_id = role.id;
       if (defaultMmr !== null) updates.default_mmr = defaultMmr;
       if (promoteAt !== null) updates.promote_at = promoteAt;
       if (relegateBelow !== null) updates.relegate_below = relegateBelow;
+      if (name !== null) updates.display_name = name.trim();
 
       if (Object.keys(updates).length === 0) {
         await interaction.reply({
@@ -290,6 +301,7 @@ export const divisionCommand = {
       }
 
       updateDivision(guildId, teamSize, division, updates as any);
+      if (name !== null) invalidateDivisionNames(guildId);
       const after = getDivision(guildId, teamSize, division)!;
       const tier = getDivisionTier(division);
 

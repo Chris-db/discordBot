@@ -448,6 +448,16 @@ up by name or by the already-registered channel id first, so a re-run repairs ga
 creates nothing that exists. Gated on Manage Server; checks the bot's own permissions
 first and names the missing ones. `tests/setup.test.ts` (fake guild records creates).
 
+**Ladder naming (same night, after Vanilla's server joined):** a one-ladder server saw "Rank C"
+everywhere, which means nothing without a B. `/setup name:` (default `6mans`) renames division C on
+every size; a re-run renames the category/channel/role it made earlier instead of duplicating
+them (a channel an admin renamed is left alone). The cards took "Rank C" from a hard-coded
+table -- `src/services/divisionNames.ts` now carries the server's names in the same request
+context as the palette (`withGuildTheme` sets both) and `getDivisionTier` reads them; cache is
+reloaded in place so the panel posted inside the renaming request already shows the new name.
+`/division configure name:` renames any division. Third real server: **Vanilla's**
+(`1348387644693938370`), joined 21:34 SAST 2026-09-11.
+
 **Run on the throwaway test server 2026-09-11 (`divisions:three roles:true`), twice: built
 correctly, second run created nothing.** Chris asked for highest rank on top and
 `━━━━━  Rank S  ━━━━━` category names (6547fb7); confirmed right after a re-run.

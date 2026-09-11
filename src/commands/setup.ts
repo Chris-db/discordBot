@@ -5,7 +5,7 @@ import {
   EmbedBuilder,
   MessageFlags,
 } from 'discord.js';
-import { runSetup, missingBotPermissions, DivisionPreset } from '../services/setupService';
+import { runSetup, missingBotPermissions, DivisionPreset, DEFAULT_LADDER_NAME } from '../services/setupService';
 import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import { RL_COLORS } from '../ui/embeds';
@@ -38,6 +38,14 @@ export const setupCommand = {
         .setRequired(false)
         .addChoices(...TEAM_SIZE_CHOICES)
     )
+    .addStringOption(opt =>
+      opt
+        .setName('name')
+        .setDescription(`One ladder only: what to call it on the panel, cards and sidebar (default: ${DEFAULT_LADDER_NAME})`)
+        .setRequired(false)
+        .setMinLength(2)
+        .setMaxLength(24)
+    )
     .addBooleanOption(opt =>
       opt
         .setName('roles')
@@ -67,6 +75,7 @@ export const setupCommand = {
       teamSize: interaction.options.getInteger('size') ?? DEFAULT_TEAM_SIZE,
       roles: interaction.options.getBoolean('roles') ?? false,
       feed: interaction.options.getBoolean('feed') ?? true,
+      name: interaction.options.getString('name') ?? undefined,
     };
 
     const missing = missingBotPermissions(interaction.guild, opts.roles);
@@ -94,7 +103,7 @@ export const setupCommand = {
           value:
             '• Players click **Join Queue** on the panel in their rank channel.\n' +
             (opts.preset === 'one'
-              ? '• Everyone starts in Rank C at 1000 MMR — no placement needed.\n'
+              ? '• One ladder — everyone starts at 1000 MMR, no placement needed.\n'
               : '• Place players with `/division place <user> <division>` (new players start in Rank C).\n') +
             (opts.roles ? '• Give each player their rank role so they can see their category.\n' : '') +
             '• `/help` explains the rest. Run `/setup` again any time; it only adds what is missing.',
