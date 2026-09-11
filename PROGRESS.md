@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (avatar fetch deadline)
+Last updated: 2026-09-11 (auto-delete timing)
 
 ---
 
@@ -88,7 +88,7 @@ Everything else worked, but these have never been run against the real API:
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **314 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **317 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -369,6 +369,27 @@ Fixed on `main`:
 
 If it happens again, `journalctl -u 6mans | grep "Avatar for user"` says which fetches
 timed out. If nothing is logged and it is still slow, it is not avatars.
+
+**It was not avatars.** After the fix no timeout was logged and it was still slow. The Pi
+checked out healthy (one process, load 0.27, 3.6 GB free, Discord API 70–120 ms, a 200 KB
+upload in 0.33 s), so the bot sends its cards in well under a second — what was slow was
+Discord's CDN delivering images to Chris's client. Nothing in the bot for that. The avatar
+deadline stays: it is right on its own terms.
+
+What the log *did* show: `DiscordAPIError[10008] Unknown Message` on `vote_random`,
+`teams_verify_yes` and `match_report_blue_18`. `autoDeleteReply` started its 6 s
+countdown on **deferral**; in a bot lobby one click finalises the vote and runs the whole
+next phase inline, which took > 6 s that evening, so the ephemeral was deleted before
+`editReply`. Fixed: the countdown now starts when the reply is actually **sent**
+(`interaction.replied`, set by editReply, not deferReply). The button catch block now
+finishes a deferred reply with the error text instead of leaving "thinking…" stuck.
+`tests/autoDelete.test.ts` pins it.
+
+**Diagnostic one-liner for "everything is slow"** (procs, load, memory, Discord latency,
+upload, recent warnings) — see the conversation of 2026-09-11 or rebuild from: `pgrep -af
+"node.*dist"`, `uptime`, `free -m`, `curl -w %{time_total}` against
+`discord.com/api/v10/gateway` with and without a 200 KB `-F` upload, `journalctl -u
+6mans | grep -iE "warn|error|429"`. One process + fast curl = not the Pi.
 
 ## Next
 

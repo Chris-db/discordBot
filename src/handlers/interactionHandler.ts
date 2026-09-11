@@ -348,8 +348,13 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
     }
 
     logger.error(`Error handling button interaction ${customId}:`, error);
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.reply({ content: '❌ An error occurred.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    // A deferred reply must still be finished, or the clicker sees "thinking…" until the
+    // token expires -- and autoDeleteReply only starts once something is actually sent.
+    const content = '❌ An error occurred.';
+    if (interaction.deferred && !interaction.replied) {
+      await interaction.editReply({ content }).catch(() => null);
+    } else if (!interaction.replied) {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => null);
     }
   }
 }
