@@ -281,16 +281,21 @@ Chris made a throwaway server and invited the bot. Two findings, both fixed on `
   now runs for every guild on boot, on `GuildCreate`, and inside `/queue panel`. Idempotent.
   **This would have hit the first real trial server on day one.**
 
-After deploying: re-run `/queue panel division:C` in the test server's channel so it
+Second-guild run **passed** after the fix: a bot match in the test server while a queue sat in the
+real one; nothing crossed over. Deploy step was: re-run `/queue panel division:C` in the test server's channel so it
 registers properly (the existing queue row is kept).
 
 ## Next
 
 0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
 0b. `/replay check` has not yet been run against a real Discord upload — first real dispute (or a deliberate test with a file from `DemosEpic`) is the test.
-1. Full achievements table — low value for a group of 6; the streak callouts already
+1. **Before the first outside trial:** (a) per-server match numbers — `match_id` is one global
+   sequence, so a trial server's first match is "#47"; keep the key, add a per-guild display
+   number and use it everywhere a human sees one (~40 sites). (b) Pick hosting: Oracle free
+   tier, else Hetzner ~R80/mo; disclose it either way. (c) Uptime monitor (UptimeRobot).
+2. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
-2. Webhooks — recommended **skip** until something actually consumes them.
+3. Webhooks — recommended **skip** until something actually consumes them.
 
 ## Multi-queue design (phase 5)
 
