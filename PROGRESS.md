@@ -84,8 +84,8 @@ Everything else worked, but these have never been run against the real API:
 - **2v2 and 4v4** in any form — no channel is registered to a size yet.
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
-- `/replay check` against a real upload (parser verified on 260 local files, the Discord
-  download path is not).
+- ~~`/replay check` against a real upload~~ — Chris tested it live in an earlier session (with a
+  cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
 Tests: **308 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
@@ -335,7 +335,7 @@ whoever has it can fake the bot being up).
 ## Next
 
 0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
-0b. `/replay check` has not yet been run against a real Discord upload — first real dispute (or a deliberate test with a file from `DemosEpic`) is the test.
+0b. ~~`/replay check` against a real Discord upload~~ — done, worked (Chris, earlier session).
 1. **Before the first outside trial:** (a) ~~per-server match numbers~~ — shipped 2026-09-11,
    see above. (b) Pick hosting: Oracle free tier, else Hetzner ~R80/mo; disclose it either
    way. (c) ~~Uptime monitor~~ — bot side shipped 2026-09-11; Chris creates the
