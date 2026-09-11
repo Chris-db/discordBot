@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (off-site backups)
+Last updated: 2026-09-11 (second-guild fixes)
 
 ---
 
@@ -88,7 +88,7 @@ Everything else worked, but these have never been run against the real API:
   download path is not).
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **290 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **293 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -266,6 +266,23 @@ database, so they cover a bad write, not a dead card. The off-site layer:
   `gunzip` the file to `data/6mans.sqlite` on the new host, deploy as usual.
 - **Check it is still running:** `tail ~/6mans-backups.log` on the Pi, or look at the
   repo's commit list — one commit per night.
+
+## Second-guild test (2026-09-11)
+
+Chris made a throwaway server and invited the bot. Two findings, both fixed on `main`:
+
+- **Slash commands were missing** in the new server: registration was per-guild against
+  `GUILD_ID` only. Now registers to every guild on boot and on `GuildCreate` (8f0dde5).
+- **A guild that joins after migration 2 had no `guild_divisions` rows at all.** The seed
+  only ever ran inside migration 2 for guilds present at the time. Symptoms on the test
+  server: `/queue panel division:C` posted the *unregistered* panel (🚀 `3V3 MATCH QUEUE`
+  title) because `updateDivision` updated a row that did not exist; divisions, placement,
+  promotion and the join gate were inert. `ensureGuildDefaults()` (`src/services/guildSetup.ts`)
+  now runs for every guild on boot, on `GuildCreate`, and inside `/queue panel`. Idempotent.
+  **This would have hit the first real trial server on day one.**
+
+After deploying: re-run `/queue panel division:C` in the test server's channel so it
+registers properly (the existing queue row is kept).
 
 ## Next
 

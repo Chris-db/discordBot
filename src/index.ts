@@ -17,6 +17,7 @@ import {
 import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
 import { withGuildTheme } from './services/themeService';
+import { ensureGuildDefaults } from './services/guildSetup';
 // Registers the bundled fonts before anything can draw a card. The image modules import
 // this too, so it is belt and braces -- but it means a missing font file is reported at
 // boot rather than the first time someone completes a match.
@@ -51,8 +52,10 @@ const client = new Client({
   ],
 });
 
-// Invited to a new server while running: register there too, so commands show up at once.
+// Invited to a new server while running: give it its divisions and register commands
+// there, so it works at once.
 client.on(Events.GuildCreate, guild => {
+  ensureGuildDefaults(guild.id);
   registerCommands([guild.id]).catch(err => {
     logger.error(`Error registering commands in new guild ${guild.id}:`, err);
   });
@@ -67,6 +70,7 @@ client.once(Events.ClientReady, async readyClient => {
 
   // Register to every guild the bot is in: per-guild registration is instant, whereas
   // global registration can take up to an hour to show up.
+  for (const guildId of readyClient.guilds.cache.keys()) ensureGuildDefaults(guildId);
   if (config.discordToken && config.clientId) {
     await registerCommands([...readyClient.guilds.cache.keys()]);
   }

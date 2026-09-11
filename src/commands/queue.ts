@@ -28,6 +28,7 @@ import {
 import { getQueuePanelButtons } from '../ui/buttons';
 import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { autoDeleteReply } from '../utils/autoDelete';
+import { ensureGuildDefaults } from '../services/guildSetup';
 
 const NO_PANEL_HERE = '❌ There is no queue panel in this channel. Run `/queue panel` in the queue channel.';
 
@@ -125,6 +126,9 @@ export const queueCommand = {
       }
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+      // Belt and braces for a guild that somehow missed the boot-time seed.
+      ensureGuildDefaults(guildId);
 
       const requestedSize = interaction.options.getInteger('size');
       const requestedDivision = interaction.options.getString('division');
