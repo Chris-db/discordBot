@@ -47,10 +47,18 @@ describe('startHeartbeat', () => {
   it('does nothing at all without a URL', () => {
     vi.useFakeTimers();
     const { calls, fetchImpl } = recorder();
-    const stop = startHeartbeat(clientThatIs(true), { url: undefined, fetchImpl, intervalMs: 1000 });
-    vi.advanceTimersByTime(10_000);
-    expect(calls).toEqual([]);
-    stop();
+    // `url: undefined` falls through to config, which on the Pi is the real .env with a
+    // real HEARTBEAT_URL -- so blank it, or this test depends on where it runs.
+    const saved = config.heartbeatUrl;
+    config.heartbeatUrl = undefined;
+    try {
+      const stop = startHeartbeat(clientThatIs(true), { url: undefined, fetchImpl, intervalMs: 1000 });
+      vi.advanceTimersByTime(10_000);
+      expect(calls).toEqual([]);
+      stop();
+    } finally {
+      config.heartbeatUrl = saved;
+    }
   });
 
   it('pings at once on start, then every interval, and stops when told', async () => {
