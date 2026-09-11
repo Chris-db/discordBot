@@ -57,7 +57,12 @@ export async function handleCommand(interaction: ChatInputCommandInteraction): P
 /**
  * Registers all slash commands with Discord API.
  */
-export async function registerCommands(): Promise<void> {
+/**
+ * Register slash commands. With `guildIds`, registers to each of those guilds (instant;
+ * used on boot with every guild the bot is in). Without, falls back to GUILD_ID from
+ * .env, or global registration (up to an hour to propagate) if that is unset.
+ */
+export async function registerCommands(guildIds?: string[]): Promise<void> {
   if (!config.discordToken || !config.clientId) {
     logger.warn('DISCORD_TOKEN or CLIENT_ID missing in .env. Skipping command registration.');
     return;
@@ -67,7 +72,13 @@ export async function registerCommands(): Promise<void> {
   const body = commands.map(c => c.data.toJSON());
 
   try {
-    if (config.guildId) {
+    if (guildIds) {
+      for (const guildId of guildIds) {
+        logger.info(`Registering ${body.length} commands to Guild ${guildId}...`);
+        await rest.put(Routes.applicationGuildCommands(config.clientId, guildId), { body });
+      }
+      logger.info(`Successfully registered slash commands in ${guildIds.length} guild(s)!`);
+    } else if (config.guildId) {
       logger.info(`Registering ${body.length} commands to Guild ${config.guildId}...`);
       await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), {
         body,

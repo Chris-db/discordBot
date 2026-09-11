@@ -51,6 +51,13 @@ const client = new Client({
   ],
 });
 
+// Invited to a new server while running: register there too, so commands show up at once.
+client.on(Events.GuildCreate, guild => {
+  registerCommands([guild.id]).catch(err => {
+    logger.error(`Error registering commands in new guild ${guild.id}:`, err);
+  });
+});
+
 client.once(Events.ClientReady, async readyClient => {
   logger.info(`🚀 Logged in as ${readyClient.user.tag}! Rocket League 6mans bot is online.`);
 
@@ -58,9 +65,10 @@ client.once(Events.ClientReady, async readyClient => {
     type: ActivityType.Playing,
   });
 
-  // Optionally auto-register commands on boot if token is present
+  // Register to every guild the bot is in: per-guild registration is instant, whereas
+  // global registration can take up to an hour to show up.
   if (config.discordToken && config.clientId) {
-    await registerCommands();
+    await registerCommands([...readyClient.guilds.cache.keys()]);
   }
 
   // Recover any queues left in temporary states from before a crash/restart, then remove
