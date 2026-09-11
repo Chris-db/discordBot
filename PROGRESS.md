@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (replay reader, division gate)
+Last updated: 2026-09-11 (five division channels live, panel colours)
 
 ---
 
@@ -54,6 +54,28 @@ A pre-migration snapshot is at `data/6mans.pre-phase5.sqlite` if anything needs 
 back. All the feature branches still exist; `git reset --hard 818432c` returns `main` to
 where it was before phase 5.
 
+## Live setup as of 2026-09-11
+
+All five 3v3 divisions have their own channel on the server, each in its own Discord
+category, and a Rank B match has been played end to end through the new channels:
+
+| Division | Channel id |
+|---|---|
+| S | `1532714997568897024` (the original queue channel) |
+| X | `1547878777936154655` |
+| A | `1547878982345695292` |
+| B | `1547879043058114560` |
+| C | `1547879120459931679` |
+
+Chris placed his regulars into S and himself into B for the test (`/division place`
+with the default `keep-mmr:false`, so they sit on S's 1900 default now). The test bots
+are still C; `/queue fill-bots` bypasses the division gate on purpose.
+
+The queue panel takes its division's colour on the accent line and badge, and its title
+is `RANK B 3V3 QUEUE` — no emoji, at Chris's request. Sidebar styling (category and
+channel names, role colours) is Discord-side and Chris's; the bot's only naming is
+`match-N`, `🔊 Ready Check #N`, `🔵 Team Blue [Match #N]`, `🟠 Team Orange [Match #N]`.
+
 ## Still unexercised in Discord
 
 Everything else worked, but these have never been run against the real API:
@@ -64,7 +86,7 @@ Everything else worked, but these have never been run against the real API:
 - Rematch actually starting (the decline path was tested).
 - `/replay check` against a real upload (parser verified on 260 local files, the Discord
   download path is not).
-- A second division channel (Rank B) end to end.
+- ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
 Tests: **274 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
@@ -200,7 +222,8 @@ landed to make multi-channel divisions real and to give admins a dispute tool:
 
 ## Next
 
-0. ~~Register the queue channel to a division~~ — done 2026-09-10 (3v3 → Rank C). Policy calls done 2026-09-11.
+0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
+0b. `/replay check` has not yet been run against a real Discord upload — first real dispute (or a deliberate test with a file from `DemosEpic`) is the test.
 1. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
 2. Webhooks — recommended **skip** until something actually consumes them.
