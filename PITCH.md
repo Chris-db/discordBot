@@ -54,4 +54,7 @@ No Administrator. No reading message content.
   saved `.replay` file with `/replay check`.
 - **Can we keep our existing roles/channels?** Yes — `/setup` reuses anything with a
   matching name and only adds what's missing.
-- **Cost after the month?** Not decided yet — that's partly what the trial is for.
+- **Cost after the month?** R100/month per server, or R1 000/year. The first two servers get
+  a founding price of R50/month locked in for good, in exchange for honest feedback.
+  (Anchor: NeatQueue premium is ~$5/month ≈ R90; the bot costs ~nothing to run, so the
+  price is about proving people will pay, not income.)
