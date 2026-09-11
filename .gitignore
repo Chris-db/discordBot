@@ -14,3 +14,4 @@ data/**/*.sqlite.partial
 # Claude Code session data (worktrees, parked patches)
 .claude/
 data/.deploy-reported-*
+data/.restart-pending
