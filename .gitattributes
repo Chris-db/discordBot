@@ -1,0 +1,2 @@
+# Shell scripts run on the Pi; never let a Windows checkout give them CRLF.
+*.sh text eol=lf
