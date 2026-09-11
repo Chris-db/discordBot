@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (five division channels live, panel colours)
+Last updated: 2026-09-11 (themes)
 
 ---
 
@@ -87,8 +87,9 @@ Everything else worked, but these have never been run against the real API:
 - `/replay check` against a real upload (parser verified on 260 local files, the Discord
   download path is not).
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
+- `/theme` against the real API (renders verified locally under every preset).
 
-Tests: **274 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **290 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -219,6 +220,34 @@ landed to make multi-channel divisions real and to give admins a dispute tool:
   does write `ScriptLog: Match Ended` plus the private server address the moment a game
   ends — a clean trigger for a watcher — but no score. Any auto-report design needs a
   program on a player's PC; parked, see the conversation of 2026-09-11.
+
+## Themes (2026-09-11)
+
+Chris asked for a styling preset he can set himself instead of asking for each colour.
+Two commits:
+
+1. **`src/ui/palette.ts`** — every colour the ten image files draw with, as named tokens
+   on one object (`P`). ~200 literals replaced; **no pixel changed**, proven by
+   `scripts/renderAll.ts` (renders all 13 cards with fixed data; a run before and after is
+   byte-identical). Tints come from `alpha()` / `overlay()` so an overridden base colour
+   carries them. Run the script after touching any image code:
+   `DB_PATH=/tmp/x.sqlite npx ts-node scripts/renderAll.ts out/`
+2. **Per-server themes.** Migration 5 adds `guild_themes(guild_id, theme JSON)` holding
+   only the overrides. `P` is an `AsyncLocalStorage`-backed proxy: every interaction and
+   chat event runs inside `withGuildTheme(guildId, …)` (index.ts), the per-guild
+   background loops wrap their renders, and timers scheduled inside inherit the context.
+   Outside any context `P` is the default. `getDivisionTier` reads its colour at call
+   time for the same reason.
+
+**`/theme`** (Manage Server): `set token colour` (22 tokens as a dropdown, hex typed),
+`reset [token]`, `preset default|mono|midnight|ember`, `list`, `show`. Every mutating
+subcommand replies with a rendered queue panel + result card under the new theme.
+**Requires `npm run register`.**
+
+Not themed, on purpose: Discord embed side-bars (`RL_COLORS` in `ui/embeds.ts`, a few
+`setColor` calls) — those are the messages, which Chris is happy with; and the
+card-specific groups (`matchVs`, `gamble`, `leaderboard` medals, `history`) which keep
+their defaults except that `queueBg` follows an overridden `bgTop`/`bgBottom`.
 
 ## Next
 

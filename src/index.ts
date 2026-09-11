@@ -16,6 +16,7 @@ import {
 } from './services/queueService';
 import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
+import { withGuildTheme } from './services/themeService';
 // Registers the bundled fonts before anything can draw a card. The image modules import
 // this too, so it is belt and braces -- but it means a missing font file is reported at
 // boot rather than the first time someone completes a match.
@@ -106,12 +107,14 @@ client.once(Events.ClientReady, async readyClient => {
   }, 30 * 60_000);
 });
 
+// Every handler runs inside its guild's colour theme, so any card it draws -- now or on a
+// timer it schedules -- comes out in that server's palette.
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
-      await handleCommand(interaction);
+      await withGuildTheme(interaction.guildId, () => handleCommand(interaction));
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      await handleInteraction(interaction);
+      await withGuildTheme(interaction.guildId, () => handleInteraction(interaction));
     }
   } catch (error) {
     logger.error('Unhandled interaction error:', error);
@@ -120,7 +123,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 client.on(Events.MessageCreate, message => {
   try {
-    handleChannelMessage(client, message);
+    withGuildTheme(message.guildId, () => handleChannelMessage(client, message));
   } catch (error) {
     logger.error('Error handling channel message:', error);
   }

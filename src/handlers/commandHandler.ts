@@ -12,6 +12,7 @@ import { banCommand } from '../commands/ban';
 import { seasonCommand } from '../commands/season';
 import { divisionCommand } from '../commands/division';
 import { replayCommand } from '../commands/replay';
+import { themeCommand } from '../commands/theme';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -27,6 +28,7 @@ export const commands = [
   seasonCommand,
   divisionCommand,
   replayCommand,
+  themeCommand,
 ];
 
 /**

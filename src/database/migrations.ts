@@ -470,6 +470,22 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'per-guild themes',
+    up: db => {
+      // Colour overrides for the image cards, as a JSON map of palette token -> hex.
+      // Only the overrides are stored, so a default that changes in code still applies
+      // to every server that has not touched that token.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS guild_themes (
+          guild_id TEXT PRIMARY KEY,
+          theme TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    },
+  },
 ];
 
 /**

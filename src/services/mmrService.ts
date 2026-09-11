@@ -64,12 +64,12 @@ export interface RankTier {
  * roughly 8% of men cannot separate at emoji size. Ordering is now conveyed by the
  * badge letter as well as the colour.
  */
-const DIVISION_TIERS: Record<string, RankTier> = {
-  C: { name: 'Rank C', emoji: '🟢', color: P.division.C },
-  B: { name: 'Rank B', emoji: '🔵', color: P.division.B },
-  A: { name: 'Rank A', emoji: '🟣', color: P.division.A },
-  X: { name: 'Rank X', emoji: '⚔️', color: P.division.X },
-  S: { name: 'Rank S', emoji: '👑', color: P.division.S },
+const DIVISION_META: Record<string, Omit<RankTier, 'color'> & { colorKey: 'C' | 'B' | 'A' | 'X' | 'S' }> = {
+  C: { name: 'Rank C', emoji: '🟢', colorKey: 'C' },
+  B: { name: 'Rank B', emoji: '🔵', colorKey: 'B' },
+  A: { name: 'Rank A', emoji: '🟣', colorKey: 'A' },
+  X: { name: 'Rank X', emoji: '⚔️', colorKey: 'X' },
+  S: { name: 'Rank S', emoji: '👑', colorKey: 'S' },
 };
 
 /**
@@ -80,7 +80,10 @@ const DIVISION_TIERS: Record<string, RankTier> = {
  * the badge from MMR would contradict the division they are actually queuing in.
  */
 export function getDivisionTier(division: string): RankTier {
-  return DIVISION_TIERS[division] || DIVISION_TIERS.C;
+  // The colour is read here, not at import: it comes from whichever theme the current
+  // request runs under, and a module-level table would freeze the default forever.
+  const meta = DIVISION_META[division] || DIVISION_META.C;
+  return { name: meta.name, emoji: meta.emoji, color: P.division[meta.colorKey] };
 }
 
 /**

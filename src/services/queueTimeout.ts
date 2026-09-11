@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 import { parseDbTimestamp } from '../utils/time';
 import { refreshQueuePanel } from './queuePanel';
 import { cancelMatch } from './matchService';
+import { withGuildTheme } from './themeService';
 import { deleteMatchChannels, hasPendingChannelDeletion } from './channelService';
 
 /**
@@ -56,7 +57,7 @@ export async function checkQueueTimeouts(client: Client): Promise<void> {
       saveQueue(queue);
 
       if (removedPlayers.length > 0) {
-        await refreshQueuePanel(client, queue.channel_id);
+        await withGuildTheme(queue.guild_id, () => refreshQueuePanel(client, queue.channel_id));
         try {
           const channel = (await client.channels.fetch(queue.channel_id).catch(() => null)) as TextChannel | null;
           if (channel) {
@@ -121,7 +122,7 @@ export async function sweepStaleMatches(client: Client): Promise<void> {
     );
 
     try {
-      await cancelMatch(client, match.match_id, 'Automatic timeout');
+      await withGuildTheme(match.guild_id, () => cancelMatch(client, match.match_id, 'Automatic timeout'));
     } catch (err) {
       logger.error(`Failed to auto-cancel stale Match #${match.match_id}:`, err);
     }
@@ -212,7 +213,7 @@ export async function recoverStuckQueues(client: Client): Promise<void> {
       logger.warn(
         `Match #${activeMatch!.match_id} was mid-${activeMatch!.state} at shutdown. Cancelling so its players are released.`
       );
-      const cancelled = await cancelMatch(client, activeMatch!.match_id, 'Bot restarted').catch(err => {
+      const cancelled = await withGuildTheme(queue.guild_id, () => cancelMatch(client, activeMatch!.match_id, 'Bot restarted')).catch(err => {
         logger.error(`Failed to cancel orphaned Match #${activeMatch!.match_id}:`, err);
         return undefined;
       });
@@ -233,7 +234,7 @@ export async function recoverStuckQueues(client: Client): Promise<void> {
     queue.ready_check_vc_id = undefined;
     saveQueue(queue);
     recoveredCount++;
-    await refreshQueuePanel(client, queue.channel_id).catch(() => null);
+    await withGuildTheme(queue.guild_id, () => refreshQueuePanel(client, queue.channel_id)).catch(() => null);
   }
 
   if (recoveredCount > 0) {
