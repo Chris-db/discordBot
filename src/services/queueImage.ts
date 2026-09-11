@@ -19,7 +19,9 @@ import { FONT_STACK } from '../utils/fonts';
 export async function generateQueuePanelImage(
   client: Client,
   players: Player[],
-  teamSize: number
+  teamSize: number,
+  /** The division this channel is registered to. Unregistered channels get the old cyan. */
+  division?: string
 ): Promise<Buffer> {
   const cardW = 240;
   const cardH = 115;
@@ -28,7 +30,15 @@ export async function generateQueuePanelImage(
   const capacity = teamSize * 2;
 
   const isFull = players.length === capacity;
-  const title = `🚀 ${teamSize}V${teamSize} MATCH QUEUE`;
+  // The accent colour is the division's own -- the same one on the player cards below
+  // and on every rank badge -- so five panels are told apart at a glance and the panel
+  // agrees with the cards under it. A full queue goes emerald whatever the division: the
+  // badge text says QUEUE FULL, and the colour change is what catches the eye.
+  const tier = division ? getDivisionTier(division) : undefined;
+  const accent = isFull ? '#00e676' : tier?.color ?? '#00b0ff';
+  const title = tier
+    ? `${tier.emoji} ${tier.name.toUpperCase()} · ${teamSize}V${teamSize} QUEUE`
+    : `🚀 ${teamSize}V${teamSize} MATCH QUEUE`;
   const badgeText = isFull
     ? `QUEUE FULL  •  ${capacity} / ${capacity} READY!`
     : `WAITING FOR PLAYERS  •  ${players.length} / ${capacity}`;
@@ -59,8 +69,8 @@ export async function generateQueuePanelImage(
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // Top accent line (cyan or emerald when full)
-  ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
+  // Top accent line
+  ctx.fillStyle = accent;
   ctx.fillRect(0, 0, width, 5);
 
   // 2. Title & Status Header
@@ -75,15 +85,15 @@ export async function generateQueuePanelImage(
   const badgeY = 25;
   const badgeH = 34;
 
-  ctx.fillStyle = isFull ? 'rgba(0, 230, 118, 0.15)' : 'rgba(0, 176, 255, 0.15)';
+  ctx.fillStyle = accent + '26'; // the accent at 15% alpha
   ctx.fillRect(badgeX, badgeY, badgeWidth, badgeH);
-  ctx.strokeStyle = isFull ? '#00e676' : '#00b0ff';
+  ctx.strokeStyle = accent;
   ctx.lineWidth = 2;
   ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeH);
 
   ctx.textAlign = 'center';
   ctx.font = `bold 14px ${FONT_STACK}`;
-  ctx.fillStyle = isFull ? '#00e676' : '#00b0ff';
+  ctx.fillStyle = accent;
   ctx.fillText(badgeText, badgeX + badgeWidth / 2, badgeY + 22);
 
   // 3. Player slot cards, teamSize per row, two rows

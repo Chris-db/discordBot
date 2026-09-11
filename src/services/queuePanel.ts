@@ -137,7 +137,12 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     // The panel image already draws the size, the count badge, every queued player with
     // their MMR, and the empty slots. An embed listing the same roster underneath it was
     // the same panel twice.
-    const imageBuffer = await generateQueuePanelImage(client, players, queue.team_size);
+    const imageBuffer = await generateQueuePanelImage(
+      client,
+      players,
+      queue.team_size,
+      getDivisionByChannel(queue.guild_id, channelId)?.division
+    );
     const attachment = new AttachmentBuilder(imageBuffer, { name: 'queue_panel.png' });
     const components = [getQueuePanelButtons()];
 
