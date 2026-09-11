@@ -13,6 +13,7 @@ import { seasonCommand } from '../commands/season';
 import { divisionCommand } from '../commands/division';
 import { replayCommand } from '../commands/replay';
 import { themeCommand } from '../commands/theme';
+import { feedbackCommand } from '../commands/feedback';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -29,6 +30,7 @@ export const commands = [
   divisionCommand,
   replayCommand,
   themeCommand,
+  feedbackCommand,
 ];
 
 /**

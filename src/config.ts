@@ -36,6 +36,16 @@ export interface AppConfig {
    */
   heartbeatUrl?: string;
   heartbeatIntervalMinutes: number;
+  /**
+   * GitHub Issues as the bot's outbox: every distinct runtime error and every `/feedback`
+   * becomes an issue in this repo, for a person or an agent to pick up without needing a
+   * way into the Pi. Both unset = nothing is sent. Token: fine-grained PAT, this repo only,
+   * Issues read+write.
+   */
+  githubRepo?: string;
+  githubToken?: string;
+  /** Minimum minutes between two notes about the same error on its issue. */
+  errorReportCooldownMinutes: number;
 }
 
 const config: AppConfig = {
@@ -56,6 +66,9 @@ const config: AppConfig = {
   voteTimeoutSeconds: parseInt(process.env.VOTE_TIMEOUT_SECONDS || '60', 10),
   heartbeatUrl: process.env.HEARTBEAT_URL || undefined,
   heartbeatIntervalMinutes: parseInt(process.env.HEARTBEAT_INTERVAL_MINUTES || '5', 10),
+  githubRepo: process.env.GITHUB_REPO || undefined,
+  githubToken: process.env.GITHUB_TOKEN || undefined,
+  errorReportCooldownMinutes: parseInt(process.env.ERROR_REPORT_COOLDOWN_MINUTES || '60', 10),
 };
 
 export default config;
@@ -81,6 +94,7 @@ export function validateConfig(c: AppConfig = config): string[] {
     ['backupRetentionDays', 'BACKUP_RETENTION_DAYS'],
     ['voteTimeoutSeconds', 'VOTE_TIMEOUT_SECONDS'],
     ['heartbeatIntervalMinutes', 'HEARTBEAT_INTERVAL_MINUTES'],
+    ['errorReportCooldownMinutes', 'ERROR_REPORT_COOLDOWN_MINUTES'],
   ];
   for (const [key, envName] of positive) {
     const value = c[key];
@@ -96,6 +110,14 @@ export function validateConfig(c: AppConfig = config): string[] {
   // page for a bot that is perfectly fine.
   if (c.heartbeatUrl !== undefined && !/^https?:\/\/\S+$/.test(c.heartbeatUrl)) {
     problems.push(`HEARTBEAT_URL must be an http(s) URL (got "${c.heartbeatUrl}").`);
+  }
+  // Half a GitHub setup is the worst kind: the reporter would fail on every error and the
+  // errors would go nowhere. Either both, or neither.
+  if (Boolean(c.githubRepo) !== Boolean(c.githubToken)) {
+    problems.push('GITHUB_REPO and GITHUB_TOKEN must be set together (or both left unset).');
+  }
+  if (c.githubRepo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(c.githubRepo)) {
+    problems.push(`GITHUB_REPO must look like owner/name (got "${c.githubRepo}").`);
   }
   return problems;
 }

@@ -17,6 +17,7 @@ import {
 import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
 import { startHeartbeat } from './services/heartbeat';
+import { installErrorReporter } from './services/errorReporter';
 import { withGuildTheme } from './services/themeService';
 import { ensureGuildDefaults } from './services/guildSetup';
 // Registers the bundled fonts before anything can draw a card. The image modules import
@@ -34,6 +35,9 @@ if (configProblems.length > 0) {
   logger.error('Fix .env and restart.');
   process.exit(1);
 }
+
+// From here on, every logger.error becomes (or updates) a GitHub issue -- if configured.
+installErrorReporter();
 
 registerFonts();
 
