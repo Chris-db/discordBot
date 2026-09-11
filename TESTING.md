@@ -53,7 +53,7 @@ overwrites, getting moved between voice channels, and the channel teardown. Watc
 
 ## 3. Rematch and requeue
 
-On the result card, within 90 seconds:
+On the result card, within 3 minutes:
 
 - **Run it back** → same teams, new lobby credentials, `REMATCH — GAME 2`, and a
   `📊 Series so far: 🔵 1 — 0 🟠` line.
@@ -72,7 +72,7 @@ Worth provoking deliberately, because they are silent when they break:
   meanwhile, it should re-pop immediately rather than stranding anyone.
 - **Draft auto-pick** — in a captains draft, let a captain sit for 90s. It should
   auto-pick the highest-MMR player left and say so, not hang forever.
-- **Channel teardown** — after the 90s rematch window, `#match-N` and both team VCs
+- **Channel teardown** — after the 3-minute rematch window, `#match-N` and both team VCs
   should disappear. Check no `Ready Check #N` VC is left orphaned.
 
 ## 5. Multi-queue, when you want it

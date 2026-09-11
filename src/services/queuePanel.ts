@@ -35,7 +35,7 @@ import {
 import { startNewMatch } from './matchService';
 import { generateQueuePanelImage } from './queueImage';
 import { logger } from '../utils/logger';
-import { startReadyCheckPhase } from './readyCheckService';
+import { startReadyCheckPhase, AFK_COOLDOWN_REASON } from './readyCheckService';
 import { sendCaptainsDraftCard } from './votingService';
 
 const panelMoveTimers = new Map<string, NodeJS.Timeout>();
@@ -231,9 +231,18 @@ export async function handleJoinQueue(
   // Check if player is banned
   const activeBan = getActiveBan(guildId, user.id);
   if (activeBan) {
-    const expiryStr = activeBan.expires_at
-      ? `Expires: <t:${Math.floor(new Date(activeBan.expires_at).getTime() / 1000)}:R>`
-      : '**Permanent**';
+    const expiresStamp = activeBan.expires_at
+      ? `<t:${Math.floor(new Date(activeBan.expires_at).getTime() / 1000)}:R>`
+      : '';
+    // A ready-check cooldown is a ban row underneath, but "you are banned" is the wrong
+    // thing to tell someone whose game crashed five minutes ago.
+    if (activeBan.reason === AFK_COOLDOWN_REASON && expiresStamp) {
+      return {
+        success: false,
+        message: `⏳ You missed the last ready check. You can queue again ${expiresStamp}.`,
+      };
+    }
+    const expiryStr = expiresStamp ? `Expires: ${expiresStamp}` : '**Permanent**';
     return {
       success: false,
       message: `🚫 You are banned from queuing.\n**Reason:** ${activeBan.reason}\n${expiryStr}`,

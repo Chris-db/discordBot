@@ -11,6 +11,7 @@ const good: AppConfig = {
   setupTimeoutMinutes: 15,
   draftPickTimeoutSeconds: 90,
   readyCheckTimeoutSeconds: 300,
+  afkCooldownMinutes: 5,
   backupRetentionDays: 14,
   voteTimeoutSeconds: 60,
 };

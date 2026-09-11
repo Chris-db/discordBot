@@ -16,6 +16,12 @@ export interface AppConfig {
   setupTimeoutMinutes: number;
   /** How long a captain has to make a pick before it is auto-picked for them. */
   draftPickTimeoutSeconds: number;
+  /**
+   * Queue cooldown for a player who misses or leaves a ready check. 0 disables it.
+   * Chris chose 5 minutes on 2026-09-11: enough to stop click-and-vanish without punishing
+   * a genuine disconnect, and short enough that an admin never has to lift it.
+   */
+  afkCooldownMinutes: number;
   /** How long a popped lobby has to get everyone into the ready-check voice channel. */
   readyCheckTimeoutSeconds: number;
   /** Nightly SQLite snapshots. The database holds every rank and is not in version control. */
@@ -37,6 +43,7 @@ const config: AppConfig = {
   setupTimeoutMinutes: parseInt(process.env.SETUP_TIMEOUT_MINUTES || '15', 10),
   draftPickTimeoutSeconds: parseInt(process.env.DRAFT_PICK_TIMEOUT_SECONDS || '90', 10),
   readyCheckTimeoutSeconds: parseInt(process.env.READY_CHECK_TIMEOUT_SECONDS || '300', 10),
+  afkCooldownMinutes: parseInt(process.env.AFK_COOLDOWN_MINUTES || '5', 10),
   backupEnabled: (process.env.BACKUP_ENABLED || 'true').toLowerCase() !== 'false',
   backupDir: process.env.BACKUP_DIR || path.join('data', 'backups'),
   backupRetentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '14', 10),
@@ -71,6 +78,10 @@ export function validateConfig(c: AppConfig = config): string[] {
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
       problems.push(`${envName} must be a positive whole number (got "${process.env[envName]}").`);
     }
+  }
+  // Zero is a valid setting here: it means 'no cooldown'.
+  if (!Number.isFinite(c.afkCooldownMinutes) || c.afkCooldownMinutes < 0) {
+    problems.push(`AFK_COOLDOWN_MINUTES must be a whole number, 0 or more (got "${process.env.AFK_COOLDOWN_MINUTES}").`);
   }
   return problems;
 }

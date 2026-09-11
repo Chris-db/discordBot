@@ -13,8 +13,12 @@ export function majorityOf(rosterSize: number): number {
   return Math.floor(rosterSize / 2) + 1;
 }
 
-/** How long a finished match's channels stay open for a rematch before teardown. */
-export const REMATCH_WINDOW_MS = 90_000;
+/**
+ * How long a finished match's channels stay open for a rematch before teardown.
+ * Was 90s; Chris raised it to three minutes on 2026-09-11 -- after a BO5 six people need
+ * time to say gg and decide, and 90s was closing the channel mid-conversation.
+ */
+export const REMATCH_WINDOW_MS = 3 * 60_000;
 
 /**
  * How many times a lobby can reject a captain pair or a team split before the next one is

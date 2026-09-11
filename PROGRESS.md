@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-10 (stray panel fix)
+Last updated: 2026-09-11 (policy calls shipped)
 
 ---
 
@@ -63,7 +63,7 @@ Everything else worked, but these have never been run against the real API:
 - Double or Nothing.
 - Rematch actually starting (the decline path was tested).
 
-Tests: **263 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **266 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -106,9 +106,9 @@ Landed in the follow-up session (same day, all on `main`):
   match in the current channel. **Requires `npm run register` on deploy.**
 - Join/Leave reply before the panel re-renders; panel refresh is one API call, not three.
 
-**Audit items deliberately left as policy decisions for Chris:**
-- AFK cooldown for a player who fails/leaves a ready check (comment marks the spot).
-- Whether the 90s rematch window is long enough after a BO5.
+**Policy calls, decided by Chris on 2026-09-11 and shipped:**
+- AFK cooldown: **5 minutes** (`AFK_COOLDOWN_MINUTES`, 0 disables). A timed ban row with reason `Missed the ready check`; the join message reads as a cooldown, `/ban remove` lifts it early.
+- Rematch window: **3 minutes** (`REMATCH_WINDOW_MS`), up from 90s.
 
 ## Audit leftovers (2026-09-10, third session)
 
@@ -162,7 +162,7 @@ sizes, that is a design reversal of the 2026-08-08 decision, not a fix.
 
 ## Next
 
-0. **Register the queue channel to a division** (`/queue panel division:C` in the 3v3 channel) — until then divisions, promotion and per-division leaderboards are inert. Then decide the two policy calls above.
+0. ~~Register the queue channel to a division~~ — done 2026-09-10 (3v3 → Rank C). Policy calls done 2026-09-11.
 1. Full achievements table — low value for a group of 6; the streak callouts already
    deliver most of it.
 2. Webhooks — recommended **skip** until something actually consumes them.

@@ -16,6 +16,7 @@ import {
   getActiveMatchForPlayer,
   createMatch,
   updateMatch,
+  createBan,
   ActiveQueue,
 } from '../database/queries';
 import { createMatchChannels, deleteMatchChannels } from './channelService';
@@ -36,6 +37,30 @@ const runningReadyChecks = new Map<
   number,
   { playerIds: string[]; fail: (afkPlayerIds: string[], why: string) => Promise<boolean> }
 >();
+
+/** The ban reason that marks an automatic ready-check cooldown, so the join message can tell it from a real ban. */
+export const AFK_COOLDOWN_REASON = 'Missed the ready check';
+
+/**
+ * Puts the players who missed or left a ready check on a short queue cooldown.
+ *
+ * It is a timed ban row -- the join path already checks those, /ban list shows it, and
+ * /ban remove lifts it early -- rather than a new table. Test bots never show up to voice
+ * and are never cooled down. Returns the ids actually cooled, for the notice and the tests.
+ */
+export function applyAfkCooldown(guildId: string, afkPlayerIds: string[], bannedBy: string): string[] {
+  const minutes = config.afkCooldownMinutes;
+  if (!minutes || minutes <= 0) return [];
+
+  const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
+  const cooled: string[] = [];
+  for (const id of afkPlayerIds) {
+    if (id.startsWith('test_bot_')) continue;
+    createBan(guildId, id, bannedBy, AFK_COOLDOWN_REASON, expiresAt);
+    cooled.push(id);
+  }
+  return cooled;
+}
 
 /**
  * Drops anyone who already has a live match from a lobby that is about to pop, and says
@@ -386,7 +411,8 @@ export async function startReadyCheckPhase(
       winner: 'NONE',
       completed_at: new Date().toISOString(),
     });
-    // A queue cooldown for `afkPlayerIds` would go here, if the server ever wants one.
+    const cooled = applyAfkCooldown(guildId, afkPlayerIds, client.user?.id ?? 'system');
+    const cooldownNote = cooled.length > 0 ? ` ${config.afkCooldownMinutes}m queue cooldown.` : '';
 
     if (matchTextChannel) {
       await matchTextChannel.send({
@@ -406,8 +432,8 @@ export async function startReadyCheckPhase(
     const afkMentions = afkPlayerIds.map(id => `<@${id}>`).join(', ');
     await closePopNotice(
       rePopped
-        ? `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}. Queue re-popped (${rosterSize}/${rosterSize}).`
-        : `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}. Queue is ${waiting}/${rosterSize}.`
+        ? `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}.${cooldownNote} Queue re-popped (${rosterSize}/${rosterSize}).`
+        : `❌ Match #${match.match_id} ready check failed — removed ${afkMentions}.${cooldownNote} Queue is ${waiting}/${rosterSize}.`
     );
 
     setTimeout(() => {

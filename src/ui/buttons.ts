@@ -202,7 +202,7 @@ export function getGambleProposeButton(
 
 /**
  * ActionRow shown on the result card: run the same teams back, or send everyone to the
- * back of the queue. Without these the channel just dies after 90 seconds and all six
+ * back of the queue. Without these the channel just dies after the rematch window and all six
  * players have to re-queue from scratch.
  */
 export function getPostMatchButtons(
