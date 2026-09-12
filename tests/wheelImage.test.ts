@@ -48,9 +48,9 @@ describe('wheel maths', () => {
     }
   });
 
-  it('spins at least two full turns, so the spin is never a twitch', () => {
+  it('spins at least three full turns, so the spin is never a twitch', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      expect(landingAngleFor('BLUE', seeded(seed))).toBeGreaterThanOrEqual(2 * Math.PI * 2);
+      expect(landingAngleFor('BLUE', seeded(seed))).toBeGreaterThanOrEqual(3 * Math.PI * 2);
     }
   });
 
@@ -118,7 +118,7 @@ describe('generateWheelSpinGif', () => {
 
   it('reports when the wheel lands, the whole play time, and the angle it landed on', () => {
     expect(spin.landedAfterMs).toBeGreaterThan(1500);
-    expect(spin.landedAfterMs).toBeLessThan(4000);
+    expect(spin.landedAfterMs).toBeLessThan(7000);
     // The landed hold is long enough that a looping player cannot restart the spin
     // before the service, which waits landedAfterMs + 3 s, has collapsed the message.
     expect(spin.durationMs - spin.landedAfterMs).toBeGreaterThanOrEqual(10_000);
@@ -126,6 +126,6 @@ describe('generateWheelSpinGif', () => {
   });
 
   it('stays small enough to upload from the Pi without a wait', () => {
-    expect(spin.buffer.length).toBeLessThan(1_000_000);
+    expect(spin.buffer.length).toBeLessThan(1_600_000);
   });
 });

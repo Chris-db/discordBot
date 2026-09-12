@@ -407,7 +407,7 @@ upload, recent warnings) — see the conversation of 2026-09-11 or rebuild from:
 
 The spin is now a real wheel. `src/services/wheelImage.ts` draws it -- eight slices
 alternating blue and orange, gold rim and pointer, hub naming the match -- and renders the
-spin as one animated GIF (360px, ~85 frames at 30 ms, ~4 s a loop, ~790 KB, ~280 ms to render on
+spin as one animated GIF (360px, ~130 frames at 45 ms, lands at ~5.8 s then holds 15 s, ~1.2 MB, ~400 ms to render on
 Windows) via `gifenc` (pure JS, so the Pi's `npm ci` needs no toolchain). The 50/50 is
 decided *before* the GIF is drawn, so the wheel lands on the real answer; `landingAngleFor`
 / `segmentUnderPointer` are the only maths the outcome depends on and
@@ -426,7 +426,7 @@ Discord caveats accepted: it loops GIFs, so the wheel re-spins until the result 
 replaces it (the landed frame holds 1.2 s per loop); a viewer with auto-play GIFs off sees
 the resting wheel, then the result.
 
-**Untested in Discord** until Chris runs it on the test server and merges.
+**Live since 2026-09-12** (a64b7a3): tested on the dev bot, then on the real server -- "looks perfect". Spin lengthened to ~5.8 s for suspense right after (three turns, 45 ms frames).
 
 **Testing a branch without touching `main`** (first done for this one): a second Discord
 application ("6mans Dev"), its own token, invited to the throwaway test server only

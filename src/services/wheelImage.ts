@@ -33,7 +33,7 @@ export function segmentUnderPointer(angle: number): number {
 /**
  * The total rotation for a spin that ends on a slice of the winner's colour.
  *
- * Two full turns plus the landing offset, so the spin is never visibly the same
+ * Three full turns plus the landing offset, so the spin is never visibly the same
  * twice; the stop lands in the middle 80% of the slice, never on a boundary where the
  * pointer would look undecided.
  */
@@ -43,7 +43,7 @@ export function landingAngleFor(winner: 'BLUE' | 'ORANGE', rng: () => number = M
   const segment = candidates[Math.floor(rng() * candidates.length)];
   const local = (segment + 0.1 + 0.8 * rng()) * SEGMENT_ARC;
   const rest = (tau - local) % tau;
-  const turns = 2;
+  const turns = 3;
   return turns * tau + rest;
 }
 
@@ -139,8 +139,8 @@ export function drawWheel(
 }
 
 export const SPIN_GIF_SIZE = 360;
-/** Chromium plays GIF frames at 20 ms or slower; 30 ms leaves a margin and looks smooth. */
-const FRAME_DELAY_MS = 30;
+/** Chromium plays GIF frames at 20 ms or slower; 45 ms (22 fps) reads as a wheel, not a flicker. */
+const FRAME_DELAY_MS = 45;
 /**
  * How long the landed wheel holds, and in how many frames. The GIF is written to play
  * once, but a player that loops regardless must not restart the spin before the caller
