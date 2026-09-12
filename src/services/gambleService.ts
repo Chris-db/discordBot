@@ -482,7 +482,7 @@ async function spinWheelOfFate(
     await new Promise((res) => setTimeout(res, spin!.landedAfterMs + LANDED_VIEW_MS));
   } else {
     await targetMsg.edit({
-      content: `🎡 Spinning the wheel — Match #${match.match_number}…`,
+      content: `Spinning the wheel — Match #${match.match_number}…`,
       embeds: [],
       components: [],
     }).catch(() => null);
@@ -603,7 +603,7 @@ async function spinWheelOfFate(
   // instant before the card loaded -- a wheel that landed, then twitched.
   const teamLabel = wheelWinner === 'BLUE' ? '🔵 Blue' : '🟠 Orange';
   await targetMsg.edit({
-    content: `🎡 Match #${match.match_number} — the wheel landed on ${teamLabel}.`,
+    content: `**Match #${match.match_number}** — the wheel landed on ${teamLabel}.`,
     embeds: [],
     files: [],
     attachments: [],
