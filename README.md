@@ -15,7 +15,7 @@ This bot solves the UI/UX friction and common complaints of legacy bots like **N
 
 If someone is hosting the bot for you, setup is three steps:
 
-1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles* (only if you want rank roles), *View Channels*, *Send Messages*, *Attach Files*, *Move Members*.
+1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles*, *Manage Messages*, *View Channels*, *Send Messages*, *Read Message History*, *Embed Links*, *Attach Files*, *Connect*, *Speak*, *Move Members* — or simply *Administrator*. It creates private match channels, and Discord only lets a bot grant permissions it holds itself, so a bot short of any of these fails at the first match with `Missing Permissions`.
 2. Run **`/setup`** in any channel. Pick how many rank divisions you want:
    - `One ladder` — everyone queues together. Right for most servers. It is called **6mans** everywhere (sidebar, panel, cards); pass `name:` to call it something else.
    - `Three` (C/B/A) or `All five` (C/B/A/X/S) — separate ladders, players are placed by an admin with `/division place`.

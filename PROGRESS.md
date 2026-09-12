@@ -429,7 +429,9 @@ the resting wheel, then the result.
 **Untested in Discord** until Chris runs it on the test server and merges.
 
 **Testing a branch without touching `main`** (first done for this one): a second Discord
-application ("6mans Dev"), its own token, invited to the throwaway test server only, run
+application ("6mans Dev"), its own token, invited to the throwaway test server only
+(`&permissions=288484368` on the invite URL, or just give its role Administrator -- the
+README list of six permissions was short, and a bot cannot grant an overwrite it lacks), run
 from the Windows checkout on the branch with `ENV_FILE=.env.dev npm run dev`
 (`src/config.ts` reads `ENV_FILE`; `.env.*` is gitignored). `.env.dev` carries the dev
 token/client id and `DB_PATH=data/dev.sqlite`, so it starts from an empty ladder: `/setup`
