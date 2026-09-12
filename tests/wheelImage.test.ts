@@ -101,9 +101,17 @@ describe('generateWheelSpinGif', () => {
     expect(frames).toBe(spinFrameCount(spin.landingAngle));
   });
 
-  it('reports a duration the service can wait out, and the angle it landed on', () => {
-    expect(spin.durationMs).toBeGreaterThan(3000);
-    expect(spin.durationMs).toBeLessThan(5500);
+  it('is written to play once, not loop', () => {
+    // The NETSCAPE2.0 application extension is what asks a player to loop.
+    expect(spin.buffer.indexOf(Buffer.from('NETSCAPE2.0', 'ascii'))).toBe(-1);
+  });
+
+  it('reports when the wheel lands, the whole play time, and the angle it landed on', () => {
+    expect(spin.landedAfterMs).toBeGreaterThan(1500);
+    expect(spin.landedAfterMs).toBeLessThan(4000);
+    // The landed hold is long enough that a looping player cannot restart the spin
+    // before the service, which waits landedAfterMs + 3 s, has swapped in the result.
+    expect(spin.durationMs - spin.landedAfterMs).toBeGreaterThanOrEqual(6000);
     expect(segmentTeam(segmentUnderPointer(spin.landingAngle))).toBe('BLUE');
   });
 

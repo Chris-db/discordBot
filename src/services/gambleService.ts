@@ -31,6 +31,9 @@ const GAMBLE_WINDOW_MS = 60_000;
 const TEARDOWN_AFTER_DEAD_PROPOSAL_MS = 30_000;
 const TEARDOWN_AFTER_WHEEL_MS = 60_000;
 
+/** How long the landed wheel is left on screen before the result card replaces it. */
+const LANDED_VIEW_MS = 3000;
+
 const activeGambleTimers = new Map<number, NodeJS.Timeout>();
 const activeGambleMessages = new Map<number, { channelId: string; messageId: string }>();
 
@@ -456,9 +459,9 @@ async function spinWheelOfFate(
   const wheelWinner: 'BLUE' | 'ORANGE' = Math.random() < 0.5 ? 'BLUE' : 'ORANGE';
   const originalWinner = match.winner;
 
-  // The spin replaces the consensus card. Discord loops the GIF, so once one play has
-  // finished the result card takes its place. If the render fails the gamble still
-  // resolves -- the MMR is what matters -- behind a plain line instead of a wheel.
+  // The spin replaces the consensus card; the result card replaces the spin once the
+  // wheel has landed and been looked at. If the render fails the gamble still resolves
+  // -- the MMR is what matters -- behind a plain line instead of a wheel.
   let spin: WheelSpin | undefined;
   try {
     spin = generateWheelSpinGif(match.match_number, wheelWinner);
@@ -473,8 +476,10 @@ async function spinWheelOfFate(
       files: [new AttachmentBuilder(spin.buffer, { name: 'wheel_spin.gif' })],
       attachments: [],
     }).catch(() => null);
-    // Measured from when Discord has the GIF, so viewers see the whole spin land.
-    await new Promise((res) => setTimeout(res, spin!.durationMs + 500));
+    // Measured from when Discord accepted the upload. A viewer's copy starts playing
+    // later than that, by however long their download took, so the allowance after the
+    // landing covers that lag as well as a moment to take the result in.
+    await new Promise((res) => setTimeout(res, spin!.landedAfterMs + LANDED_VIEW_MS));
   } else {
     await targetMsg.edit({
       content: `🎡 Spinning the wheel — Match #${match.match_number}…`,

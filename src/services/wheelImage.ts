@@ -141,8 +141,13 @@ export function drawWheel(
 export const SPIN_GIF_SIZE = 360;
 /** Chromium plays GIF frames at 20 ms or slower; 30 ms leaves a margin and looks smooth. */
 const FRAME_DELAY_MS = 30;
-/** The landed wheel holds before Discord loops the GIF back to the start. */
-const HOLD_LAST_MS = 1500;
+/**
+ * How long the landed wheel holds. The GIF is written to play once, but a player that
+ * loops regardless must not restart the spin before the result card has replaced it --
+ * and the viewer's copy starts later than the bot's upload finishes, by however long the
+ * download took. So the hold is long, and the caller times the swap from `landedAfterMs`.
+ */
+const HOLD_LAST_MS = 8000;
 /**
  * The most the wheel may turn between two frames: under half a slice. Eight identical
  * slices stepping more than that per frame read as a slower wheel, or one going backwards
@@ -171,7 +176,9 @@ export function spinFrameCount(landingAngle: number): number {
 
 export interface WheelSpin {
   buffer: Buffer;
-  /** Play time of one loop; the caller waits this long before posting the result. */
+  /** Play time from the first frame to the wheel coming to rest. */
+  landedAfterMs: number;
+  /** Play time of the whole file, landed hold included. */
   durationMs: number;
   /** Where the wheel stopped, for the frozen copy on the result card. */
   landingAngle: number;
@@ -218,13 +225,15 @@ export function generateWheelSpinGif(
     gif.writeFrame(index, size, size, {
       palette: i === 0 ? palette : undefined,
       delay: isLast ? HOLD_LAST_MS : FRAME_DELAY_MS,
-      repeat: 0,
+      // Once: the wheel stays landed. Discord may loop anyway; see HOLD_LAST_MS.
+      repeat: -1,
     });
   });
   gif.finish();
 
   return {
     buffer: Buffer.from(gif.bytes()),
+    landedAfterMs: (frameCount - 1) * FRAME_DELAY_MS,
     durationMs: (frameCount - 1) * FRAME_DELAY_MS + HOLD_LAST_MS,
     landingAngle,
   };
