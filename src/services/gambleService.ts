@@ -62,6 +62,17 @@ function lobbyBrokenUp(match: Match): boolean {
   return !!occupant && occupant.match_id !== match.match_id;
 }
 
+/**
+ * Everyone has to agree -- everyone who can click. This used to be a hardcoded 6, so a
+ * 2v2 lobby could never reach consensus and a 4v4 spun two short of unanimous; then it
+ * was the whole roster, so a lobby padded with `/queue fill-bots` could never spin, as
+ * the bots never click. Test bots only enter a match through that admin command.
+ */
+function agreementsNeeded(match: Match): number {
+  const humans = [...match.blue_team, ...match.orange_team].filter(id => !id.startsWith('test_bot_'));
+  return Math.max(1, humans.length);
+}
+
 function clearGambleTimer(matchId: number): void {
   const timer = activeGambleTimers.get(matchId);
   if (!timer) return;
@@ -238,6 +249,15 @@ export async function proposeGamble(
   }
 
   const ref = { channelId: interaction.channelId, messageId: msg.id };
+
+  // The proposer has agreed by proposing. If they are the only one who can click -- one
+  // human in a lobby of test bots -- that is already unanimous, and there is nobody left
+  // to click Agree and trigger the spin from there.
+  if (newStatus.agreedPlayers.length >= agreementsNeeded(match)) {
+    await startWheelOfFate(client, matchId, ref.channelId, ref.messageId);
+    return;
+  }
+
   activeGambleMessages.set(matchId, ref);
 
   // The delay is measured from proposedAt rather than from here, so the timer fires at
@@ -340,13 +360,7 @@ export async function handleGambleAgree(
     components: [getGambleConsensusButtons(matchId, false)],
   });
 
-  // Everyone has to agree -- everyone who can click. This used to be a hardcoded 6, so a
-  // 2v2 lobby could never reach consensus and a 4v4 spun two short of unanimous; then it
-  // was the whole roster, so a lobby padded with `/queue fill-bots` could never spin, as
-  // the bots never click. Test bots only enter a match through that admin command.
-  const humans = [...match.blue_team, ...match.orange_team].filter(id => !id.startsWith('test_bot_'));
-  const needed = Math.max(1, humans.length);
-  if (status.agreedPlayers.length >= needed) {
+  if (status.agreedPlayers.length >= agreementsNeeded(match)) {
     clearGambleTimer(matchId);
     activeGambleMessages.delete(matchId);
 

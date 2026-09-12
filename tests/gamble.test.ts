@@ -301,6 +301,24 @@ describe('double or nothing', () => {
       await handleGambleAgree(fakeClient, click('o1'), padded.match_id);
       expect(getMatch(padded.match_id)!.gamble_status!.state).toBe('SPINNING');
 
+      // One human among five bots: proposing is already unanimous, and nobody else can
+      // click Agree, so the proposal itself has to start the spin.
+      const solo = createMatch({
+        guild_id: G,
+        channel_id: 'queue_chan',
+        blue_team: ['b1', 'test_bot_1', 'test_bot_2'],
+        orange_team: ['test_bot_3', 'test_bot_4', 'test_bot_5'],
+        rl_name: 'RL44',
+        rl_pass: '319',
+        text_channel_id: 'match_chan_3',
+        queue_channel_id: 'queue_chan',
+      });
+      updateMatch(solo.match_id, { state: 'COMPLETED', winner: 'BLUE', completed_at: new Date().toISOString() });
+
+      await proposeGamble(fakeClient, click('b1'), solo.match_id);
+      expect(getMatch(solo.match_id)!.gamble_status!.state).toBe('SPINNING');
+      expect(hasPendingChannelDeletion(solo.match_id)).toBe(true);
+
       // And the six-human lobby still needs all six.
       await proposeGamble(fakeClient, click('b1'), matchId);
       for (const id of ['b2', 'b3', 'o1', 'o2']) await handleGambleAgree(fakeClient, click(id), matchId);

@@ -160,11 +160,14 @@ export function buildGambleConsensusEmbed(
   // as fresh as the last click that re-rendered the card.
   deadlineUnixSeconds: number
 ): EmbedBuilder {
-  // Test bots never click, so they are not asked to.
-  const rosterSize = [...blueTeam, ...orangeTeam].filter(p => !p.discord_id.startsWith('test_bot_')).length;
+  // Test bots never click, so they are not asked to -- and are shown as already in.
+  const isBot = (p: Player) => p.discord_id.startsWith('test_bot_');
+  const rosterSize = [...blueTeam, ...orangeTeam].filter(p => !isBot(p)).length;
 
   const roster = (players: Player[]) =>
-    players.map(p => `${agreedIds.includes(p.discord_id) ? '✅' : '⏳'} ${p.username}`).join('\n');
+    players
+      .map(p => `${isBot(p) || agreedIds.includes(p.discord_id) ? '✅' : '⏳'} ${p.username}`)
+      .join('\n');
 
   return new EmbedBuilder()
     .setTitle(`Double or Nothing — Match #${matchNumber}`)
