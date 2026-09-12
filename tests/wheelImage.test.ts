@@ -4,7 +4,8 @@ import {
   segmentUnderPointer,
   segmentTeam,
   generateWheelSpinGif,
-  SPIN_FRAMES,
+  spinFrameCount,
+  spinProfile,
   SPIN_GIF_SIZE,
   WHEEL_SEGMENTS,
 } from '../src/services/wheelImage';
@@ -47,9 +48,27 @@ describe('wheel maths', () => {
     }
   });
 
-  it('spins at least four full turns, so the spin is never a twitch', () => {
+  it('spins at least two full turns, so the spin is never a twitch', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      expect(landingAngleFor('BLUE', seeded(seed))).toBeGreaterThanOrEqual(4 * Math.PI * 2);
+      expect(landingAngleFor('BLUE', seeded(seed))).toBeGreaterThanOrEqual(2 * Math.PI * 2);
+    }
+  });
+
+  it('never turns more than half a slice between frames, so the slices cannot strobe', () => {
+    // Eight identical slices stepping half a slice or more per frame read as a slower or
+    // backwards wheel. The frame count is sized from the angle to keep under that.
+    const halfSlice = Math.PI / WHEEL_SEGMENTS;
+    for (let seed = 1; seed <= 50; seed++) {
+      const angle = landingAngleFor('BLUE', seeded(seed));
+      const frames = spinFrameCount(angle);
+      let largest = 0;
+      for (let f = 1; f < frames; f++) {
+        const step = angle * (spinProfile(f / (frames - 1)) - spinProfile((f - 1) / (frames - 1)));
+        expect(step).toBeGreaterThanOrEqual(0);
+        largest = Math.max(largest, step);
+      }
+      expect(largest).toBeLessThan(halfSlice);
+      expect(spinProfile(1)).toBeCloseTo(1, 9);
     }
   });
 
@@ -79,12 +98,12 @@ describe('generateWheelSpinGif', () => {
     for (let i = 0; i < spin.buffer.length - 2; i++) {
       if (spin.buffer[i] === 0x21 && spin.buffer[i + 1] === 0xf9 && spin.buffer[i + 2] === 0x04) frames++;
     }
-    expect(frames).toBe(SPIN_FRAMES);
+    expect(frames).toBe(spinFrameCount(spin.landingAngle));
   });
 
   it('reports a duration the service can wait out, and the angle it landed on', () => {
     expect(spin.durationMs).toBeGreaterThan(3000);
-    expect(spin.durationMs).toBeLessThan(6000);
+    expect(spin.durationMs).toBeLessThan(5500);
     expect(segmentTeam(segmentUnderPointer(spin.landingAngle))).toBe('BLUE');
   });
 

@@ -407,13 +407,13 @@ upload, recent warnings) — see the conversation of 2026-09-11 or rebuild from:
 
 The spin is now a real wheel. `src/services/wheelImage.ts` draws it -- eight slices
 alternating blue and orange, gold rim and pointer, hub naming the match -- and renders the
-spin as one animated GIF (420px, 36 frames, ~4.4 s a loop, ~470 KB, ~250 ms to render on
+spin as one animated GIF (360px, ~85 frames at 30 ms, ~4 s a loop, ~790 KB, ~280 ms to render on
 Windows) via `gifenc` (pure JS, so the Pi's `npm ci` needs no toolchain). The 50/50 is
 decided *before* the GIF is drawn, so the wheel lands on the real answer; `landingAngleFor`
 / `segmentUnderPointer` are the only maths the outcome depends on and
-`tests/wheelImage.test.ts` proves 500 seeds a colour land on the right slice. Fast frames
-are smeared (sub-steps at reduced alpha) so eight slices at speed do not strobe into an
-apparent backwards turn.
+`tests/wheelImage.test.ts` proves 500 seeds a colour land on the right slice. Every frame
+is sharp and the frame count is sized from the angle so no step exceeds half a slice --
+the first cut faked motion blur by smearing frames, which blended blue over orange into olive.
 
 Flow after the last Agree: consensus card → GIF (one message edit) → wait one loop →
 apply MMR → result PNG, whose header now carries the wheel frozen where the GIF stopped

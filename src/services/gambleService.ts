@@ -231,11 +231,16 @@ export async function proposeGamble(
     consensusDeadline(newStatus)
   );
 
+  // The proposer has agreed by proposing. If they are the only one who can click -- one
+  // human in a lobby of test bots -- that is already unanimous: the card goes up without
+  // buttons (a click on it would land after the spin had started) and the wheel follows.
+  const unanimous = newStatus.agreedPlayers.length >= agreementsNeeded(match);
+
   let msg;
   try {
     msg = await interaction.reply({
       embeds: [embed],
-      components: [getGambleConsensusButtons(matchId, false)],
+      components: unanimous ? [] : [getGambleConsensusButtons(matchId, false)],
       fetchReply: true,
     });
   } catch (err) {
@@ -250,10 +255,7 @@ export async function proposeGamble(
 
   const ref = { channelId: interaction.channelId, messageId: msg.id };
 
-  // The proposer has agreed by proposing. If they are the only one who can click -- one
-  // human in a lobby of test bots -- that is already unanimous, and there is nobody left
-  // to click Agree and trigger the spin from there.
-  if (newStatus.agreedPlayers.length >= agreementsNeeded(match)) {
+  if (unanimous) {
     await startWheelOfFate(client, matchId, ref.channelId, ref.messageId);
     return;
   }
