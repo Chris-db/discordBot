@@ -177,23 +177,3 @@ export function buildGambleConsensusEmbed(
       { name: '🟠 Orange', value: roster(orangeTeam), inline: true }
     );
 }
-
-/**
- * The two-step spin animation before the wheel result lands.
- */
-export function buildGambleSpinningEmbed(
-  step: 1 | 2,
-  /** The per-server display number, not the database match_id. */
-  matchNumber: number,
-  _rosterSize: number
-): EmbedBuilder {
-  const ticker =
-    step === 1
-      ? '🔵 — 🟠 — 🔵 — 🟠 — 🔵 — 🟠'
-      : '🟠 — 🔵 — ❓';
-
-  return new EmbedBuilder()
-    .setTitle(`Spinning the wheel — Match #${matchNumber}`)
-    .setColor(RL_COLORS.GOLD)
-    .setDescription(ticker);
-}

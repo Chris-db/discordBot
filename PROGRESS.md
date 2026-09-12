@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-11 (/setup command)
+Last updated: 2026-09-12 (Double or Nothing wheel, branch gamble-wheel)
 
 ---
 
@@ -94,13 +94,13 @@ Everything else worked, but these have never been run against the real API:
 
 - ~~Reporting by **button vote**~~ — worked in the trial run, 2026-09-11.
 - **2v2 and 4v4** in any form — no channel is registered to a size yet.
-- ~~Double or Nothing.~~ — worked, 2026-09-11.
+- ~~Double or Nothing.~~ — worked, 2026-09-11. **The new wheel GIF (branch `gamble-wheel`) is not yet.**
 - ~~Rematch actually starting~~ — worked, 2026-09-11 (channel rename bug found and fixed).
 - ~~`/replay check` against a real upload~~ — Chris tested it live in an earlier session (with a
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **351 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **365 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -402,6 +402,31 @@ upload, recent warnings) — see the conversation of 2026-09-11 or rebuild from:
 "node.*dist"`, `uptime`, `free -m`, `curl -w %{time_total}` against
 `discord.com/api/v10/gateway` with and without a 200 KB `-F` upload, `journalctl -u
 6mans | grep -iE "warn|error|429"`. One process + fast curl = not the Pi.
+
+## Double or Nothing wheel (2026-09-12, branch `gamble-wheel`)
+
+The spin is now a real wheel. `src/services/wheelImage.ts` draws it -- eight slices
+alternating blue and orange, gold rim and pointer, hub naming the match -- and renders the
+spin as one animated GIF (420px, 36 frames, ~4.4 s a loop, ~470 KB, ~250 ms to render on
+Windows) via `gifenc` (pure JS, so the Pi's `npm ci` needs no toolchain). The 50/50 is
+decided *before* the GIF is drawn, so the wheel lands on the real answer; `landingAngleFor`
+/ `segmentUnderPointer` are the only maths the outcome depends on and
+`tests/wheelImage.test.ts` proves 500 seeds a colour land on the right slice. Fast frames
+are smeared (sub-steps at reduced alpha) so eight slices at speed do not strobe into an
+apparent backwards turn.
+
+Flow after the last Agree: consensus card → GIF (one message edit) → wait one loop →
+apply MMR → result PNG, whose header now carries the wheel frozen where the GIF stopped
+(`generateGambleResultImage` takes the landing angle; roster block moved 20px down to
+make room). If the GIF render throws, the gamble still resolves behind a plain
+"Spinning…" line. The two emoji-ticker embeds (`buildGambleSpinningEmbed`) are gone.
+No migration: `gamble_status` already stored `wheelWinner` / `resultType`.
+
+Discord caveats accepted: it loops GIFs, so the wheel re-spins until the result card
+replaces it (the landed frame holds 1.2 s per loop); a viewer with auto-play GIFs off sees
+the resting wheel, then the result.
+
+**Untested in Discord** until Chris runs it on the test server and merges.
 
 ## Next
 

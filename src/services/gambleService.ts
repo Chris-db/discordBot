@@ -11,9 +11,10 @@ import {
   Player,
 } from '../database/queries';
 import { cancelMatchChannelDeletion, scheduleMatchChannelDeletion } from './channelService';
-import { buildGambleConsensusEmbed, buildGambleSpinningEmbed } from '../ui/embeds';
+import { buildGambleConsensusEmbed } from '../ui/embeds';
 import { getGambleConsensusButtons } from '../ui/buttons';
 import { generateGambleResultImage, GamblePlayerResult } from './gambleImage';
+import { generateWheelSpinGif, WheelSpin } from './wheelImage';
 import { logger } from '../utils/logger';
 
 /** How long the roster has to reach unanimous agreement. */
@@ -432,27 +433,37 @@ async function spinWheelOfFate(
   const targetMsg = await channel.messages.fetch(messageId).catch(() => null);
   if (!targetMsg) return;
 
-  // Step 1: Spinning
-  const step1Embed = buildGambleSpinningEmbed(1, match.match_number, match.blue_team.length + match.orange_team.length);
-  await targetMsg.edit({
-    embeds: [step1Embed],
-    components: [],
-  }).catch(() => null);
-
-  await new Promise((res) => setTimeout(res, 2000));
-
-  // Step 2: Slowdown
-  const step2Embed = buildGambleSpinningEmbed(2, match.match_number, match.blue_team.length + match.orange_team.length);
-  await targetMsg.edit({
-    embeds: [step2Embed],
-    components: [],
-  }).catch(() => null);
-
-  await new Promise((res) => setTimeout(res, 2000));
-
-  // Step 3: Resolve Winner (50/50)
+  // The 50/50 is decided before anything is drawn: the GIF has to land on the answer.
   const wheelWinner: 'BLUE' | 'ORANGE' = Math.random() < 0.5 ? 'BLUE' : 'ORANGE';
   const originalWinner = match.winner;
+
+  // The spin replaces the consensus card. Discord loops the GIF, so once one play has
+  // finished the result card takes its place. If the render fails the gamble still
+  // resolves -- the MMR is what matters -- behind a plain line instead of a wheel.
+  let spin: WheelSpin | undefined;
+  try {
+    spin = generateWheelSpinGif(match.match_number, wheelWinner);
+  } catch (err) {
+    logger.warn(`[Gamble] Could not render the spin for match id ${matchId}:`, err);
+  }
+  if (spin) {
+    await targetMsg.edit({
+      content: '',
+      embeds: [],
+      components: [],
+      files: [new AttachmentBuilder(spin.buffer, { name: 'wheel_spin.gif' })],
+      attachments: [],
+    }).catch(() => null);
+    // Measured from when Discord has the GIF, so viewers see the whole spin land.
+    await new Promise((res) => setTimeout(res, spin!.durationMs + 500));
+  } else {
+    await targetMsg.edit({
+      content: `🎡 Spinning the wheel — Match #${match.match_number}…`,
+      embeds: [],
+      components: [],
+    }).catch(() => null);
+    await new Promise((res) => setTimeout(res, 3000));
+  }
   const resultType: 'INVERTED' | 'DOUBLED' =
     wheelWinner === originalWinner ? 'DOUBLED' : 'INVERTED';
 
@@ -557,7 +568,8 @@ async function spinWheelOfFate(
     wheelWinner,
     resultType,
     blueResults,
-    orangeResults
+    orangeResults,
+    spin?.landingAngle
   );
 
   const attachment = new AttachmentBuilder(imageBuffer, { name: 'wheel_result.png' });
