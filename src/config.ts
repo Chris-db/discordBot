@@ -1,7 +1,10 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config();
+// ENV_FILE picks a different env file, so a second bot (a dev token invited to the
+// throwaway test server only) can run from this checkout beside the Pi's copy without
+// touching .env: `ENV_FILE=.env.dev npm run dev`.
+dotenv.config({ path: process.env.ENV_FILE ?? '.env' });
 
 export interface AppConfig {
   discordToken: string;

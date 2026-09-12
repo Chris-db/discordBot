@@ -8,6 +8,8 @@ data/*.sqlite-shm
 data/**/*.sqlite
 data/**/*.sqlite.partial
 .env
+.env.*
+!.env.example
 *.log
 .DS_Store
 

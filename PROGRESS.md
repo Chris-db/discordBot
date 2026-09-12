@@ -100,7 +100,7 @@ Everything else worked, but these have never been run against the real API:
   cross-reference against the match); worked. Not recorded at the time.
 - ~~A second division channel (Rank B) end to end.~~ Played 2026-09-11.
 
-Tests: **365 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
+Tests: **366 passing**. `npx tsc --noEmit` clean. `npm run build` clean.
 
 ## Done
 
@@ -427,6 +427,17 @@ replaces it (the landed frame holds 1.2 s per loop); a viewer with auto-play GIF
 the resting wheel, then the result.
 
 **Untested in Discord** until Chris runs it on the test server and merges.
+
+**Testing a branch without touching `main`** (first done for this one): a second Discord
+application ("6mans Dev"), its own token, invited to the throwaway test server only, run
+from the Windows checkout on the branch with `ENV_FILE=.env.dev npm run dev`
+(`src/config.ts` reads `ENV_FILE`; `.env.*` is gitignored). `.env.dev` carries the dev
+token/client id and `DB_PATH=data/dev.sqlite`, so it starts from an empty ladder: `/setup`
+in the test server, then `/queue fill-bots`. Pick the dev bot's copy of each slash command
+from the popup (Discord shows the bot avatar); buttons always go to the bot that posted the
+card. Two fixes fell out of setting this up: the gamble consensus now counts humans only
+(test bots never click, so a padded lobby could never spin -- the same fix every other
+vote already had), and the consensus card's "All N must agree" counts the same way.
 
 ## Next
 

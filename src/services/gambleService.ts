@@ -340,10 +340,13 @@ export async function handleGambleAgree(
     components: [getGambleConsensusButtons(matchId, false)],
   });
 
-  // Check if everyone has agreed. This used to be a hardcoded 6, so a 2v2 lobby could
-  // never reach consensus at all and a 4v4 would spin two players short of unanimous.
-  const rosterSize = match.blue_team.length + match.orange_team.length;
-  if (status.agreedPlayers.length >= rosterSize) {
+  // Everyone has to agree -- everyone who can click. This used to be a hardcoded 6, so a
+  // 2v2 lobby could never reach consensus and a 4v4 spun two short of unanimous; then it
+  // was the whole roster, so a lobby padded with `/queue fill-bots` could never spin, as
+  // the bots never click. Test bots only enter a match through that admin command.
+  const humans = [...match.blue_team, ...match.orange_team].filter(id => !id.startsWith('test_bot_'));
+  const needed = Math.max(1, humans.length);
+  if (status.agreedPlayers.length >= needed) {
     clearGambleTimer(matchId);
     activeGambleMessages.delete(matchId);
 

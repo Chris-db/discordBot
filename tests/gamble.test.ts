@@ -278,5 +278,33 @@ describe('double or nothing', () => {
       expect(gambleState()).toBe('PROPOSED');
       expect(hasPendingChannelDeletion(matchId)).toBe(false);
     });
+
+    it('spins once every human has agreed, even in a lobby padded with test bots', async () => {
+      // Two humans, four bots -- the bots never click, so they are not waited for. The
+      // spin itself cannot run here (the fake client has no channel), so the tell is the
+      // state moving past PROPOSED.
+      const padded = createMatch({
+        guild_id: G,
+        channel_id: 'queue_chan',
+        blue_team: ['b1', 'test_bot_1', 'test_bot_2'],
+        orange_team: ['o1', 'test_bot_3', 'test_bot_4'],
+        rl_name: 'RL43',
+        rl_pass: '318',
+        text_channel_id: 'match_chan_2',
+        queue_channel_id: 'queue_chan',
+      });
+      updateMatch(padded.match_id, { state: 'COMPLETED', winner: 'BLUE', completed_at: new Date().toISOString() });
+
+      await proposeGamble(fakeClient, click('b1'), padded.match_id);
+      expect(getMatch(padded.match_id)!.gamble_status!.state).toBe('PROPOSED');
+
+      await handleGambleAgree(fakeClient, click('o1'), padded.match_id);
+      expect(getMatch(padded.match_id)!.gamble_status!.state).toBe('SPINNING');
+
+      // And the six-human lobby still needs all six.
+      await proposeGamble(fakeClient, click('b1'), matchId);
+      for (const id of ['b2', 'b3', 'o1', 'o2']) await handleGambleAgree(fakeClient, click(id), matchId);
+      expect(gambleState()).toBe('PROPOSED');
+    });
   });
 });
