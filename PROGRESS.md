@@ -24,7 +24,7 @@ of truth; the Pi pulls it. Windows is for building and testing only — never ru
 here while the Pi's copy is up (two processes on one token race every interaction).
 
 **Ship loop (since 2026-09-11): merge to `main`, the Pi does the rest.** A systemd timer
-on the Pi (`6mans-deploy.timer`, every 5 min, units + script in `scripts/pi/`) fetches
+on the Pi (`6mans-deploy.timer`, every 15 min, units + script in `scripts/pi/`) fetches
 `origin/main`; if it moved it fast-forwards, runs `npm ci` if the lockfile changed, runs
 the tests, builds into `dist.new`, swaps it in and restarts `6mans`. A failing test or
 build rolls the source back, leaves the running bot alone, and opens a `deploy-failed`

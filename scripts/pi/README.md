@@ -1,6 +1,6 @@
 # Pi deploy
 
-`6mans-deploy.timer` runs `deploy.sh` every 5 minutes as `chris`. Install once:
+`6mans-deploy.timer` runs `deploy.sh` every 15 minutes as `chris`. Install once:
 
 ```
 sudo cp scripts/pi/6mans-deploy.service scripts/pi/6mans-deploy.timer /etc/systemd/system/

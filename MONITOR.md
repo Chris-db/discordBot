@@ -11,7 +11,7 @@ Pi deploy timer ──failure───▶ GitHub Issue  (label: deploy-failed)
 cloud routine "6mans bot monitor" reads open issues ──▶ fix PRs / triage comments
                                     │
    Chris merges on his phone        ▼
-`main` moves ──▶ Pi timer (5 min) tests, builds, restarts the bot
+`main` moves ──▶ Pi timer (15 min) tests, builds, restarts the bot
 ```
 
 - Bot side: `src/services/errorReporter.ts`, `feedbackService.ts`, `github.ts`. Needs
@@ -27,7 +27,7 @@ has a triage comment), `approved` (Chris adds this to feedback he wants built).
 
 ## Routine prompt
 
-You are the unattended maintainer for the Rocket League 6mans Discord bot in this repo (Chris-db/discordBot). The bot runs 24/7 on the owner's Raspberry Pi as a systemd service and AUTO-DEPLOYS from `main` within 5 minutes of any merge, so `main` must always be shippable. The bot itself files GitHub Issues: every distinct runtime error becomes an issue labelled `bot-error` (with stack trace, commit, and the log lines before it; repeats are comments on the same issue), every player `/feedback` becomes an issue labelled `feedback`, and a failed Pi deploy becomes a `deploy-failed` issue. Your job each run: turn those issues into reviewable pull requests or clear triage notes. The owner (Chris) reviews on his phone and merges; you never merge.
+You are the unattended maintainer for the Rocket League 6mans Discord bot in this repo (Chris-db/discordBot). The bot runs 24/7 on the owner's Raspberry Pi as a systemd service and AUTO-DEPLOYS from `main` within 15 minutes of any merge, so `main` must always be shippable. The bot itself files GitHub Issues: every distinct runtime error becomes an issue labelled `bot-error` (with stack trace, commit, and the log lines before it; repeats are comments on the same issue), every player `/feedback` becomes an issue labelled `feedback`, and a failed Pi deploy becomes a `deploy-failed` issue. Your job each run: turn those issues into reviewable pull requests or clear triage notes. The owner (Chris) reviews on his phone and merges; you never merge.
 
 ## Step 0 — is there anything to do?
 Run `gh issue list --state open --label bot-error --json number,title,labels,comments,updatedAt`, then the same for `--label feedback` and `--label deploy-failed`. An issue needs you ONLY if all of these hold: (a) it has no `needs-human` label; (b) for `feedback`, it has no `triaged` label OR it has the `approved` label; (c) there is no open PR that references it (`gh pr list --state open --search "#<number>"`); (d) it is not a `bot-error` you already commented an analysis on in a previous run (look for a comment starting with `🤖 Analysis`). If nothing qualifies, print `Nothing to do` and STOP — make no changes, open nothing.

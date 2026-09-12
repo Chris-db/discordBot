@@ -1,9 +1,9 @@
 [Unit]
-Description=Check origin/main for the 6mans bot every 5 minutes
+Description=Check origin/main for the 6mans bot every 15 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=15min
 Unit=6mans-deploy.service
 
 [Install]

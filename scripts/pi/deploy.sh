@@ -46,7 +46,7 @@ restart_bot() {
 
 $(fence "echo 'chris ALL=(root) NOPASSWD: /usr/bin/systemctl restart $SERVICE' | sudo tee /etc/sudoers.d/6mans-deploy >/dev/null && sudo chmod 440 /etc/sudoers.d/6mans-deploy")
 
-The next timer tick (within 5 minutes) will restart the bot. Until then it is running the previous build."
+The next timer tick (within 15 minutes) will restart the bot. Until then it is running the previous build."
     exit 1
   fi
   rm -f "$RESTART_MARKER"
