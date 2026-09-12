@@ -598,15 +598,21 @@ async function spinWheelOfFate(
 
   const attachment = new AttachmentBuilder(imageBuffer, { name: 'wheel_result.png' });
 
-  // The result image draws the outcome, which team won the 50/50, and every player's new
-  // MMR and delta -- so the message is the image and nothing else.
+  // The GIF collapses to a line and the result card is a new message underneath. Swapping
+  // the card in over the GIF re-mounted the image, and it restarted from frame one for the
+  // instant before the card loaded -- a wheel that landed, then twitched.
+  const teamLabel = wheelWinner === 'BLUE' ? '🔵 Blue' : '🟠 Orange';
   await targetMsg.edit({
-    content: '',
+    content: `🎡 Match #${match.match_number} — the wheel landed on ${teamLabel}.`,
     embeds: [],
-    files: [attachment],
+    files: [],
     attachments: [],
     components: [],
-  }).catch((err) => {
+  }).catch(() => null);
+
+  // The result image draws the outcome, which team won the 50/50, and every player's new
+  // MMR and delta -- so the message is the image and nothing else.
+  await channel.send({ files: [attachment] }).catch((err) => {
     logger.error(`[Gamble] Failed to post resolved wheel image for match id ${matchId}:`, err);
   });
 }

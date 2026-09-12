@@ -142,12 +142,15 @@ export const SPIN_GIF_SIZE = 360;
 /** Chromium plays GIF frames at 20 ms or slower; 30 ms leaves a margin and looks smooth. */
 const FRAME_DELAY_MS = 30;
 /**
- * How long the landed wheel holds. The GIF is written to play once, but a player that
- * loops regardless must not restart the spin before the result card has replaced it --
- * and the viewer's copy starts later than the bot's upload finishes, by however long the
- * download took. So the hold is long, and the caller times the swap from `landedAfterMs`.
+ * How long the landed wheel holds, and in how many frames. The GIF is written to play
+ * once, but a player that loops regardless must not restart the spin before the caller
+ * has collapsed the message -- and the viewer's copy starts later than the bot's upload
+ * finishes, by however long the download took. The hold is a run of 1×1 transparent
+ * frames that leave the landed frame in place, so it costs a few bytes a frame and never
+ * depends on a player honouring one very long frame delay.
  */
-const HOLD_LAST_MS = 8000;
+const HOLD_MS = 15_000;
+const HOLD_FRAME_MS = 250;
 /**
  * The most the wheel may turn between two frames: under half a slice. Eight identical
  * slices stepping more than that per frame read as a slower wheel, or one going backwards
@@ -221,20 +224,32 @@ export function generateWheelSpinGif(
   const gif = GIFEncoder();
   frames.forEach((rgba, i) => {
     const index = applyPalette(rgba, palette, 'rgb444');
-    const isLast = i === frames.length - 1;
     gif.writeFrame(index, size, size, {
       palette: i === 0 ? palette : undefined,
-      delay: isLast ? HOLD_LAST_MS : FRAME_DELAY_MS,
-      // Once: the wheel stays landed. Discord may loop anyway; see HOLD_LAST_MS.
+      delay: FRAME_DELAY_MS,
+      // Leave each frame in place for the next to draw over.
+      dispose: 1,
+      // Once: the wheel stays landed. Discord may loop anyway; see HOLD_MS.
       repeat: -1,
     });
   });
+  // The hold: one transparent pixel over the landed wheel, again and again.
+  const holdFrames = Math.ceil(HOLD_MS / HOLD_FRAME_MS);
+  const holdPixel = new Uint8Array([0]);
+  for (let i = 0; i < holdFrames; i++) {
+    gif.writeFrame(holdPixel, 1, 1, {
+      delay: HOLD_FRAME_MS,
+      transparent: true,
+      transparentIndex: 0,
+      dispose: 1,
+    });
+  }
   gif.finish();
 
   return {
     buffer: Buffer.from(gif.bytes()),
     landedAfterMs: (frameCount - 1) * FRAME_DELAY_MS,
-    durationMs: (frameCount - 1) * FRAME_DELAY_MS + HOLD_LAST_MS,
+    durationMs: (frameCount - 1) * FRAME_DELAY_MS + holdFrames * HOLD_FRAME_MS,
     landingAngle,
   };
 }

@@ -93,12 +93,22 @@ describe('generateWheelSpinGif', () => {
     // Logical screen size, little-endian, straight after the header.
     expect(spin.buffer.readUInt16LE(6)).toBe(SPIN_GIF_SIZE);
     expect(spin.buffer.readUInt16LE(8)).toBe(SPIN_GIF_SIZE);
-    // One graphic control extension (21 F9 04) per frame.
+    // One graphic control extension (21 F9 04) per frame: the spin's full frames, then
+    // the hold's 1×1 transparent ones (image descriptor 2C, x 0, y 0, w 1, h 1).
     let frames = 0;
-    for (let i = 0; i < spin.buffer.length - 2; i++) {
+    let holdFrames = 0;
+    for (let i = 0; i < spin.buffer.length - 9; i++) {
       if (spin.buffer[i] === 0x21 && spin.buffer[i + 1] === 0xf9 && spin.buffer[i + 2] === 0x04) frames++;
+      if (
+        spin.buffer[i] === 0x2c &&
+        spin.buffer.readUInt16LE(i + 1) === 0 &&
+        spin.buffer.readUInt16LE(i + 3) === 0 &&
+        spin.buffer.readUInt16LE(i + 5) === 1 &&
+        spin.buffer.readUInt16LE(i + 7) === 1
+      ) holdFrames++;
     }
-    expect(frames).toBe(spinFrameCount(spin.landingAngle));
+    expect(holdFrames).toBeGreaterThan(30);
+    expect(frames).toBe(spinFrameCount(spin.landingAngle) + holdFrames);
   });
 
   it('is written to play once, not loop', () => {
@@ -110,8 +120,8 @@ describe('generateWheelSpinGif', () => {
     expect(spin.landedAfterMs).toBeGreaterThan(1500);
     expect(spin.landedAfterMs).toBeLessThan(4000);
     // The landed hold is long enough that a looping player cannot restart the spin
-    // before the service, which waits landedAfterMs + 3 s, has swapped in the result.
-    expect(spin.durationMs - spin.landedAfterMs).toBeGreaterThanOrEqual(6000);
+    // before the service, which waits landedAfterMs + 3 s, has collapsed the message.
+    expect(spin.durationMs - spin.landedAfterMs).toBeGreaterThanOrEqual(10_000);
     expect(segmentTeam(segmentUnderPointer(spin.landingAngle))).toBe('BLUE');
   });
 
