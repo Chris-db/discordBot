@@ -202,7 +202,7 @@ export async function createMatchChannels(
 export async function createTeamVoiceChannels(
   client: Client,
   guildId: string,
-  match: Pick<Match, 'match_id' | 'match_number'>,
+  match: Pick<Match, 'match_id' | 'match_number' | 'team_size'>,
   blueTeamIds: string[],
   orangeTeamIds: string[],
   parentChannelId?: string
@@ -267,7 +267,7 @@ export async function createTeamVoiceChannels(
     name: `🔵 Team Blue [Match #${match.match_number}]`,
     type: ChannelType.GuildVoice,
     parent: categoryId,
-    userLimit: 3,
+    userLimit: match.team_size,
     permissionOverwrites: voiceOverrides,
   });
 
@@ -275,7 +275,7 @@ export async function createTeamVoiceChannels(
     name: `🟠 Team Orange [Match #${match.match_number}]`,
     type: ChannelType.GuildVoice,
     parent: categoryId,
-    userLimit: 3,
+    userLimit: match.team_size,
     permissionOverwrites: voiceOverrides,
   });
 

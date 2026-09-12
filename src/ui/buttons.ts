@@ -110,7 +110,7 @@ export function getTeamsVoteButtons(
   mode: 'random' | 'balanced' = 'random'
 ): ActionRowBuilder<ButtonBuilder> {
   // The re-roll stays in the voted mode, so the label has to match what the button does.
-  const rerollLabel = mode === 'balanced' ? 'Next Split' : 'Randomize';
+  const rerollLabel = mode === 'balanced' ? 'Re-roll' : 'Randomize';
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('teams_verify_yes')
