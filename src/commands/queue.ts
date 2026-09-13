@@ -12,7 +12,8 @@ import {
   fillQueueWithBots,
   forcePopQueue,
 } from '../services/queueService';
-import { resolveTeamSize, registerQueueChannel } from '../services/queuePanel';
+import { resolveTeamSize, registerQueueChannel, announceQueueOpened } from '../services/queuePanel';
+import { logger } from '../utils/logger';
 import {
   getQueue,
   saveQueue,
@@ -210,14 +211,22 @@ export const queueCommand = {
       }
 
       getOrCreatePlayer(guildId, queue.team_size, user.id, user.username);
+      const wasEmpty = queue.player_ids.length === 0;
       queue.player_ids.push(user.id);
       queue.player_join_times = queue.player_join_times || {};
       queue.player_join_times[user.id] = Date.now();
       saveQueue(queue);
 
+      const capacity = queue.team_size * 2;
+      // An admin seating the first player opens the queue just as a click would.
+      if (wasEmpty) {
+        await announceQueueOpened(interaction.client, channelId, guildId, user, 1, capacity).catch(err =>
+          logger.warn(`Queue-open ping failed in ${channelId}:`, err)
+        );
+      }
+
       await refreshQueuePanel(interaction.client, channelId);
 
-      const capacity = queue.team_size * 2;
       await interaction.reply({
         content: `✅ Added <@${user.id}> to the queue (${queue.player_ids.length}/${capacity}).`,
         flags: MessageFlags.Ephemeral,

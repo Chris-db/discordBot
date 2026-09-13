@@ -15,7 +15,7 @@ This bot solves the UI/UX friction and common complaints of legacy bots like **N
 
 If someone is hosting the bot for you, setup is three steps:
 
-1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles*, *Manage Messages*, *View Channels*, *Send Messages*, *Read Message History*, *Embed Links*, *Attach Files*, *Connect*, *Speak*, *Move Members* — or simply *Administrator*. It creates private match channels, and Discord only lets a bot grant permissions it holds itself, so a bot short of any of these fails at the first match with `Missing Permissions`.
+1. **Invite the bot** with the link you were given. It needs *Manage Channels*, *Manage Roles*, *Manage Messages*, *View Channels*, *Send Messages*, *Read Message History*, *Embed Links*, *Attach Files*, *Connect*, *Speak*, *Move Members*, *Mention @everyone, @here and All Roles* — or simply *Administrator*. It creates private match channels, and Discord only lets a bot grant permissions it holds itself, so a bot short of any of these fails at the first match with `Missing Permissions`.
 2. Run **`/setup`** in any channel. Pick how many rank divisions you want:
    - `One ladder` — everyone queues together. Right for most servers. It is called **6mans** everywhere (sidebar, panel, cards); pass `name:` to call it something else.
    - `Three` (C/B/A) or `All five` (C/B/A/X/S) — separate ladders, players are placed by an admin with `/division place`.
@@ -42,6 +42,7 @@ Bug or idea? Anyone can type **`/feedback <message>`** — it goes straight to t
        - `Manage Messages` (required for score reporting, button interaction cleanup, and match cancel overrides)
        - `Move Members` (required to auto-move players into voice channels)
        - `Send Messages`, `Embed Links`, `Read Message History`, `Connect`, `Speak`, `Use Application Commands`
+       - `Mention @everyone, @here and All Roles` (the first player into an empty queue pings that division's role; the roles `/setup` creates are not mentionable by members, so without this the ping posts but notifies nobody)
 4. Copy the generated OAuth2 invite URL and invite the bot to your Discord server!
 5. **In your Discord Server (`Server Settings -> Roles`)**, ensure the Bot's role has **Administrator** (or all permissions listed above) checked, and delete any existing `🎮 ACTIVE 6MANS MATCHES` category if it was created with restrictive permissions.
 

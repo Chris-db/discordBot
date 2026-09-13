@@ -4,6 +4,7 @@ import {
   Message,
   User,
   AttachmentBuilder,
+  PermissionFlagsBits,
 } from 'discord.js';
 import {
   getQueue,
@@ -43,6 +44,14 @@ import { sendCaptainsDraftCard } from './votingService';
 
 const panelMoveTimers = new Map<string, NodeJS.Timeout>();
 const activePanelRefreshes = new Map<string, Promise<void>>();
+
+/**
+ * When each queue channel last pinged its division. A join-leave-join inside a minute is
+ * one person changing their mind, not three new lobbies, and a role ping is the loudest
+ * thing the bot does.
+ */
+const lastQueueOpenPings = new Map<string, number>();
+export const QUEUE_OPEN_PING_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
  * A join or leave, decided. `settled` is the follow-up work -- panel refresh, and on a
@@ -233,6 +242,54 @@ export function handleChannelMessage(client: Client, message: Message): void {
 }
 
 /**
+ * Tells a division that someone is waiting in its queue.
+ *
+ * One player in an otherwise empty queue is where most lobbies die -- nobody else knows
+ * they are there. So the first join pings the channel's division role: Rank C on a ranked
+ * server, the single ladder's role on a one-ladder server (the same row, so the same
+ * lookup). A channel with no registered division or no role is left quiet.
+ *
+ * Only the role may mention. The player is written as `<@id>` so Discord shows their
+ * server nickname, but `allowedMentions` keeps that, and anything else in the message,
+ * from notifying anyone. The roles /setup creates are not mentionable by members, which
+ * means the bot needs its own "Mention @everyone, @here and All Roles" permission; without
+ * it Discord posts the text and notifies nobody, and the warning below is the only clue.
+ *
+ * Runs before the panel refresh on purpose: the refresh sees the ping is now the newest
+ * message and re-posts the panel beneath it, so the panel stays at the bottom.
+ */
+export async function announceQueueOpened(
+  client: Client,
+  channelId: string,
+  guildId: string,
+  user: User,
+  count: number,
+  capacity: number
+): Promise<void> {
+  const roleId = getDivisionByChannel(guildId, channelId)?.role_id;
+  if (!roleId) return;
+
+  const now = Date.now();
+  if (now - (lastQueueOpenPings.get(channelId) ?? 0) < QUEUE_OPEN_PING_COOLDOWN_MS) return;
+  lastQueueOpenPings.set(channelId, now);
+
+  const channel = (await client.channels.fetch(channelId).catch(() => null)) as TextChannel | null;
+  if (!channel) return;
+
+  const botPerms = client.user ? channel.permissionsFor?.(client.user) : null;
+  if (botPerms && !botPerms.has(PermissionFlagsBits.MentionEveryone)) {
+    logger.warn(
+      `Queue ping in ${channelId}: bot lacks "Mention @everyone, @here and All Roles", so role ${roleId} will not be notified.`
+    );
+  }
+
+  await channel.send({
+    content: `<@&${roleId}> <@${user.id}> started a queue — ${count}/${capacity}`,
+    allowedMentions: { roles: [roleId] },
+  });
+}
+
+/**
  * Handles a player clicking "Join Queue" using an atomic SQLite transaction to prevent race conditions.
  */
 export async function handleJoinQueue(
@@ -315,6 +372,9 @@ export async function handleJoinQueue(
     if (queue.player_ids.includes(user.id)) {
       return { success: false, message: 'You are already in the queue!' };
     }
+    // Decided here, inside the transaction: read after the write, two first-joiners in
+    // the same instant would both look like the second.
+    const wasEmpty = queue.player_ids.length === 0;
     queue.player_ids.push(user.id);
     queue.player_join_times = queue.player_join_times || {};
     queue.player_join_times[user.id] = Date.now();
@@ -324,6 +384,7 @@ export async function handleJoinQueue(
       message: 'Joined the queue! 🚀',
       newCount: queue.player_ids.length,
       capacity: queue.team_size * 2,
+      wasEmpty,
     };
   })();
 
@@ -340,6 +401,12 @@ export async function handleJoinQueue(
   prefetchAvatar(client, user.id);
 
   const settled = (async () => {
+    if (txResult.wasEmpty) {
+      await announceQueueOpened(client, channelId, guildId, user, txResult.newCount!, txResult.capacity!).catch(
+        err => logger.warn(`Queue-open ping failed in ${channelId}:`, err)
+      );
+    }
+
     await refreshQueuePanel(client, channelId);
 
     // Queue full -- start the AFK voice ready check.
