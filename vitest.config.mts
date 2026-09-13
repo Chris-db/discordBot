@@ -15,5 +15,10 @@ export default defineConfig({
     // vitest's 5 s default there; a CPU-heavy neighbour (the wheel GIF render) was enough
     // to push one over, and a flaky gate rolls back a good deploy. Windows is nowhere near.
     testTimeout: 20_000,
+    // beforeEach in the migration tests recreates the legacy schema and seeds it, which is
+    // the same slow-Pi cost as the test body above -- vitest tracks hook time separately
+    // from test time, so raising testTimeout alone left this at its 10 s default and it
+    // tripped the deploy gate too (issue #2).
+    hookTimeout: 20_000,
   },
 });
