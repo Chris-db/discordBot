@@ -54,6 +54,36 @@ const lastQueueOpenPings = new Map<string, number>();
 export const QUEUE_OPEN_PING_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
+ * The ping still standing in each channel, so it can come down once it stops being true.
+ * In memory only: a restart orphans at most one line per channel, which is not worth a
+ * column.
+ */
+const openQueuePings = new Map<string, Message>();
+
+/** "Someone started a queue" holds while it is waiting with at least one seat taken and one free. */
+function queueStillOpen(queue: ActiveQueue): boolean {
+  return (
+    queue.state === 'WAITING' &&
+    queue.player_ids.length > 0 &&
+    queue.player_ids.length < queue.team_size * 2
+  );
+}
+
+/**
+ * Takes the channel's ping down if the queue has since emptied, filled, or popped.
+ *
+ * Called from the panel refresh, which every roster change already goes through -- a
+ * leave, /queue remove or clear, the idle sweep, the sixth join, the reset after a pop --
+ * so no path has to remember to do it.
+ */
+async function retireQueueOpenPing(queue: ActiveQueue): Promise<void> {
+  const ping = openQueuePings.get(queue.channel_id);
+  if (!ping || queueStillOpen(queue)) return;
+  openQueuePings.delete(queue.channel_id);
+  await ping.delete().catch(() => null);
+}
+
+/**
  * A join or leave, decided. `settled` is the follow-up work -- panel refresh, and on a
  * full queue the ready check -- already running; callers answer the click, then await it.
  */
@@ -169,6 +199,8 @@ async function performQueuePanelRefresh(client: Client, channelId: string): Prom
     const channel = (await client.channels.fetch(channelId)) as TextChannel;
     if (!channel) return;
 
+    await retireQueueOpenPing(queue);
+
     const players = getPlayersByIds(queue.guild_id, queue.team_size, queue.player_ids);
 
     // The panel image already draws the size, the count badge, every queued player with
@@ -256,7 +288,8 @@ export function handleChannelMessage(client: Client, message: Message): void {
  * it Discord posts the text and notifies nobody, and the warning below is the only clue.
  *
  * Runs before the panel refresh on purpose: the refresh sees the ping is now the newest
- * message and re-posts the panel beneath it, so the panel stays at the bottom.
+ * message and re-posts the panel beneath it, so the panel stays at the bottom. The ping
+ * comes down again once the queue empties, fills or pops (see retireQueueOpenPing).
  */
 export async function announceQueueOpened(
   client: Client,
@@ -283,10 +316,14 @@ export async function announceQueueOpened(
     );
   }
 
-  await channel.send({
+  // A ping the last refresh failed to delete would otherwise stand twice.
+  await openQueuePings.get(channelId)?.delete().catch(() => null);
+
+  const ping = await channel.send({
     content: `<@&${roleId}> <@${user.id}> started a queue — ${count}/${capacity}`,
     allowedMentions: { roles: [roleId] },
   });
+  openQueuePings.set(channelId, ping);
 }
 
 /**

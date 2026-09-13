@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import db from '../src/database/db';
-import { updateDivision, getQueue } from '../src/database/queries';
+import { updateDivision, getQueue, saveQueue } from '../src/database/queries';
 import { seedGuildDefaults } from '../src/database/migrations';
 import {
   handleJoinQueue,
   handleLeaveQueue,
+  refreshQueuePanel,
   getOrInitQueue,
   QUEUE_OPEN_PING_COOLDOWN_MS,
 } from '../src/services/queuePanel';
@@ -16,17 +17,20 @@ const ROLE = 'role_rank_c';
 const user = (id: string) => ({ id, username: id }) as any;
 
 /**
- * A client with one channel that records everything sent to it. The panel refresh goes
- * through the same `send`, so the recording also shows which message landed first.
+ * A client with one channel that records everything sent to it and every message deleted
+ * again. The panel refresh goes through the same `send`, so the recording also shows
+ * which message landed first.
  */
 function clientRecordingSends() {
   const sends: any[] = [];
+  const deleted: string[] = [];
   const channel = {
     id: CHAN,
     lastMessageId: null as string | null,
     send: async (payload: any) => {
       sends.push(payload);
-      return { id: `msg_${sends.length}` };
+      const id = `msg_${sends.length}`;
+      return { id, delete: async () => { deleted.push(id); } };
     },
     messages: { edit: async () => null, delete: async () => null },
   };
@@ -35,7 +39,7 @@ function clientRecordingSends() {
     users: { fetch: async () => null },
     user: { id: 'bot_1' },
   } as any;
-  return { client, sends };
+  return { client, sends, deleted };
 }
 
 const pings = (sends: any[]) => sends.filter(s => typeof s.content === 'string' && s.content.includes('<@&'));
@@ -136,6 +140,60 @@ describe('first join pings the division role', () => {
     await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
 
     expect(pings(sends)).toHaveLength(2);
+  });
+
+  describe('the ping comes down when it stops being true', () => {
+    it('stays while someone is still waiting', async () => {
+      const { client, deleted } = clientRecordingSends();
+
+      await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
+      await (await handleJoinQueue(client, CHAN, G, user('second'))).settled;
+
+      expect(deleted).toEqual([]);
+    });
+
+    it('is deleted when the last player leaves', async () => {
+      const { client, deleted } = clientRecordingSends();
+
+      await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
+      await (await handleLeaveQueue(client, CHAN, user('first'))).settled;
+
+      expect(deleted).toEqual(['msg_1']);
+    });
+
+    it('is deleted when the queue fills', async () => {
+      const { client, deleted } = clientRecordingSends();
+
+      await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
+      const queue = getQueue(CHAN)!;
+      queue.player_ids = ['first', 'p2', 'p3', 'p4', 'p5', 'p6'];
+      saveQueue(queue);
+      await refreshQueuePanel(client, CHAN);
+
+      expect(deleted).toEqual(['msg_1']);
+    });
+
+    it('is deleted when the queue pops', async () => {
+      const { client, deleted } = clientRecordingSends();
+
+      await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
+      const queue = getQueue(CHAN)!;
+      queue.state = 'READY_CHECK';
+      saveQueue(queue);
+      await refreshQueuePanel(client, CHAN);
+
+      expect(deleted).toEqual(['msg_1']);
+    });
+
+    it('is only deleted once', async () => {
+      const { client, deleted } = clientRecordingSends();
+
+      await (await handleJoinQueue(client, CHAN, G, user('first'))).settled;
+      await (await handleLeaveQueue(client, CHAN, user('first'))).settled;
+      await refreshQueuePanel(client, CHAN);
+
+      expect(deleted).toEqual(['msg_1']);
+    });
   });
 
   it('a failed ping does not stop the join or the panel', async () => {
