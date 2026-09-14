@@ -149,7 +149,8 @@ export async function generatePlayerProfileImage(client: Client, data: ProfileCa
 
   const streakVal = player.streak > 0 ? `+${player.streak}` : player.streak < 0 ? `${player.streak}` : '0';
   const streakColor = player.streak > 0 ? P.positive : player.streak < 0 ? P.negative : P.textMuted;
-  drawStatCard('STREAK', streakVal, player.streak > 0 ? 'WIN STREAK 🔥' : 'LOSS STREAK ❄️', 407, streakColor);
+  const streakSub = player.streak > 0 ? 'WIN STREAK 🔥' : player.streak < 0 ? 'LOSS STREAK ❄️' : 'NO STREAK';
+  drawStatCard('STREAK', streakVal, streakSub, 407, streakColor);
 
   // Replaced average match time, which measured lobby-to-report across every server the
   // player is on and meant nothing to anyone.

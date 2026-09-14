@@ -111,10 +111,14 @@ export function getBestTeammate(guildId: string, teamSize: number, discordId: st
 export function loadProfileCard(guildId: string, teamSize: number, player: Player): ProfileCardData {
   const rankData = getPlayerRank(guildId, teamSize, player.discord_id);
   const ladder = getDivisions(guildId, teamSize);
-  const leader = getLeaderboard(guildId, teamSize, player.division, 1)[0];
+  const rank = rankData ? rankData.rank : 0;
+  // Standing and leaderboard break ties differently (two new players on 1000 are both
+  // "#1", and the leaderboard picks one). Whoever the standing calls #1 is on top, so the
+  // bar never names someone else while the header says #1.
+  const leader = rank === 1 ? player : getLeaderboard(guildId, teamSize, player.division, 1)[0];
   return {
     player,
-    rank: rankData ? rankData.rank : 0,
+    rank,
     totalPlayers: getTotalPlayersCount(guildId, teamSize, player.division),
     bar: mmrBarFor(player, ladder, leader),
     bestTeammate: getBestTeammate(guildId, teamSize, player.discord_id),

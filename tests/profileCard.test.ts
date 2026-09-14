@@ -129,6 +129,20 @@ describe('getBestTeammate', () => {
 });
 
 describe('loadProfileCard', () => {
+  it('a player tied for #1 is on top, whichever one the leaderboard lists first', () => {
+    // Vanilla's on day one: two players on 1000 with no games. Standing said #1 while the
+    // bar named the other player as the ladder top.
+    updateDivision(G, 3, 'C', { queue_channel_id: 'c' });
+    player('jeff', 'C', 1000);
+    const me = player('me', 'C', 1000);
+
+    const card = loadProfileCard(G, 3, me);
+
+    expect(card.rank).toBe(1);
+    expect(card.bar.label).toBe("You're on top 👑");
+    expect(card.bar.progress).toBe(1);
+  });
+
   it('assembles rank, standing, bar and teammate for one ladder', () => {
     updateDivision(G, 3, 'C', { queue_channel_id: 'c' });
     const me = player('me', 'C', 1050);
