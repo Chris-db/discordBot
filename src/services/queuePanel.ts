@@ -281,11 +281,11 @@ export function handleChannelMessage(client: Client, message: Message): void {
  * server, the single ladder's role on a one-ladder server (the same row, so the same
  * lookup). A channel with no registered division or no role is left quiet.
  *
- * Only the role may mention. The player is written as `<@id>` so Discord shows their
- * server nickname, but `allowedMentions` keeps that, and anything else in the message,
- * from notifying anyone. The roles /setup creates are not mentionable by members, which
- * means the bot needs its own "Mention @everyone, @here and All Roles" permission; without
- * it Discord posts the text and notifies nobody, and the warning below is the only clue.
+ * The message is the mention and nothing else -- the panel directly beneath it already
+ * shows who is waiting and how many seats are left. The roles /setup creates are not
+ * mentionable by members, which means the bot needs its own "Mention @everyone, @here and
+ * All Roles" permission; without it Discord posts the text and notifies nobody, and the
+ * warning below is the only clue.
  *
  * Runs before the panel refresh on purpose: the refresh sees the ping is now the newest
  * message and re-posts the panel beneath it, so the panel stays at the bottom. The ping
@@ -294,10 +294,7 @@ export function handleChannelMessage(client: Client, message: Message): void {
 export async function announceQueueOpened(
   client: Client,
   channelId: string,
-  guildId: string,
-  user: User,
-  count: number,
-  capacity: number
+  guildId: string
 ): Promise<void> {
   const roleId = getDivisionByChannel(guildId, channelId)?.role_id;
   if (!roleId) return;
@@ -320,7 +317,7 @@ export async function announceQueueOpened(
   await openQueuePings.get(channelId)?.delete().catch(() => null);
 
   const ping = await channel.send({
-    content: `<@&${roleId}> <@${user.id}> started a queue — ${count}/${capacity}`,
+    content: `<@&${roleId}>`,
     allowedMentions: { roles: [roleId] },
   });
   openQueuePings.set(channelId, ping);
@@ -439,8 +436,8 @@ export async function handleJoinQueue(
 
   const settled = (async () => {
     if (txResult.wasEmpty) {
-      await announceQueueOpened(client, channelId, guildId, user, txResult.newCount!, txResult.capacity!).catch(
-        err => logger.warn(`Queue-open ping failed in ${channelId}:`, err)
+      await announceQueueOpened(client, channelId, guildId).catch(err =>
+        logger.warn(`Queue-open ping failed in ${channelId}:`, err)
       );
     }
 

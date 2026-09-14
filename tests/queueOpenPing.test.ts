@@ -63,7 +63,7 @@ describe('first join pings the division role', () => {
     getOrInitQueue(CHAN, G);
   });
 
-  it('pings the role, names the player, and lets only the role mention', async () => {
+  it('is the bare role mention, and only the role may mention', async () => {
     const { client, sends } = clientRecordingSends();
 
     const res = await handleJoinQueue(client, CHAN, G, user('first'));
@@ -72,9 +72,7 @@ describe('first join pings the division role', () => {
     expect(res.success).toBe(true);
     const [ping] = pings(sends);
     expect(ping).toBeDefined();
-    expect(ping.content).toContain(`<@&${ROLE}>`);
-    expect(ping.content).toContain('<@first>');
-    expect(ping.content).toContain('1/6');
+    expect(ping.content).toBe(`<@&${ROLE}>`);
     expect(ping.allowedMentions).toEqual({ roles: [ROLE] });
   });
 

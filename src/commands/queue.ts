@@ -220,7 +220,7 @@ export const queueCommand = {
       const capacity = queue.team_size * 2;
       // An admin seating the first player opens the queue just as a click would.
       if (wasEmpty) {
-        await announceQueueOpened(interaction.client, channelId, guildId, user, 1, capacity).catch(err =>
+        await announceQueueOpened(interaction.client, channelId, guildId).catch(err =>
           logger.warn(`Queue-open ping failed in ${channelId}:`, err)
         );
       }
