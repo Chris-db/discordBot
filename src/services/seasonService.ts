@@ -2,10 +2,15 @@ import db from '../database/db';
 import {
   Player,
   Season,
+  Match,
+  ActiveQueue,
   GuildDivision,
   getDivisions,
   getActiveSeason,
   createSeason,
+  getActiveMatches,
+  getAllQueues,
+  saveQueue,
 } from '../database/queries';
 import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { logger } from '../utils/logger';
@@ -28,6 +33,29 @@ export interface SeasonEndResult {
   endedSeason: Season;
   newSeason: Season;
   results: PlayerSeasonResult[];
+  /** Queue channels that had players waiting and were emptied by the reset. */
+  clearedQueues: string[];
+}
+
+/** The lobbies standing in the way of a season reset. Both empty means it can go ahead. */
+export interface SeasonEndBlockers {
+  matches: Match[];
+  queues: ActiveQueue[];
+}
+
+/**
+ * What would be caught mid-game by a reset right now.
+ *
+ * A reset rewrites every MMR. A match that reports afterwards applies its delta to the
+ * fresh number, and a lobby mid ready-check or mid-draft pops into a match rated on the
+ * wrong season. The reset used to run regardless; now it refuses until the admin has
+ * settled or cancelled these.
+ */
+export function seasonEndBlockers(guildId: string): SeasonEndBlockers {
+  return {
+    matches: getActiveMatches(guildId),
+    queues: getAllQueues().filter(q => q.guild_id === guildId && q.state !== 'WAITING'),
+  };
 }
 
 /**
@@ -68,11 +96,28 @@ export function resolveDivisionChange(
  *
  * The whole thing runs in a single transaction: a half-reset ranks table is unrecoverable
  * without going to the nightly backup.
+ *
+ * "Stopping the queues" needs no flag. better-sqlite3 is synchronous and Node runs one
+ * thing at a time, so no join can land between the blocker check and the last write. What
+ * the reset does do is refuse while any lobby is past WAITING, and empty the WAITING ones:
+ * a player who queued as Rank C and got promoted would otherwise still be sitting in the
+ * Rank C queue.
  */
 export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndResult {
   const active = getActiveSeason(guildId);
   if (!active) {
     throw new Error(`No active season for guild ${guildId}.`);
+  }
+
+  const blockers = seasonEndBlockers(guildId);
+  if (blockers.matches.length > 0 || blockers.queues.length > 0) {
+    const what = [
+      blockers.matches.length > 0 ? `${blockers.matches.length} active match(es)` : null,
+      blockers.queues.length > 0 ? `${blockers.queues.length} queue(s) mid-pop` : null,
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    throw new Error(`Cannot end the season with ${what} in progress.`);
   }
 
   const laddersBySize = new Map<number, GuildDivision[]>();
@@ -145,6 +190,17 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
       }
     }
 
+    // Whoever was waiting queued under the old season's placements. Send them back to
+    // the panel; the command re-posts it and tells the channel why.
+    const clearedQueues: string[] = [];
+    for (const queue of getAllQueues()) {
+      if (queue.guild_id !== guildId || queue.player_ids.length === 0) continue;
+      queue.player_ids = [];
+      queue.player_join_times = {};
+      saveQueue(queue);
+      clearedQueues.push(queue.channel_id);
+    }
+
     db.prepare(
       `UPDATE seasons SET is_active = 0, ended_at = ? WHERE season_id = ?`
     ).run(new Date().toISOString(), active.season_id);
@@ -155,10 +211,11 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
     logger.info(
       `Guild ${guildId}: ended "${active.name}" (${results.length} ladder placements), started "${nextName}". ` +
         `${results.filter(r => r.outcome === 'PROMOTED').length} promoted, ` +
-        `${results.filter(r => r.outcome === 'RELEGATED').length} relegated.`
+        `${results.filter(r => r.outcome === 'RELEGATED').length} relegated, ` +
+        `${clearedQueues.length} queue(s) cleared.`
     );
 
-    return { endedSeason: active, newSeason, results };
+    return { endedSeason: active, newSeason, results, clearedQueues };
   })();
 }
 

@@ -89,6 +89,9 @@ npm start
 | `/queue force-pop [mode]` | Admin / Mod | Instantly fills to 6 players and pops a match in a specific mode (`balanced`, `captains`, or `random`) |
 | `/match report <id> <winner>` | Admin / Mod | Manually force-reports a match winner (`blue` or `orange`) |
 | `/match cancel <id>` | Admin / Mod | Manually cancels an active match and removes temporary channels |
+| `/season info` | Everyone | Shows the current season, how long it has run, and players per division |
+| `/season history` | Everyone | Past seasons and their division champions |
+| `/season end confirm:<name>` | Admin | Manual season reset: refuses while any match or lobby is live, then snapshots standings, promotes/relegates, resets every MMR to the division default (C=1000 … S=1900), empties waiting queues, swaps division roles, and posts the summary to the feed. Never runs on its own. |
 | `/match cleanup [id]` | Admin / Mod | Cleans up temporary match text and voice channels |
 | `/match list` | Everyone | Lists all currently active matches |
 | `/stats [user]` | Everyone | Shows ELO rating, rank tier, wins, losses, win rate, and streak |

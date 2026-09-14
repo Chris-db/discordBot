@@ -10,9 +10,13 @@ import {
   getLeaderboard,
   getPlayerRank,
   getOrCreatePlayer,
+  createMatch,
+  getQueue,
+  saveQueue,
 } from '../src/database/queries';
 import { seedGuildDefaults } from '../src/database/migrations';
-import { endSeason, resolveDivisionChange, nextSeasonNameAfter } from '../src/services/seasonService';
+import { endSeason, seasonEndBlockers, resolveDivisionChange, nextSeasonNameAfter } from '../src/services/seasonService';
+import { getOrInitQueue } from '../src/services/queuePanel';
 
 const G = 'guild_season_test';
 
@@ -43,7 +47,7 @@ function seedPlayer(discordId: string, division: string, mmr: number, wins = 5, 
 describe('season resets', () => {
   beforeEach(() => {
     // season_snapshots references seasons, so it has to go first.
-    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config; DELETE FROM matches; DELETE FROM active_queues;');
     seedGuildDefaults(db, G);
   });
 
@@ -166,6 +170,46 @@ describe('season resets', () => {
       db.exec(`DELETE FROM seasons WHERE guild_id = '${G}'`);
       expect(() => endSeason(G)).toThrow(/No active season/);
     });
+
+    it('refuses while a match is in progress and leaves MMR alone', () => {
+      seedPlayer('p1', 'B', 1500);
+      createMatch({ guild_id: G, channel_id: 'q', team_size: 3, blue_team: ['p1'], orange_team: [] });
+
+      const blockers = seasonEndBlockers(G);
+      expect(blockers.matches).toHaveLength(1);
+      expect(() => endSeason(G)).toThrow(/1 active match/);
+      expect(getPlayer(G, 3, 'p1')!.mmr).toBe(1500);
+      expect(getActiveSeason(G)!.name).toBe('Season 1');
+    });
+
+    it('refuses while a queue is mid-pop', () => {
+      const queue = getOrInitQueue('season_q_popping', G);
+      queue.state = 'READY_CHECK';
+      saveQueue(queue);
+
+      expect(seasonEndBlockers(G).queues.map(q => q.channel_id)).toEqual(['season_q_popping']);
+      expect(() => endSeason(G)).toThrow(/1 queue\(s\) mid-pop/);
+    });
+
+    it('empties every waiting queue in the guild and says which', () => {
+      seedPlayer('waiting', 'C', 1000);
+      const queue = getOrInitQueue('season_q_waiting', G);
+      queue.player_ids = ['waiting'];
+      queue.player_join_times = { waiting: Date.now() };
+      saveQueue(queue);
+      getOrInitQueue('season_q_empty', G);
+      const elsewhere = getOrInitQueue('season_q_other_guild', 'other_guild');
+      elsewhere.player_ids = ['someone'];
+      saveQueue(elsewhere);
+
+      const result = endSeason(G);
+
+      expect(result.clearedQueues).toEqual(['season_q_waiting']);
+      expect(getQueue('season_q_waiting')!.player_ids).toEqual([]);
+      expect(getQueue('season_q_waiting')!.player_join_times).toEqual({});
+      expect(getQueue('season_q_waiting')!.state).toBe('WAITING');
+      expect(getQueue('season_q_other_guild')!.player_ids).toEqual(['someone']);
+    });
   });
 
   describe('nextSeasonNameAfter', () => {
@@ -183,7 +227,7 @@ describe('season resets', () => {
 describe('guild-scoped players and divisions', () => {
   beforeEach(() => {
     // season_snapshots references seasons, so it has to go first.
-    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config;');
+    db.exec('DELETE FROM season_snapshots; DELETE FROM player_ladders; DELETE FROM players; DELETE FROM seasons; DELETE FROM guild_divisions; DELETE FROM guild_config; DELETE FROM matches; DELETE FROM active_queues;');
     seedGuildDefaults(db, G);
     seedGuildDefaults(db, 'guild_b');
   });

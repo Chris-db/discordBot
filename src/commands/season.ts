@@ -4,6 +4,7 @@ import {
   PermissionFlagsBits,
   EmbedBuilder,
   MessageFlags,
+  TextChannel,
 } from 'discord.js';
 import {
   getActiveSeason,
@@ -13,7 +14,10 @@ import {
   getDivisions,
 } from '../database/queries';
 import db from '../database/db';
-import { endSeason } from '../services/seasonService';
+import { endSeason, seasonEndBlockers } from '../services/seasonService';
+import { syncDivisionRoles } from '../services/divisionRoles';
+import { refreshQueuePanel } from '../services/queuePanel';
+import { findFeedChannel } from '../services/channelService';
 import { getDivisionTier } from '../services/mmrService';
 import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
 import { formatTeamSize } from '../ui/teamSize';
@@ -154,6 +158,23 @@ export const seasonCommand = {
         return;
       }
 
+      // A reset under a live match rates that match on the new season's numbers. Checked
+      // before the confirmation so the admin is not asked to type the name twice.
+      const blockers = seasonEndBlockers(guildId);
+      if (blockers.matches.length > 0 || blockers.queues.length > 0) {
+        const matchLines = blockers.matches.map(m =>
+          m.text_channel_id ? `• Match #${m.match_number} — <#${m.text_channel_id}>` : `• Match #${m.match_number}`
+        );
+        const queueLines = blockers.queues.map(q => `• <#${q.channel_id}> is mid-pop (${q.state.toLowerCase().replace('_', ' ')})`);
+        await interaction.reply({
+          content:
+            `❌ Cannot end **${season.name}** while games are in progress. Let them finish, or ` +
+            `\`/match cancel\` them, then try again:\n${[...matchLines, ...queueLines].join('\n')}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
       // Ending a season rewrites every player's MMR and cannot be undone from inside the
       // bot -- the only way back is the nightly backup. Make the admin type the name.
       const confirm = interaction.options.getString('confirm', true);
@@ -180,15 +201,39 @@ export const seasonCommand = {
         return;
       }
 
+      // Everyone who was waiting has been taken out of their queue. Say so in each channel
+      // before the panel is re-posted, so the panel lands underneath the explanation.
+      for (const channelId of result.clearedQueues) {
+        const channel = (await interaction.client.channels.fetch(channelId).catch(() => null)) as TextChannel | null;
+        await channel
+          ?.send({
+            content: `🏁 **${result.endedSeason.name}** has ended and the queue was cleared for the reset. Join again for **${result.newSeason.name}**!`,
+            allowedMentions: { parse: [] },
+          })
+          .catch(() => null);
+        await refreshQueuePanel(interaction.client, channelId);
+      }
+
+      const roles = await syncDivisionRoles(interaction.client, guildId, result.results);
+
       const promoted = result.results.filter(r => r.outcome === 'PROMOTED');
       const relegated = result.results.filter(r => r.outcome === 'RELEGATED');
+
+      const summary = [
+        `**${result.results.length}** ladder placements reset • **${result.newSeason.name}** is now live.`,
+        result.clearedQueues.length > 0
+          ? `${result.clearedQueues.length} waiting queue(s) cleared — players need to re-join.`
+          : null,
+        roles.moved > 0 ? `${roles.moved} player(s) moved to their new division role.` : null,
+        roles.skipped > 0 ? `⚠️ ${roles.skipped} role change(s) could not be applied (no role set, or member left).` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
 
       const embed = new EmbedBuilder()
         .setColor(0xffd700)
         .setTitle(`🏁 ${result.endedSeason.name} has ended`)
-        .setDescription(
-          `**${result.results.length}** ladder placements reset • **${result.newSeason.name}** is now live.`
-        )
+        .setDescription(summary)
         .setTimestamp();
 
       const championLines = SUPPORTED_TEAM_SIZES.flatMap(size =>
@@ -233,6 +278,17 @@ export const seasonCommand = {
       }
 
       await interaction.editReply({ embeds: [embed] });
+
+      // The admin ran this wherever they happened to be; the server hears about it in
+      // the feed, unless that is where they ran it.
+      if (interaction.guild) {
+        const feed = await findFeedChannel(interaction.guild);
+        if (feed && feed.id !== interaction.channelId) {
+          await feed.send({ embeds: [embed] }).catch(err =>
+            logger.warn(`Could not post the season summary to the feed for guild ${guildId}:`, err)
+          );
+        }
+      }
       return;
     }
   },
