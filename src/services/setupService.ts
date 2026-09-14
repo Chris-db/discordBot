@@ -67,6 +67,29 @@ export interface SetupOptions {
 
 export const DEFAULT_LADDER_NAME = '6mans';
 
+/**
+ * The preset a server is already on, read from which divisions have a queue channel
+ * registered -- this size first, then any size, since a server set up as three ladders at
+ * 3v3 wants three at 2v2 too. Undefined for a server nothing has been set up on yet.
+ *
+ * This is what a re-run without `divisions` should assume. It used to assume `one`, and
+ * `one` renames division C to the ladder name, so an admin re-running `/setup roles:true`
+ * on a three-ladder server to add the roles got Rank C turned into "6mans" everywhere.
+ */
+export function inferPreset(guildId: string, teamSize: number): DivisionPreset | undefined {
+  const registeredOn = (size: number) =>
+    new Set(getDivisions(guildId, size).filter(d => d.queue_channel_id).map(d => d.division));
+  const sizes = [teamSize, ...SUPPORTED_TEAM_SIZES.filter(s => s !== teamSize)];
+  for (const size of sizes) {
+    const registered = registeredOn(size);
+    if (registered.size === 0) continue;
+    if (PRESET_DIVISIONS.all.some(d => !PRESET_DIVISIONS.three.includes(d) && registered.has(d))) return 'all';
+    if (PRESET_DIVISIONS.three.some(d => !PRESET_DIVISIONS.one.includes(d) && registered.has(d))) return 'three';
+    return 'one';
+  }
+  return undefined;
+}
+
 /** What the bot needs in a queue channel: see it, post the panel (image + buttons), keep it re-posted. */
 const BOT_CHANNEL_PERMISSIONS = [
   PermissionFlagsBits.ViewChannel,

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import db from '../src/database/db';
 import { getDivisions, getQueue, updateDivision } from '../src/database/queries';
-import { runSetup, missingBotPermissions, queueChannelName, categoryName, isCategoryFor, PRESET_DIVISIONS } from '../src/services/setupService';
+import { runSetup, missingBotPermissions, inferPreset, queueChannelName, categoryName, isCategoryFor, PRESET_DIVISIONS } from '../src/services/setupService';
 import { withGuildTheme } from '../src/services/themeService';
 import { getDivisionTier } from '../src/services/mmrService';
 import { clearDivisionNamesCache, invalidateDivisionNames } from '../src/services/divisionNames';
@@ -342,6 +342,44 @@ describe('missingBotPermissions', () => {
     expect(missingBotPermissions(fakeGuild({ perms: [PermissionFlagsBits.ViewChannel] }).guild, false)).toEqual(['Manage Channels', 'Send Messages', 'Attach Files']);
     expect(missingBotPermissions(fakeGuild({ perms: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }).guild, true)).toEqual(['Manage Roles']);
     expect(missingBotPermissions(fakeGuild({ admin: true, perms: [] }).guild, true)).toEqual([]);
+  });
+});
+
+describe('inferPreset: a re-run without `divisions` keeps the layout the server has', () => {
+  it('is undefined on a server nothing has been set up on', async () => {
+    const { ensureGuildDefaults } = await import('../src/services/guildSetup');
+    ensureGuildDefaults(G);
+    expect(inferPreset(G, 3)).toBeUndefined();
+  });
+
+  it('reads one / three / all from which divisions have a queue channel', async () => {
+    const { guild, client } = fakeGuild();
+    await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
+    expect(inferPreset(G, 3)).toBe('one');
+
+    await runSetup(client, guild, { teamSize: 3, preset: 'three', roles: false, feed: false });
+    expect(inferPreset(G, 3)).toBe('three');
+
+    await runSetup(client, guild, { teamSize: 3, preset: 'all', roles: false, feed: false });
+    expect(inferPreset(G, 3)).toBe('all');
+  });
+
+  it('falls back to another size, so a three-ladder 3v3 server sets up 2v2 as three', async () => {
+    const { guild, client } = fakeGuild();
+    await runSetup(client, guild, { teamSize: 3, preset: 'three', roles: false, feed: false });
+    expect(inferPreset(G, 2)).toBe('three');
+  });
+
+  it('so adding roles to a three-ladder server no longer turns Rank C into 6mans', async () => {
+    // Chris's test server: /setup divisions:three, then /setup roles:true with nothing else.
+    const { guild, client } = fakeGuild();
+    await runSetup(client, guild, { teamSize: 3, preset: 'three', roles: false, feed: false });
+
+    const preset = inferPreset(G, 3) ?? 'one';
+    await runSetup(client, guild, { teamSize: 3, preset, roles: true, feed: false });
+
+    expect(getDivisions(G, 3).find(d => d.division === 'C')!.display_name).toBe('Rank C');
+    expect(getDivisions(G, 3).find(d => d.division === 'C')!.role_id).toBeTruthy();
   });
 });
 

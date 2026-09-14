@@ -5,7 +5,10 @@ import {
   EmbedBuilder,
   MessageFlags,
 } from 'discord.js';
-import { runSetup, missingBotPermissions, DivisionPreset, DEFAULT_LADDER_NAME } from '../services/setupService';
+import { runSetup, missingBotPermissions, inferPreset, DivisionPreset, DEFAULT_LADDER_NAME } from '../services/setupService';
+
+/** How the result names the layout it used, so a defaulted or inferred preset is never a surprise. */
+const PRESET_LABELS: Record<DivisionPreset, string> = { one: 'one ladder', three: 'three ladders', all: 'five ladders' };
 import { TEAM_SIZE_CHOICES, formatTeamSize } from '../ui/teamSize';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import { RL_COLORS } from '../ui/embeds';
@@ -23,7 +26,7 @@ export const setupCommand = {
     .addStringOption(opt =>
       opt
         .setName('divisions')
-        .setDescription('How many rank divisions to set up')
+        .setDescription('How many rank divisions to set up (a re-run keeps what the server already has)')
         .setRequired(false)
         .addChoices(
           { name: 'One ladder — everyone plays together (best for small servers)', value: 'one' },
@@ -70,9 +73,12 @@ export const setupCommand = {
       });
     }
 
+    const teamSize = interaction.options.getInteger('size') ?? DEFAULT_TEAM_SIZE;
+    // A re-run keeps the layout the server already has; only a fresh server defaults to one.
+    const chosen = interaction.options.getString('divisions') as DivisionPreset | null;
     const opts = {
-      preset: (interaction.options.getString('divisions') ?? 'one') as DivisionPreset,
-      teamSize: interaction.options.getInteger('size') ?? DEFAULT_TEAM_SIZE,
+      preset: chosen ?? inferPreset(interaction.guild.id, teamSize) ?? 'one',
+      teamSize,
       roles: interaction.options.getBoolean('roles') ?? false,
       feed: interaction.options.getBoolean('feed') ?? true,
       name: interaction.options.getString('name') ?? undefined,
@@ -95,7 +101,7 @@ export const setupCommand = {
       const report = await runSetup(interaction.client, interaction.guild, opts);
 
       const embed = new EmbedBuilder()
-        .setTitle(`✅ ${formatTeamSize(opts.teamSize)} setup done — ${report.created} created, ${report.reused} already there`)
+        .setTitle(`✅ ${formatTeamSize(opts.teamSize)} setup done — ${PRESET_LABELS[opts.preset]} — ${report.created} created, ${report.reused} already there`)
         .setColor(RL_COLORS.ORANGE)
         .setDescription(report.lines.join('\n') || '*Nothing to do.*')
         .addFields({
