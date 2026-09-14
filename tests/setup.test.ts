@@ -254,6 +254,30 @@ describe('one-ladder naming', () => {
     expect(again.lines.filter(l => l.includes('renamed'))).toHaveLength(0);
     expect(created).toEqual([]);
   });
+
+  it('switching from one ladder to three gives C its rank name back, on every size', async () => {
+    // Chris's test server: set up as "6mans", channels deleted by hand, then three ladders
+    // chosen. Division C still read "6mans", so it got a category called 6mans next to
+    // Rank B and Rank A, and queue channels called 6mans-3v3 and 6mans-2v2.
+    const { guild, client, channels } = fakeGuild();
+    await runSetup(client, guild, { teamSize: 3, preset: 'one', roles: false, feed: false });
+    for (const size of [2, 3, 4]) expect(getDivisions(G, size).find(d => d.division === 'C')!.display_name).toBe('6mans');
+
+    await runSetup(client, guild, { teamSize: 3, preset: 'three', roles: false, feed: false });
+    for (const size of [2, 3, 4]) expect(getDivisions(G, size).find(d => d.division === 'C')!.display_name).toBe('Rank C');
+
+    const categories = [...channels.values()].filter(c => c.type === ChannelType.GuildCategory).map(c => c.name);
+    expect(categories).toEqual(expect.arrayContaining(['━━━━━  Rank C  ━━━━━', '━━━━━  Rank B  ━━━━━', '━━━━━  Rank A  ━━━━━']));
+    expect(categories).not.toContain('━━━━━  6mans  ━━━━━');
+    const queueChannel = channels.get(getDivisions(G, 3).find(d => d.division === 'C')!.queue_channel_id!)!;
+    expect(queueChannel.name).toBe('rank-c-3v3');
+    expect(withGuildTheme(G, () => getDivisionTier('C').name)).toBe('Rank C');
+
+    // The 2v2 run afterwards names its channel from the restored name too.
+    await runSetup(client, guild, { teamSize: 2, preset: 'three', roles: false, feed: false });
+    const twos = channels.get(getDivisions(G, 2).find(d => d.division === 'C')!.queue_channel_id!)!;
+    expect(twos.name).toBe('rank-c-2v2');
+  });
 });
 
 describe('category naming and order', () => {

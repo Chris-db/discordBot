@@ -9,7 +9,7 @@ import {
   Role,
 } from 'discord.js';
 import { getDivisions, updateDivision, getQueue, GuildDivision } from '../database/queries';
-import { SUPPORTED_TEAM_SIZES } from '../database/migrations';
+import { SUPPORTED_TEAM_SIZES, DIVISIONS } from '../database/migrations';
 import { invalidateDivisionNames } from './divisionNames';
 import { ensureGuildDefaults } from './guildSetup';
 import { registerQueueChannel } from './queuePanel';
@@ -128,18 +128,25 @@ export async function runSetup(client: Client, guild: Guild, opts: SetupOptions)
 
   // Renaming happens before anything is looked up, and the old name is kept so that a
   // category or channel made under it can be found and renamed rather than duplicated.
+  //
+  // Division C carries the ladder name on a one-ladder server and its rank name on any
+  // other, and switching preset has to switch the name with it: a server that was set up
+  // as "6mans" and then chose three ladders used to get categories called 6mans, Rank B,
+  // Rank A. Both directions are the same rename, on every size, because the sizes all
+  // share the one name.
   const previousNames = new Map<string, string>();
-  if (opts.preset === 'one') {
-    const name = (opts.name ?? DEFAULT_LADDER_NAME).trim();
-    for (const size of SUPPORTED_TEAM_SIZES) {
-      const row = getDivisions(guild.id, size).find(d => d.division === 'C');
-      if (row && row.display_name !== name) {
-        if (size === opts.teamSize) previousNames.set('C', row.display_name);
-        updateDivision(guild.id, size, 'C', { display_name: name });
-      }
+  const nameForC =
+    opts.preset === 'one'
+      ? (opts.name ?? DEFAULT_LADDER_NAME).trim()
+      : DIVISIONS.find(d => d.division === 'C')!.displayName;
+  for (const size of SUPPORTED_TEAM_SIZES) {
+    const row = getDivisions(guild.id, size).find(d => d.division === 'C');
+    if (row && row.display_name !== nameForC) {
+      if (size === opts.teamSize) previousNames.set('C', row.display_name);
+      updateDivision(guild.id, size, 'C', { display_name: nameForC });
     }
-    invalidateDivisionNames(guild.id);
   }
+  invalidateDivisionNames(guild.id);
 
   const wanted = PRESET_DIVISIONS[opts.preset];
   const divisions = getDivisions(guild.id, opts.teamSize).filter(d => wanted.includes(d.division));
