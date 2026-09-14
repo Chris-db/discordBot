@@ -1,6 +1,6 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { Client } from 'discord.js';
-import { Player, getAverageMatchDuration } from '../database/queries';
+import { ProfileCardData } from './profileCard';
 import { getDivisionTier } from './mmrService';
 import { logger } from '../utils/logger';
 import { getCachedAvatarImage } from '../utils/avatarCache';
@@ -8,15 +8,12 @@ import { FONT_STACK } from '../utils/fonts';
 import { P, overlay } from '../ui/palette';
 
 /**
- * Generates a custom Player Profile Banner graphic with Rank Tier badge,
- * MMR progress bar toward the next rank, and Stats boxes.
+ * Generates a custom Player Profile Banner graphic with Rank Tier badge, MMR progress bar
+ * and four stat boxes. Everything it shows arrives in `data` (see loadProfileCard), so the
+ * renderer itself touches no database and can be drawn from fixtures.
  */
-export async function generatePlayerProfileImage(
-  client: Client,
-  player: Player,
-  rank: number,
-  totalPlayers: number
-): Promise<Buffer> {
+export async function generatePlayerProfileImage(client: Client, data: ProfileCardData): Promise<Buffer> {
+  const { player, rank, totalPlayers } = data;
   const width = 800;
   const height = 380;
   const canvas = createCanvas(width, height);
@@ -92,35 +89,10 @@ export async function generatePlayerProfileImage(
   ctx.fillStyle = P.textMuted;
   ctx.fillText(`SERVER STANDING: ${rankText}`, 410, 104);
 
-  // 3. MMR Progress Bar toward next rank
-  // Rank C (<1200), Rank B (1200-1400), Rank A (1400-1600), Rank X (1600-1800), Rank S (1800+)
-  let currentBase = 0;
-  let nextTarget = 1200;
-  let nextRankName = 'Rank B';
-
-  if (player.mmr >= 1800) {
-    currentBase = 1800;
-    nextTarget = 2000;
-    nextRankName = 'Max SSL';
-  } else if (player.mmr >= 1600) {
-    currentBase = 1600;
-    nextTarget = 1800;
-    nextRankName = 'Rank S';
-  } else if (player.mmr >= 1400) {
-    currentBase = 1400;
-    nextTarget = 1600;
-    nextRankName = 'Rank X';
-  } else if (player.mmr >= 1200) {
-    currentBase = 1200;
-    nextTarget = 1400;
-    nextRankName = 'Rank A';
-  } else {
-    currentBase = 0;
-    nextTarget = 1200;
-    nextRankName = 'Rank B';
-  }
-
-  const progress = Math.max(0, Math.min(1, (player.mmr - currentBase) / (nextTarget - currentBase)));
+  // 3. MMR progress bar -- target and caption decided in profileCard.ts from the guild's
+  // own divisions, so a one-ladder server is never told about a Rank B it does not have.
+  const { bar } = data;
+  const progress = bar.progress;
 
   const barX = 45;
   const barY = 165;
@@ -130,9 +102,9 @@ export async function generatePlayerProfileImage(
   ctx.fillStyle = P.textFaint;
   ctx.font = `bold 15px ${FONT_STACK}`;
   ctx.textAlign = 'left';
-  ctx.fillText(`MMR PROGRESS (${player.mmr} / ${nextTarget})`, barX, barY - 10);
+  ctx.fillText(`MMR ${player.mmr} / ${bar.to}`, barX, barY - 10);
   ctx.textAlign = 'right';
-  ctx.fillText(`Next: ${nextRankName}`, barX + barWidth, barY - 10);
+  ctx.fillText(bar.label, barX + barWidth, barY - 10);
 
   // Bar Background
   ctx.fillStyle = overlay(0.08);
@@ -144,7 +116,7 @@ export async function generatePlayerProfileImage(
     ctx.fillRect(barX, barY, Math.round(barWidth * progress), barHeight);
   }
 
-  // 4. Stats Grids (4 cards at bottom: Win Rate, Record, Streak, Avg Match Time)
+  // 4. Stats Grids (4 cards at bottom: Win Rate, Games, Streak, Best Teammate)
   const totalGames = player.wins + player.losses;
   const winRate = totalGames > 0 ? ((player.wins / totalGames) * 100).toFixed(1) : '0.0';
 
@@ -173,15 +145,32 @@ export async function generatePlayerProfileImage(
   };
 
   drawStatCard('WIN RATE %', `${winRate}%`, `${totalGames} MATCHES`, 45, P.sky);
-  drawStatCard('W - L RECORD', `${player.wins}W - ${player.losses}L`, `PLAYED: ${totalGames}`, 226, P.text);
+  drawStatCard('GAMES', `${totalGames}`, `${player.wins}W - ${player.losses}L`, 226, P.text);
 
   const streakVal = player.streak > 0 ? `+${player.streak}` : player.streak < 0 ? `${player.streak}` : '0';
   const streakColor = player.streak > 0 ? P.positive : player.streak < 0 ? P.negative : P.textMuted;
   drawStatCard('STREAK', streakVal, player.streak > 0 ? 'WIN STREAK 🔥' : 'LOSS STREAK ❄️', 407, streakColor);
 
-  const avgSecs = getAverageMatchDuration(player.discord_id);
-  const avgTimeStr = avgSecs > 0 ? `${Math.floor(avgSecs / 60)}m ${avgSecs % 60}s` : 'N/A';
-  drawStatCard('AVG TIME', avgTimeStr, 'PER MATCH ⏱️', 588, P.amber, 167);
+  // Replaced average match time, which measured lobby-to-report across every server the
+  // player is on and meant nothing to anyone.
+  const mate = data.bestTeammate;
+  drawStatCard(
+    'BEST TEAMMATE',
+    mate ? fitText(ctx, mate.username, 150, `bold 26px ${FONT_STACK}`) : '—',
+    mate ? `${mate.wins} WIN${mate.wins === 1 ? '' : 'S'} TOGETHER 🤝` : 'NO WINS YET',
+    588,
+    P.amber,
+    167
+  );
 
   return canvas.toBuffer('image/png');
+}
+
+/** Trims a string with an ellipsis until it fits `maxWidth` in the given font. */
+function fitText(ctx: import('@napi-rs/canvas').SKRSContext2D, text: string, maxWidth: number, font: string): string {
+  ctx.font = font;
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let out = text;
+  while (out.length > 1 && ctx.measureText(`${out}…`).width > maxWidth) out = out.slice(0, -1);
+  return `${out}…`;
 }

@@ -144,6 +144,13 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
 
     for (const [teamSize, ladder] of laddersBySize) {
       const defaultMmrFor = new Map(ladder.map(d => [d.division, d.default_mmr]));
+      // Promotion only runs between divisions the server has actually set up -- the ones
+      // with a queue channel, the same test /setup and the cards use. Every guild has all
+      // five rows seeded, so a one-ladder server used to promote its best players into a
+      // Rank B that had no channel, where the join gate then locked them out of the only
+      // queue. Standings and the reset itself still cover every division.
+      const setUp = ladder.filter(d => d.queue_channel_id);
+      const promotable = setUp.length > 0 ? setUp : ladder;
 
       for (const division of ladder) {
         // Rank within (size, division), which is the ladder players actually competed on.
@@ -158,7 +165,7 @@ export function endSeason(guildId: string, nextSeasonName?: string): SeasonEndRe
 
         standings.forEach((player, i) => {
           const finalRank = i + 1;
-          const { toDivision, outcome } = resolveDivisionChange(player, ladder);
+          const { toDivision, outcome } = resolveDivisionChange(player, promotable);
           const newMmr = defaultMmrFor.get(toDivision) ?? player.mmr;
 
           snapshot.run(

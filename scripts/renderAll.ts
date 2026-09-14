@@ -23,6 +23,7 @@ import { generateMatchResultImage } from '../src/services/resultImage';
 import { generateGambleResultImage } from '../src/services/gambleImage';
 import { generateLeaderboardImage } from '../src/services/leaderboardImage';
 import { generatePlayerProfileImage } from '../src/services/profileImage';
+import { ProfileCardData, MmrBar, BestTeammate } from '../src/services/profileCard';
 import { generateMatchHistoryImage } from '../src/services/historyImage';
 
 registerFonts();
@@ -75,7 +76,25 @@ async function main(): Promise<void> {
   await write('gamble_doubled', generateGambleResultImage(client, 42, 'BLUE', 'DOUBLED', result(blue, 28), result(orange, -28)));
   await write('gamble_inverted', generateGambleResultImage(client, 42, 'ORANGE', 'INVERTED', result(blue, -14), result(orange, 14)));
   await write('leaderboard', generateLeaderboardImage(client, [...roster, p('sudoroso', 1201, 'B'), p('Cometteninho', 1190, 'B')], 1, 3));
-  await write('profile', generatePlayerProfileImage(client, roster[0], 1, 8));
+  // The profile card's bar and fourth stat come from profileCard.ts; these are the four
+  // shapes it can take, drawn from fixtures rather than the database.
+  const profile = (player: Player, rank: number, bar: MmrBar, bestTeammate?: BestTeammate): ProfileCardData =>
+    ({ player, rank, totalPlayers: 8, bar, bestTeammate });
+  await write('profile_ranked', generatePlayerProfileImage(client, profile(
+    roster[0], 1, { from: 1300, to: 1400, progress: 0.27, label: 'Promotes to Rank A at 1400' },
+    { discord_id: 'id_wilxnt', username: 'wilxnt', wins: 7, games: 9 }
+  )));
+  await write('profile_one_ladder', generatePlayerProfileImage(client, profile(
+    p('zephyerrl', 1016, 'C', { wins: 1, losses: 1, streak: -1 }), 2, { from: 1000, to: 1180, progress: 0.09, label: 'Ladder top: 1180 (ravi_rl1)' },
+    { discord_id: 'id_a8chi', username: 'a8chi', wins: 1, games: 2 }
+  )));
+  await write('profile_on_top', generatePlayerProfileImage(client, profile(
+    p('ravi_rl1', 1180, 'C', { wins: 9, losses: 3, streak: 4 }), 1, { from: 1000, to: 1180, progress: 1, label: "You're on top 👑" },
+    { discord_id: 'id_x', username: 'averyveryverylongdiscordname', wins: 5, games: 6 }
+  )));
+  await write('profile_new', generatePlayerProfileImage(client, profile(
+    p('josho', 1000, 'C', { wins: 0, losses: 0, streak: 0 }), 0, { from: 1000, to: 1200, progress: 0, label: 'Promotes to Rank B at 1200' }
+  )));
   await write('history', generateMatchHistoryImage(client, [match(42, 'BLUE'), match(41, 'ORANGE'), match(40, 'BLUE', { winner: 'NONE', state: 'CANCELLED' })], undefined));
   console.log(`rendered ${fs.readdirSync(out).length} cards to ${out}`);
 }

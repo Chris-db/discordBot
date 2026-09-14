@@ -5,6 +5,52 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { RL_COLORS } from '../ui/embeds';
+import { getDivisions, GuildDivision } from '../database/queries';
+import { getDivisionTier } from '../services/mmrService';
+import { SUPPORTED_TEAM_SIZES, DEFAULT_TEAM_SIZE } from '../database/migrations';
+
+/**
+ * The rank section, from the server's own divisions rather than the five defaults.
+ *
+ * Only divisions with a queue channel are listed -- a one-ladder server sees one line under
+ * its ladder's name, not Rank C..S with numbers it will never use -- and the numbers are
+ * the server's, which an admin may have retuned. Highest first, like the sidebar. Read
+ * from 3v3 first, then whichever size is set up.
+ */
+export function divisionsHelp(guildId: string | null): { name: string; value: string } {
+  const sizes = [DEFAULT_TEAM_SIZE, ...SUPPORTED_TEAM_SIZES.filter(s => s !== DEFAULT_TEAM_SIZE)];
+  const ladder: GuildDivision[] = guildId
+    ? (sizes.map(size => getDivisions(guildId, size).filter(d => d.queue_channel_id)).find(l => l.length > 0) ?? [])
+    : [];
+
+  if (ladder.length <= 1) {
+    const name = ladder[0]?.display_name ?? '6mans';
+    const start = ladder[0]?.default_mmr ?? 1000;
+    return {
+      name: '🏆 THE LADDER',
+      value: `One ladder, **${name}** — everyone starts at ${start} MMR and plays together. A season reset puts everyone back to ${start}.`,
+    };
+  }
+
+  const lines = ladder
+    .slice()
+    .sort((a, b) => b.sort_order - a.sort_order)
+    .map(d => {
+      const parts = [`starts at ${d.default_mmr}`];
+      if (d.promote_at !== null) parts.push(`promotes at ${d.promote_at}`);
+      if (d.relegate_below !== null) parts.push(`relegates below ${d.relegate_below}`);
+      return `${getDivisionTier(d.division).emoji} **${d.display_name}** — ${parts.join(', ')}`;
+    });
+  return {
+    name: '🏆 RANK DIVISIONS',
+    value:
+      'You are **placed** into a division by an admin, and you stay there for the ' +
+      'whole season — MMR moves your position inside your division, not between them. ' +
+      'At a season reset you promote or relegate based on where you finished.\n\n' +
+      lines.join('\n') +
+      '\n\n*Admins can retune these with `/division configure`.*',
+  };
+}
 
 export const helpCommand = {
   data: new SlashCommandBuilder()
@@ -83,20 +129,7 @@ export const helpCommand = {
             '• **How do I report scores?** Click the win buttons inside `#match-id`. When confirmed, ELO updates automatically and rooms clean up after 30 seconds.',
           inline: false,
         },
-        {
-          name: '🏆 RANK DIVISIONS',
-          value:
-            'You are **placed** into a division by an admin, and you stay there for the ' +
-            'whole season — MMR moves your position inside your division, not between them. ' +
-            'At a season reset you promote or relegate based on where you finished.\n\n' +
-            '👑 **Rank S** — starts at 1900 MMR\n' +
-            '⚔️ **Rank X** — starts at 1700, relegates below 1600\n' +
-            '🟣 **Rank A** — starts at 1500, promotes at 1600, relegates below 1400\n' +
-            '🔵 **Rank B** — starts at 1300, promotes at 1400, relegates below 1200\n' +
-            '🟢 **Rank C** — starts at 1000, promotes at 1200\n\n' +
-            '*Defaults — admins can retune them per division with `/division configure`.*',
-          inline: false,
-        }
+        { ...divisionsHelp(interaction.guildId), inline: false }
       )
       .setFooter({ text: 'Rocket League 6mans • Designed to replace legacy queue bots' })
       .setTimestamp();

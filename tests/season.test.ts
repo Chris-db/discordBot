@@ -10,6 +10,7 @@ import {
   getLeaderboard,
   getPlayerRank,
   getOrCreatePlayer,
+  updateDivision,
   createMatch,
   getQueue,
   saveQueue,
@@ -164,6 +165,19 @@ describe('season resets', () => {
       expect(outsider.mmr).toBe(1390);
       expect(outsider.wins).toBe(12);
       expect(getActiveSeason('other_guild')!.name).toBe('Season 1');
+    });
+
+    it('only promotes into divisions the server has set up', () => {
+      // A one-ladder server: only C has a queue channel. Its best player used to be
+      // promoted into a Rank B with no channel and locked out of the only queue.
+      updateDivision(G, 3, 'C', { queue_channel_id: 'only' });
+      seedPlayer('star', 'C', 1250); // above C's 1200 promotion line
+
+      const { results } = endSeason(G);
+
+      expect(getPlayer(G, 3, 'star')!.division).toBe('C');
+      expect(getPlayer(G, 3, 'star')!.mmr).toBe(1000);
+      expect(results.find(r => r.discord_id === 'star')!.outcome).toBe('STAYED');
     });
 
     it('refuses when there is no active season', () => {

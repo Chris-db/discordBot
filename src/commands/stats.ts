@@ -9,7 +9,6 @@ import {
   getOrCreatePlayer,
   getLeaderboard,
   getTotalPlayersCount,
-  getPlayerRank,
   setPlayerMmr,
   getMatchHistory,
 } from '../database/queries';
@@ -17,6 +16,7 @@ import { addTeamSizeOption, getTeamSizeOption, formatTeamSize } from '../ui/team
 import { getLeaderboardButtons } from '../ui/buttons';
 import { generateLeaderboardImage } from '../services/leaderboardImage';
 import { generatePlayerProfileImage } from '../services/profileImage';
+import { loadProfileCard } from '../services/profileCard';
 import { generateMatchHistoryImage } from '../services/historyImage';
 import { autoDeleteReply } from '../utils/autoDelete';
 
@@ -40,17 +40,7 @@ export const statsCommand = {
     const teamSize = getTeamSizeOption(interaction);
     const user = interaction.options.getUser('user') || interaction.user;
     const player = getOrCreatePlayer(guildId, teamSize, user.id, user.username);
-    // Rank is a position within the player's own division on this ladder.
-    const rankData = getPlayerRank(guildId, teamSize, player.discord_id);
-    const rank = rankData ? rankData.rank : 0;
-    const totalPlayers = getTotalPlayersCount(guildId, teamSize, player.division);
-
-    const imageBuffer = await generatePlayerProfileImage(
-      interaction.client,
-      player,
-      rank,
-      totalPlayers
-    );
+    const imageBuffer = await generatePlayerProfileImage(interaction.client, loadProfileCard(guildId, teamSize, player));
     const fileName = `profile_${Date.now()}.png`;
     const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
 

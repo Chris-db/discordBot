@@ -31,13 +31,13 @@ import {
   getOrCreatePlayer,
   getLeaderboard,
   getTotalPlayersCount,
-  getPlayerRank,
   getMatch,
   getMatchHistory,
 } from '../database/queries';
 import { getLeaderboardButtons } from '../ui/buttons';
 import { generateLeaderboardImage } from '../services/leaderboardImage';
 import { generatePlayerProfileImage } from '../services/profileImage';
+import { loadProfileCard } from '../services/profileCard';
 import { generateMatchHistoryImage } from '../services/historyImage';
 import { autoDeleteReply } from '../utils/autoDelete';
 import { logger } from '../utils/logger';
@@ -92,17 +92,7 @@ export async function handleButtonInteraction(interaction: ButtonInteraction): P
       const guildId = interaction.guildId!;
       const teamSize = channelTeamSize(guildId, channelId);
       const player = getOrCreatePlayer(guildId, teamSize, user.id, user.username);
-      // Rank is a position within the player's own division, not the whole server.
-      const rankData = getPlayerRank(guildId, teamSize, player.discord_id);
-      const rank = rankData ? rankData.rank : 0;
-      const totalPlayers = getTotalPlayersCount(guildId, teamSize, player.division);
-
-      const imageBuffer = await generatePlayerProfileImage(
-        interaction.client,
-        player,
-        rank,
-        totalPlayers
-      );
+      const imageBuffer = await generatePlayerProfileImage(interaction.client, loadProfileCard(guildId, teamSize, player));
       const fileName = `profile_${Date.now()}.png`;
       const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
 
