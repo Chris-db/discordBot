@@ -19,7 +19,7 @@ cloud routine "6mans bot monitor" reads open issues ──▶ fix PRs / triage c
 - Pi side: `scripts/pi/deploy.sh` + `6mans-deploy.timer` (install: copy both unit files to
   `/etc/systemd/system/`, `daemon-reload`, `enable --now 6mans-deploy.timer`).
 - CI: `.github/workflows/test.yml` — typecheck + tests on every PR.
-- Cloud routine: created at https://claude.ai/code/routines with the prompt below.
+- Cloud routine: **DISABLED 2026-09-15** (Chris triages issues himself; nobody was using /feedback). It still exists at https://claude.ai/code/routines/trig_01DPDjQcTuUVHgVUTyRq1sxW and can be re-enabled there in one click; the prompt below is what it runs.
   Model `claude-sonnet-5`, cron `0 */6 * * *` (UTC), repo `Chris-db/discordBot`.
 
 Labels the routine uses: `needs-human` (it gave up, Chris must look), `triaged` (feedback
