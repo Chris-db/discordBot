@@ -17,7 +17,8 @@ import {
 import { sweepOrphanedMatchChannels, sweepStrayQueuePanels } from './services/queueTimeout';
 import { startBackupSchedule } from './services/backupService';
 import { startHeartbeat } from './services/heartbeat';
-import { installErrorReporter } from './services/errorReporter';
+import { installErrorReporter, flushErrorReports } from './services/errorReporter';
+import { loginWithRetry } from './services/login';
 import { withGuildTheme } from './services/themeService';
 import { ensureGuildDefaults } from './services/guildSetup';
 // Registers the bundled fonts before anything can draw a card. The image modules import
@@ -168,7 +169,9 @@ process.on('uncaughtException', error => {
   } catch {
     // The database may be what threw; nothing more to do for it.
   }
-  process.exit(1);
+  // The error that kills the process is the one most worth an issue; give it a moment
+  // to reach GitHub before exiting.
+  void flushErrorReports().finally(() => process.exit(1));
 });
 
 // Graceful shutdown handling for SIGINT and SIGTERM
@@ -189,9 +192,10 @@ function gracefulShutdown(signal: string) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-client.login(config.discordToken).catch(err => {
-  logger.error('Failed to log in to Discord:', err);
-  process.exit(1);
+// Discord being down is not a reason to exit: wait and retry (see services/login.ts).
+// Only a rejected token or intents is fatal -- and even then the report goes out first.
+void loginWithRetry({ login: () => client.login(config.discordToken) }).then(outcome => {
+  if (outcome === 'fatal') void flushErrorReports().finally(() => process.exit(1));
 });
 
 export default client;

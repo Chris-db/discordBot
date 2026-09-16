@@ -212,6 +212,11 @@ export class ErrorReporter {
     return this.chain;
   }
 
+  /** Resolves once every report queued so far has been handled (or failed). */
+  idle(): Promise<void> {
+    return this.chain;
+  }
+
   /** Read-only view for tests and diagnostics. */
   entries(): ReportState {
     return JSON.parse(JSON.stringify(this.state));
@@ -328,14 +333,36 @@ export class ErrorReporter {
  * Wires the reporter to the logger. Does nothing without GITHUB_REPO + GITHUB_TOKEN.
  * Returns a function that unhooks it.
  */
+let active: ErrorReporter | undefined;
+
 export function installErrorReporter(options: ErrorReporterOptions = {}): () => void {
   const client = options.client ?? (config.githubRepo && config.githubToken ? createGitHubClient(config.githubRepo, config.githubToken) : undefined);
   if (!client) return () => {};
 
   const reporter = new ErrorReporter({ ...options, client });
+  active = reporter;
   // The reporter's own failures go through logger.warn, never logger.error, so this cannot
   // feed back into itself.
   const unhook = logger.onError((msg, args) => void reporter.report(msg, args));
   logger.info(`Error reporter: distinct errors will be opened as issues on ${config.githubRepo ?? 'GitHub'}.`);
-  return unhook;
+  return () => {
+    unhook();
+    if (active === reporter) active = undefined;
+  };
+}
+
+/**
+ * Waits for queued reports to reach GitHub, up to `timeoutMs`. Call before `process.exit`:
+ * the errors that end the process are exactly the ones worth an issue, and the Discord
+ * outage of 2026-09-15 went unreported because the exit came first.
+ */
+export function flushErrorReports(timeoutMs = 5_000): Promise<void> {
+  if (!active) return Promise.resolve();
+  return Promise.race([
+    active.idle(),
+    new Promise<void>(resolve => {
+      const t = setTimeout(resolve, timeoutMs);
+      t.unref?.();
+    }),
+  ]);
 }

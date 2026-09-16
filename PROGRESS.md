@@ -441,6 +441,21 @@ card. Two fixes fell out of setting this up: the gamble consensus now counts hum
 (test bots never click, so a padded lobby could never spin -- the same fix every other
 vote already had), and the consensus card's "All N must agree" counts the same way.
 
+## Discord outage, 15 Sep 2026 16:41–16:55 SAST
+
+A deploy restarted the bot in the middle of a Discord gateway outage (503 / 500 on login).
+`client.login` failed → `process.exit(1)` → systemd restart → 361 processes in 14 minutes
+until Discord recovered. Pi and network were fine. No issue was opened, because the exit
+came before the report reached GitHub. Fixed:
+- `src/services/login.ts` — `loginWithRetry`: backoff 5s→60s forever for passing failures;
+  only `TokenInvalid` / `DisallowedIntents` / 401 are fatal. Warns per attempt, one
+  `logger.error` after 5 min so the outage gets an issue.
+- `flushErrorReports()` (errorReporter.ts) is awaited (max 5s) before every `process.exit`
+  on the error paths, so the error that kills the process is the one that gets reported.
+
+Diagnose a similar one with:
+`journalctl -u 6mans --since "YYYY-MM-DD HH:MM" --until "…" | grep -E "restart counter|Logged in|Failed to log in"`.
+
 ## Next
 
 0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
