@@ -8,7 +8,7 @@
 # live database), gzips it, and commits it to a private GitHub repo. A snapshot is a few
 # hundred KB; a year of them is well under GitHub's limits.
 #
-# Runs from cron on the Pi as the bot's user (see PROGRESS.md "Off-site backups"):
+# Runs from cron on the Pi as the bot's user (see docs/OPERATIONS.md "Backups"):
 #   30 3 * * * /home/chris/discordBot/scripts/offsite-backup.sh >> /home/chris/6mans-backups.log 2>&1
 #
 # Restore: scripts/restore-backup.sh <file.sqlite.gz>

@@ -61,7 +61,7 @@ Open `.env` and fill in:
 # Install dependencies
 npm install
 
-# Register slash commands with Discord
+# Register slash commands with Discord (optional: the bot also registers on boot)
 npm run register
 
 # Run the bot in development mode
@@ -76,35 +76,55 @@ npm start
 
 ## 🎮 Slash Commands
 
-| Command | Permission | Description |
+Commands marked *Admin* are hidden from members by Discord's default permissions; server
+admins can change who sees them under *Server Settings → Integrations*. Most commands that
+read a ladder take an optional `size:` (2v2 / 3v3 / 4v4), defaulting to 3v3.
+
+| Command | Who | What it does |
 | :--- | :--- | :--- |
 | `/setup` | Admin | Creates rank categories, queue channels, panels and (optionally) roles in one go; safe to re-run |
-| `/feedback <message>` | Everyone | Sends a bug report or suggestion to the maintainer (filed as a GitHub issue) |
-| `/queue panel` | Admin / Mod | Spawns the persistent interactive queue panel with Join/Leave buttons |
-| `/queue status` | Everyone | Displays current queue status and players waiting |
-| `/queue add <user>` | Admin / Mod | Manually adds a player to the current queue |
-| `/queue remove <user>` | Admin / Mod | Manually removes a player from the current queue |
-| `/queue clear` | Admin / Mod | Clears the active queue |
-| `/queue fill-bots` | Admin / Mod | Fills remaining empty slots with simulated AI bot players (`test_bot_1..5`) for solo testing |
-| `/queue force-pop [mode]` | Admin / Mod | Instantly fills to 6 players and pops a match in a specific mode (`balanced`, `captains`, or `random`) |
-| `/match report <id> <winner>` | Admin / Mod | Manually force-reports a match winner (`blue` or `orange`) |
-| `/match cancel <id>` | Admin / Mod | Manually cancels an active match and removes temporary channels |
-| `/season info` | Everyone | Shows the current season, how long it has run, and players per division |
-| `/season history` | Everyone | Past seasons and their division champions |
-| `/season end confirm:<name>` | Admin | Manual season reset: refuses while any match or lobby is live, then snapshots standings, promotes/relegates, resets every MMR to the division default (C=1000 … S=1900), empties waiting queues, swaps division roles, and posts the summary to the feed. Never runs on its own. |
-| `/match cleanup [id]` | Admin / Mod | Cleans up temporary match text and voice channels |
-| `/match list` | Everyone | Lists all currently active matches |
-| `/stats [user]` | Everyone | Shows ELO rating, rank tier, wins, losses, win rate, and streak |
-| `/leaderboard` | Everyone | Displays the server's top players by ELO |
-| `/set-mmr <user> <mmr>` | Admin / Mod | Sets a player's ELO rating |
-| `/help` | Everyone | Shows instructions, rules, and features |
+| `/queue panel [size] [division]` | Admin | Registers this channel as a queue and posts the panel |
+| `/queue status` | Everyone | Current queue and who is waiting |
+| `/queue add` / `remove <user>` | Admin | Adds or removes a player by hand (an admin add bypasses the division gate) |
+| `/queue clear` | Admin | Empties the queue |
+| `/queue fill-bots` | Admin | Pads the queue with test bots, for solo testing |
+| `/queue force-pop [mode]` | Admin | Fills and pops now, in `balanced`, `captains` or `random` |
+| `/match list` | Everyone | Live matches |
+| `/match report <winner> [match]` | Admin | Settles a result (`match` is the N in `#match-N`; defaults to this channel's match) |
+| `/match cancel [match]` | Admin | Cancels a match and removes its channels |
+| `/match cleanup [match]` / `cancel-all` | Admin | Tidies leftover match channels / cancels every live match |
+| `/replay check <files> [match]` | Admin | Reads `.replay` uploads and posts the scoreboards, to settle a dispute; never changes a result |
+| `/stats [user]` | Everyone | Profile card: MMR, division, W/L, streak |
+| `/leaderboard` | Everyone | Top players on a ladder |
+| `/history [user]` | Everyone | Recent matches |
+| `/set-mmr <user> <mmr>` | Admin | Sets a player's MMR |
+| `/division list` / `check [user]` | Everyone | Divisions with their thresholds and channels / a player's division |
+| `/division place` / `configure` | Admin | Puts a player in a division / changes a division's name, channel, role or thresholds |
+| `/season info` / `history` | Everyone | The current season / past seasons and their champions |
+| `/season end confirm:<name>` | Admin | Ends the season: snapshots standings, promotes/relegates, resets every MMR to its division's default. Refuses while anything is live. Never runs on its own |
+| `/ban add` / `remove` / `check` / `list` | Admin | Queue bans: `30m`, `12h`, `7d`, `2w`, `1mo` or `permanent` |
+| `/theme set` / `reset` / `preset` / `list` / `show` | Admin | The server's card colours |
+| `/feedback <message>` | Everyone | Sends a bug report or idea to the maintainer (files a GitHub issue) |
+| `/help` | Everyone | How the bot works |
 
 ---
 
-## 🏆 ELO Rank Tiers
-- **Supersonic Legend**: 1600+ MMR
-- **Grand Champion**: 1400 - 1599 MMR
-- **Champion**: 1200 - 1399 MMR
-- **Diamond**: 1000 - 1199 MMR
-- **Platinum**: 800 - 999 MMR
-- **Gold & Below**: < 800 MMR
+## 🏆 Ranks
+
+Players sit in a **division** (C, B, A, X, S; or one ladder for the whole server), each with
+its own starting MMR (1000 / 1300 / 1500 / 1700 / 1900). MMR moves every match; the
+division only changes at a season end, by promotion or relegation, or when an admin uses
+`/division place`.
+
+---
+
+## 📚 Docs
+
+| Doc | What's in it |
+|---|---|
+| [PROGRESS.md](PROGRESS.md) | Status and the backlog of what is left to do |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the code works, settled design, rules |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Deploying to the Pi, logs, backups, the dev bot |
+| [docs/TESTING.md](docs/TESTING.md) | Checklist for a live test run |
+| [docs/PITCH.md](docs/PITCH.md) | Copy for offering the bot to a new server |
+| [docs/history/](docs/history/) | The original audit and the build log |
