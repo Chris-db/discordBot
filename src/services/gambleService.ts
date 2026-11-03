@@ -54,7 +54,7 @@ function consensusDeadline(status: GambleStatus): number {
  * result, so it cannot outlive either.
  *
  * Both of those set rematchResolved -- but so does a declined rematch vote, which leaves
- * the teams intact and the Double or Nothing button live. Hence the two concrete checks
+ * the teams intact and the Gamble button live. Hence the two concrete checks
  * rather than the flag alone.
  */
 function lobbyBrokenUp(match: Match): boolean {
@@ -156,13 +156,13 @@ export async function voidPendingGamble(client: Client, matchId: number): Promis
     client,
     matchId,
     ref,
-    '🚫 Double or Nothing is off — the lobby has moved on. The original result stands.'
+    '🚫 The gamble is off — the lobby has moved on. The original result stands.'
   );
   return true;
 }
 
 /**
- * Initiates the Double or Nothing gamble proposal with a 60-second unanimous consensus window.
+ * Initiates the gamble proposal with a 60-second unanimous consensus window.
  */
 export async function proposeGamble(
   client: Client,
@@ -172,7 +172,7 @@ export async function proposeGamble(
   const match = getMatch(matchId);
   if (!match || match.state !== 'COMPLETED') {
     await interaction.reply({
-      content: '❌ This match is not eligible for Double or Nothing.',
+      content: '❌ This match is not eligible for a gamble.',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -184,7 +184,7 @@ export async function proposeGamble(
 
   if (!isPlayer) {
     await interaction.reply({
-      content: '❌ Only players who participated in this match can propose Double or Nothing!',
+      content: '❌ Only players who participated in this match can propose a gamble!',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -195,7 +195,7 @@ export async function proposeGamble(
   // no longer exist, must not open at all.
   if (lobbyBrokenUp(match)) {
     await interaction.reply({
-      content: '❌ Double or Nothing is off — the lobby has already moved on to a rematch or the queue.',
+      content: '❌ The gamble is off — the lobby has already moved on to a rematch or the queue.',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -204,7 +204,7 @@ export async function proposeGamble(
   const status = match.gamble_status || { state: 'NONE', agreedPlayers: [] };
   if (status.state !== 'NONE' && status.state !== 'EXPIRED') {
     await interaction.reply({
-      content: '❌ A Double or Nothing gamble has already been proposed or resolved for this match.',
+      content: '❌ A gamble has already been proposed or resolved for this match.',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -280,7 +280,7 @@ export async function proposeGamble(
       client,
       matchId,
       ref,
-      '⏰ Double or Nothing expired — the original result stands.'
+      '⏰ The gamble expired — the original result stands.'
     );
   }, Math.max(0, newStatus.proposedAt! + GAMBLE_WINDOW_MS - Date.now()));
 
@@ -298,7 +298,7 @@ export async function handleGambleAgree(
   const match = getMatch(matchId);
   if (!match || match.gamble_status?.state !== 'PROPOSED') {
     await interaction.reply({
-      content: '❌ No active Double or Nothing proposal is currently open for this match.',
+      content: '❌ No gamble proposal is currently open for this match.',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -312,7 +312,7 @@ export async function handleGambleAgree(
       status.state = 'EXPIRED';
     });
     await interaction.update({
-      content: '🚫 Double or Nothing is off — the lobby has moved on. The original result stands.',
+      content: '🚫 The gamble is off — the lobby has moved on. The original result stands.',
       embeds: [],
       components: [],
     });
@@ -384,7 +384,7 @@ export async function handleGambleDecline(
   const match = getMatch(matchId);
   if (!match || match.gamble_status?.state !== 'PROPOSED') {
     await interaction.reply({
-      content: '❌ No active Double or Nothing proposal is open for this match.',
+      content: '❌ No gamble proposal is open for this match.',
       flags: MessageFlags.Ephemeral,
     });
     return;

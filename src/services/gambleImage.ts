@@ -15,7 +15,7 @@ export interface GamblePlayerResult {
 }
 
 /**
- * Generates the 960px-wide Double or Nothing result card.
+ * Generates the 960px-wide gamble result card.
  * Displays whether the match outcome was INVERTED (stolen victory) or DOUBLED (jackpot),
  * along with the updated player MMRs and deltas.
  */

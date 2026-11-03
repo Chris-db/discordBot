@@ -146,7 +146,7 @@ export function buildPublicFeedCardEmbed(
 }
 
 /**
- * Double or Nothing consensus. The stakes have to be stated once -- players are agreeing
+ * Gamble consensus. The stakes have to be stated once -- players are agreeing
  * to a 50/50 on their own MMR -- but two lines is enough for that.
  */
 export function buildGambleConsensusEmbed(
@@ -170,7 +170,7 @@ export function buildGambleConsensusEmbed(
       .join('\n');
 
   return new EmbedBuilder()
-    .setTitle(`Double or Nothing — Match #${matchNumber}`)
+    .setTitle(`Gamble — Match #${matchNumber}`)
     .setColor(RL_COLORS.GOLD)
     .setDescription(
       `A 50/50 spin. Losers win the wheel → the result flips. Winners win it → MMR is doubled.\n` +

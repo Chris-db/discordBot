@@ -4,7 +4,7 @@ import { FONT_STACK } from '../utils/fonts';
 import { P } from '../ui/palette';
 
 /**
- * The Double or Nothing wheel: eight slices alternating blue and orange, a gold rim and
+ * The gamble wheel: eight slices alternating blue and orange, a gold rim and
  * pointer, and a hub naming the match. One renderer draws it everywhere -- the spin GIF
  * that replaces the consensus card, and the frozen copy in the result card's header --
  * so the two images read as one sequence.
@@ -255,7 +255,7 @@ export function generateWheelSpinGif(
   const cx = size / 2;
   const cy = size / 2 + 10;
   const r = size * 0.42;
-  const hubLines: [string, string] = ['DOUBLE OR NOTHING', `MATCH #${matchNumber}`];
+  const hubLines: [string, string] = ['GAMBLE', `MATCH #${matchNumber}`];
 
   const renderFrame = (angle: number, withCover = false): Uint8Array => {
     ctx.fillStyle = P.gamble.stoneTop;

@@ -27,7 +27,7 @@ export interface Palette {
   accent: string;
   /** "Go": queue full, player ready, positive MMR delta, a win. */
   positive: string;
-  /** Negative MMR delta, a loss, the Double-or-Nothing jackpot. */
+  /** Negative MMR delta, a loss, the gamble jackpot. */
   negative: string;
   /** Captains, promotion zone, Rank S. */
   gold: string;
@@ -74,7 +74,7 @@ export interface Palette {
   queueBg: { top: string; bottom: string };
   /** The pre-match VS card: navy fading to burnt orange; its blue side is `sky`. */
   matchVs: { bgTop: string; bgMid: string; bgBottom: string; orange: string };
-  /** The Double-or-Nothing result: stone for an inversion, deep red for a jackpot. */
+  /** The gamble result: stone for an inversion, deep red for a jackpot. */
   gamble: {
     stoneTop: string; stoneBottom: string;
     redTop: string; redBottom: string;

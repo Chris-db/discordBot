@@ -184,7 +184,7 @@ export function getLeaderboardButtons(page: number, totalPages: number): ActionR
 }
 
 /**
- * ActionRow for proposing Double or Nothing after match completion (60s timer).
+ * ActionRow for proposing a gamble after match completion (60s timer).
  */
 export function getGambleProposeButton(
   matchId: number,
@@ -193,7 +193,7 @@ export function getGambleProposeButton(
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`gamble_propose_${matchId}`)
-      .setLabel('Double or Nothing')
+      .setLabel('Gamble')
       .setEmoji('🎰')
       .setStyle(ButtonStyle.Primary)
       .setDisabled(disabled)
@@ -237,7 +237,7 @@ export function getPostMatchButtons(
 }
 
 /**
- * ActionRow for voting on Double or Nothing (Agree / Decline).
+ * ActionRow for voting on a gamble (Agree / Decline).
  */
 export function getGambleConsensusButtons(matchId: number, disabled: boolean = false): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
