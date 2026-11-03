@@ -158,6 +158,12 @@ const HOLD_FRAME_MS = 250;
  * slices to hide that, blended blue over orange into olive.
  */
 const MAX_STEP = SEGMENT_ARC * 0.45;
+/**
+ * The cover is the GIF's first frame. A viewer with Discord's GIF autoplay off sees only
+ * that frame, still, until they tap it -- so it says the wheel plays. Anyone autoplaying
+ * sees it for 20 ms, the shortest delay Chromium honours.
+ */
+const COVER_DELAY_MS = 20;
 /** The fraction of the spin at full speed before the wheel starts to slow. */
 const CRUISE = 0.3;
 
@@ -175,6 +181,45 @@ export function spinProfile(t: number): number {
 /** How many frames a spin of `landingAngle` needs to keep every step under MAX_STEP. */
 export function spinFrameCount(landingAngle: number): number {
   return Math.ceil((landingAngle * PEAK_SLOPE) / MAX_STEP) + 1;
+}
+
+/**
+ * A "▶ Tap to spin" pill centred on (cx, cy), in the wheel's own colours so the palette
+ * built from the landed frame still covers it. The play triangle is a path, not a glyph:
+ * the emoji font would draw ▶ in a blue the palette does not hold.
+ */
+function drawCoverLabel(ctx: SKRSContext2D, cx: number, cy: number): void {
+  const label = 'Tap to spin';
+  const h = 44;
+  const icon = 14;
+  const gap = 10;
+  ctx.font = `bold 20px ${FONT_STACK}`;
+  const textW = ctx.measureText(label).width;
+  const w = 24 + icon + gap + textW + 24;
+  const left = cx - w / 2;
+
+  ctx.beginPath();
+  ctx.roundRect(left, cy - h / 2, w, h, h / 2);
+  ctx.fillStyle = P.gamble.stoneTop;
+  ctx.fill();
+  ctx.strokeStyle = P.gold;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  const ix = left + 24;
+  ctx.beginPath();
+  ctx.moveTo(ix, cy - icon / 2);
+  ctx.lineTo(ix + icon, cy);
+  ctx.lineTo(ix, cy + icon / 2);
+  ctx.closePath();
+  ctx.fillStyle = P.gold;
+  ctx.fill();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = P.text;
+  ctx.fillText(label, ix + icon + gap, cy + 1);
+  ctx.textBaseline = 'alphabetic';
 }
 
 export interface WheelSpin {
@@ -210,6 +255,12 @@ export function generateWheelSpinGif(
   const r = size * 0.42;
   const hubLines: [string, string] = ['DOUBLE OR NOTHING', `MATCH #${matchNumber}`];
 
+  ctx.fillStyle = P.gamble.stoneTop;
+  ctx.fillRect(0, 0, size, size);
+  drawWheel(ctx, cx, cy, r, 0, { hubLines });
+  drawCoverLabel(ctx, cx, cy + r * 0.62);
+  const cover = new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer);
+
   const frames: Uint8Array[] = [];
   for (let f = 0; f < frameCount; f++) {
     const angle = landingAngle * spinProfile(f / (frameCount - 1));
@@ -222,17 +273,20 @@ export function generateWheelSpinGif(
   const palette = quantize(frames[frames.length - 1], 256, { format: 'rgb444' });
 
   const gif = GIFEncoder();
-  frames.forEach((rgba, i) => {
-    const index = applyPalette(rgba, palette, 'rgb444');
-    gif.writeFrame(index, size, size, {
-      palette: i === 0 ? palette : undefined,
-      delay: FRAME_DELAY_MS,
-      // Leave each frame in place for the next to draw over.
-      dispose: 1,
-      // Once: the wheel stays landed. Discord may loop anyway; see HOLD_MS.
-      repeat: -1,
-    });
+  gif.writeFrame(applyPalette(cover, palette, 'rgb444'), size, size, {
+    palette,
+    delay: COVER_DELAY_MS,
+    // Leave each frame in place for the next to draw over.
+    dispose: 1,
+    // Once: the wheel stays landed. Discord may loop anyway; see HOLD_MS.
+    repeat: -1,
   });
+  for (const rgba of frames) {
+    gif.writeFrame(applyPalette(rgba, palette, 'rgb444'), size, size, {
+      delay: FRAME_DELAY_MS,
+      dispose: 1,
+    });
+  }
   // The hold: one transparent pixel over the landed wheel, again and again.
   const holdFrames = Math.ceil(HOLD_MS / HOLD_FRAME_MS);
   const holdPixel = new Uint8Array([0]);
@@ -248,8 +302,8 @@ export function generateWheelSpinGif(
 
   return {
     buffer: Buffer.from(gif.bytes()),
-    landedAfterMs: (frameCount - 1) * FRAME_DELAY_MS,
-    durationMs: (frameCount - 1) * FRAME_DELAY_MS + holdFrames * HOLD_FRAME_MS,
+    landedAfterMs: COVER_DELAY_MS + (frameCount - 1) * FRAME_DELAY_MS,
+    durationMs: COVER_DELAY_MS + (frameCount - 1) * FRAME_DELAY_MS + holdFrames * HOLD_FRAME_MS,
     landingAngle,
   };
 }

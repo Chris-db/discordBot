@@ -108,7 +108,23 @@ describe('generateWheelSpinGif', () => {
       ) holdFrames++;
     }
     expect(holdFrames).toBeGreaterThan(30);
-    expect(frames).toBe(spinFrameCount(spin.landingAngle) + holdFrames);
+    // The cover, then the spin, then the hold.
+    expect(frames).toBe(1 + spinFrameCount(spin.landingAngle) + holdFrames);
+  });
+
+  it('opens on a cover frame that is gone in 20 ms', () => {
+    // With GIF autoplay off, Discord shows the first frame still until it is tapped, so
+    // the first frame carries the "Tap to spin" label. It must be full-size, or the
+    // still would be a sliver, and short enough that an autoplaying viewer never sees it.
+    const gce = spin.buffer.indexOf(Buffer.from([0x21, 0xf9, 0x04]));
+    // Delay is in hundredths of a second, little-endian, after the packed byte.
+    expect(spin.buffer.readUInt16LE(gce + 4)).toBe(2);
+    const descriptor = spin.buffer.indexOf(0x2c, gce + 8);
+    expect(spin.buffer.readUInt16LE(descriptor + 5)).toBe(SPIN_GIF_SIZE);
+    expect(spin.buffer.readUInt16LE(descriptor + 7)).toBe(SPIN_GIF_SIZE);
+    // The next frame is the spin at full speed, not another 20 ms one.
+    const next = spin.buffer.indexOf(Buffer.from([0x21, 0xf9, 0x04]), descriptor);
+    expect(spin.buffer.readUInt16LE(next + 4)).toBeGreaterThan(2);
   });
 
   it('is written to play once, not loop', () => {
