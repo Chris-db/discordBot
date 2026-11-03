@@ -191,11 +191,13 @@ export function spinFrameCount(landingAngle: number): number {
 function drawCoverLabel(ctx: SKRSContext2D, cx: number, cy: number): void {
   const label = 'Tap to spin';
   const h = 44;
+  const pad = 24;
   const icon = 14;
   const gap = 10;
+  ctx.save();
   ctx.font = `bold 20px ${FONT_STACK}`;
   const textW = ctx.measureText(label).width;
-  const w = 24 + icon + gap + textW + 24;
+  const w = pad + icon + gap + textW + pad;
   const left = cx - w / 2;
 
   ctx.beginPath();
@@ -206,7 +208,7 @@ function drawCoverLabel(ctx: SKRSContext2D, cx: number, cy: number): void {
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  const ix = left + 24;
+  const ix = left + pad;
   ctx.beginPath();
   ctx.moveTo(ix, cy - icon / 2);
   ctx.lineTo(ix + icon, cy);
@@ -219,7 +221,7 @@ function drawCoverLabel(ctx: SKRSContext2D, cx: number, cy: number): void {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = P.text;
   ctx.fillText(label, ix + icon + gap, cy + 1);
-  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
 }
 
 export interface WheelSpin {
@@ -255,19 +257,18 @@ export function generateWheelSpinGif(
   const r = size * 0.42;
   const hubLines: [string, string] = ['DOUBLE OR NOTHING', `MATCH #${matchNumber}`];
 
-  ctx.fillStyle = P.gamble.stoneTop;
-  ctx.fillRect(0, 0, size, size);
-  drawWheel(ctx, cx, cy, r, 0, { hubLines });
-  drawCoverLabel(ctx, cx, cy + r * 0.62);
-  const cover = new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer);
-
-  const frames: Uint8Array[] = [];
-  for (let f = 0; f < frameCount; f++) {
-    const angle = landingAngle * spinProfile(f / (frameCount - 1));
+  const renderFrame = (angle: number, withCover = false): Uint8Array => {
     ctx.fillStyle = P.gamble.stoneTop;
     ctx.fillRect(0, 0, size, size);
     drawWheel(ctx, cx, cy, r, angle, { hubLines });
-    frames.push(new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer));
+    if (withCover) drawCoverLabel(ctx, cx, cy + r * 0.62);
+    return new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer);
+  };
+
+  const cover = renderFrame(0, true);
+  const frames: Uint8Array[] = [];
+  for (let f = 0; f < frameCount; f++) {
+    frames.push(renderFrame(landingAngle * spinProfile(f / (frameCount - 1))));
   }
 
   const palette = quantize(frames[frames.length - 1], 256, { format: 'rgb444' });
@@ -300,10 +301,11 @@ export function generateWheelSpinGif(
   }
   gif.finish();
 
+  const landedAfterMs = COVER_DELAY_MS + (frameCount - 1) * FRAME_DELAY_MS;
   return {
     buffer: Buffer.from(gif.bytes()),
-    landedAfterMs: COVER_DELAY_MS + (frameCount - 1) * FRAME_DELAY_MS,
-    durationMs: COVER_DELAY_MS + (frameCount - 1) * FRAME_DELAY_MS + holdFrames * HOLD_FRAME_MS,
+    landedAfterMs,
+    durationMs: landedAfterMs + holdFrames * HOLD_FRAME_MS,
     landingAngle,
   };
 }
