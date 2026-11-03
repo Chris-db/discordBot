@@ -73,7 +73,7 @@ function makeCompletedMatch() {
   return getMatch(match.match_id)!;
 }
 
-describe('double or nothing', () => {
+describe('gamble', () => {
   let matchId: number;
 
   beforeEach(() => {
@@ -190,7 +190,7 @@ describe('double or nothing', () => {
     });
 
     // A declined rematch vote sets rematchResolved too, but the teams are still there and
-    // the card leaves the Double or Nothing button live. Voiding on the flag alone would
+    // the card leaves the Gamble button live. Voiding on the flag alone would
     // have killed the gamble in exactly the case players reach for it.
     it('still allows a proposal after the rematch vote failed', async () => {
       for (const id of ['b1', 'b2', 'b3']) {
