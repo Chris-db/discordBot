@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { beat, startHeartbeat, FetchLike } from '../src/services/heartbeat';
+import { Client, Status } from 'discord.js';
+import { beat, gatewayConnected, startHeartbeat, FetchLike } from '../src/services/heartbeat';
 import { validateConfig, AppConfig } from '../src/config';
 import config from '../src/config';
+import { logger } from '../src/utils/logger';
 
 /**
  * The uptime heartbeat. What matters is the *absence* of pings: the monitor must never
  * hear from a bot whose gateway is down, and must hear promptly from one that just came up.
  */
 
-const clientThatIs = (ready: boolean) => ({ isReady: () => ready }) as any;
+const shardsWith = (...statuses: Status[]) => ({ ws: { shards: new Map(statuses.map((status, id) => [id, { status }])) } });
+const clientThatIs = (ready: boolean) => shardsWith(ready ? Status.Ready : Status.Connecting);
 
 function recorder(ok = true) {
   const calls: string[] = [];
@@ -41,8 +44,56 @@ describe('beat', () => {
   });
 });
 
+describe('gatewayConnected', () => {
+  it('needs every shard Ready, and at least one shard', () => {
+    expect(gatewayConnected(shardsWith(Status.Ready, Status.Ready))).toBe(true);
+    expect(gatewayConnected(shardsWith(Status.Ready, Status.Resuming))).toBe(false);
+    expect(gatewayConnected(shardsWith())).toBe(false);
+  });
+
+  // The six-week outage. On the Pi the first login fails (WiFi not up yet), discord.js
+  // destroys the client, the retry logs in on that same client -- and `isReady()` stays
+  // false forever because `ws.destroyed` never resets. Uses a real Client so a future
+  // discord.js that changes this shows up here rather than on the monitor.
+  it('still pings after a failed login was retried on the same client', async () => {
+    const client = new Client({ intents: [] });
+    await client.destroy(); // what client.login() does when it throws
+    // ...then the retry connects: the manager and its shard come up Ready.
+    (client.ws as any).status = Status.Ready;
+    client.ws.shards.set(0, { status: Status.Ready } as any);
+
+    expect(client.isReady()).toBe(false); // the latch the heartbeat must not rely on
+    const { calls, fetchImpl } = recorder();
+    expect(await beat(client, 'https://hc-ping.com/abc', fetchImpl)).toBe('sent');
+    expect(calls).toEqual(['https://hc-ping.com/abc']);
+  });
+});
+
 describe('startHeartbeat', () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('says once when it holds pings for a disconnected gateway, and once when it resumes', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const shard = { status: Status.Connecting };
+    const client = { ws: { shards: new Map([[0, shard]]) } };
+    const { calls, fetchImpl } = recorder();
+
+    const stop = startHeartbeat(client, { url: 'https://hc-ping.com/abc', fetchImpl, intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(calls).toEqual([]);
+    expect(warn.mock.calls.filter(c => String(c[0]).startsWith('Heartbeat paused')).length).toBe(1);
+
+    shard.status = Status.Ready;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls.length).toBe(1);
+    expect(info.mock.calls.filter(c => String(c[0]).startsWith('Heartbeat resumed')).length).toBe(1);
+    stop();
+  });
 
   it('does nothing at all without a URL', () => {
     vi.useFakeTimers();

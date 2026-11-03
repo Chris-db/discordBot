@@ -532,6 +532,17 @@ which it keeps because they are already registered. No need to run it.
   at the end, no per-game score. Rematch was built as "same teams, new match, series
   counter", not a BO3 scoring system.
 
+## Gotchas found in the heartbeat outage (2026-11-03)
+
+- **`client.isReady()` latches false after a failed login.** `client.login()` calls
+  `client.destroy()` when it throws, which sets `ws.destroyed = true` for good;
+  `loginWithRetry` then logs in on the same client and everything works except
+  `isReady()`. The Pi boots before WiFi is up, so this hit nearly every boot: from 09-18
+  the heartbeat skipped every ping in silence and Healthchecks showed the bot down for six
+  weeks while it was online (four real power cuts in Oct went unalerted). The heartbeat
+  now reads shard status via `gatewayConnected`, and logs when it pauses. **Never use
+  `isReady()` for liveness.**
+
 ## Gotchas found in the first live session
 
 - **SQLite `CURRENT_TIMESTAMP` is UTC with no zone marker, and `new Date()` reads it as
