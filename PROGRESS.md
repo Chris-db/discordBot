@@ -2,7 +2,7 @@
 
 Tracker for a multi-session build. Update this before ending a session.
 
-Last updated: 2026-09-12 (Double or Nothing wheel, branch gamble-wheel)
+Last updated: 2026-11-03 (one Backlog replaces the Next list; feature_plan1.md retired)
 
 ---
 
@@ -11,9 +11,10 @@ Last updated: 2026-09-12 (Double or Nothing wheel, branch gamble-wheel)
 - `TESTING.md` — the ordered checklist for the first live session, and what should happen
   at each step. Nothing here has ever run against Discord.
 
-- `AUDIT.md` — the full codebase audit. Still the source of truth for what's wrong.
-- `feature_plan1.md` — **treat as a menu of ideas, not a spec.** It is stale and partly
-  contradicts agreed design (see "Where the plan is wrong" below).
+- **Backlog** (below) — the one list of what is still to do. Everything in `AUDIT.md` and
+  the old `feature_plan1.md` was checked against the code on 2026-11-03 and is either done
+  or filed there.
+- `AUDIT.md` — the original audit, kept as history. Not a to-do list any more.
 - Project memory (`discord-6mans-bot`) — the agreed design decisions.
 
 ## Status: deployed on the Pi as a systemd service
@@ -94,7 +95,7 @@ Everything else worked, but these have never been run against the real API:
 
 - ~~Reporting by **button vote**~~ — worked in the trial run, 2026-09-11.
 - **2v2 and 4v4** in any form — no channel is registered to a size yet.
-- ~~Double or Nothing.~~ — worked, 2026-09-11. **The new wheel GIF (branch `gamble-wheel`) is not yet.**
+- ~~Double or Nothing.~~ — worked, 2026-09-11. The wheel GIF worked live too (Chris); the only snag is viewers with GIF autoplay off -- see Backlog.
 - ~~Rematch actually starting~~ — worked, 2026-09-11 (channel rename bug found and fixed).
 - ~~`/replay check` against a real upload~~ — Chris tested it live in an earlier session (with a
   cross-reference against the match); worked. Not recorded at the time.
@@ -456,17 +457,45 @@ came before the report reached GitHub. Fixed:
 Diagnose a similar one with:
 `journalctl -u 6mans --since "YYYY-MM-DD HH:MM" --until "…" | grep -E "restart counter|Logged in|Failed to log in"`.
 
-## Next
+## Backlog
 
-0. ~~Register the queue channel to a division~~ — all five 3v3 divisions registered 2026-09-11. Policy calls done 2026-09-11.
-0b. ~~`/replay check` against a real Discord upload~~ — done, worked (Chris, earlier session).
-1. **Before the first outside trial:** (a) ~~per-server match numbers~~ — shipped 2026-09-11,
-   see above. (b) Pick hosting: Oracle free tier, else Hetzner ~R80/mo; disclose it either
-   way. (c) ~~Uptime monitor~~ — bot side shipped 2026-09-11; Chris creates the
-   Healthchecks.io check and set `HEARTBEAT_URL` on the Pi — **done and proven 2026-09-11**.
-2. Full achievements table — low value for a group of 6; the streak callouts already
-   deliver most of it.
-3. Webhooks — recommended **skip** until something actually consumes them.
+Built 2026-11-03 from `AUDIT.md`, the old `feature_plan1.md` and the old Next list, each
+item checked against the code. **Hosting:** the Pi is the host; a VPS only if funding turns
+up (unlikely).
+
+**Open**
+- ~~**Wheel GIF cover frame.**~~ Shipped 2026-11-03 (branch `feat/wheel-cover-frame`). With
+  Discord's GIF autoplay off (a per-user setting; OS reduced motion can switch it off too) a
+  GIF shows its first frame still until tapped; frame 0 is now the wheel with "▶ Tap to
+  spin" for 20 ms. Not yet seen live with autoplay off.
+- **2v2 / 4v4 live run.** Never played against Discord; no channel is registered to a size.
+- **AFK ping at T-20s** in the ready check, before it fails.
+- **Help button on the queue panel.** `/help` exists only as a command.
+- **Image smoke tests for every card.** Only the wheel, profile and palette render in tests.
+- **Pin Node 24** in `package.json` `engines`. CI pins it; nothing else does.
+
+**Deferred** (ask Chris before building)
+- Ready-check failure pulls the next queued player in, instead of sending the lobby back.
+- "I'm here" button as an alternative to joining the VC.
+- Party/duo; MMR preview on the teams vote; queue-pop estimate (needs queue-to-pop history
+  the schema does not keep).
+- Full achievements table -- the streak callouts deliver most of it. The old plan's
+  MMR-threshold keys are wrong now that rank is stored state.
+- Webhooks -- only once something consumes them.
+- Code health: typed DB rows instead of `row: any` (`queries.ts` `parseQueueRow`,
+  `parseMatchRow`), `noUncheckedIndexedAccess` / `noUnusedLocals`, a shared drawing kit
+  for the `*Image.ts` cards.
+- Only if someone complains: panel re-post on chat (1200 ms debounce), the
+  `autoDeleteReply` timers, leaderboard paging on an ephemeral reply with images.
+
+**Rejected**
+- Queue state-machine extraction and a `match_players` table -- restart recovery and vote
+  races were fixed another way (sweeps, `mutateMatchReportStatus`).
+- `loadConfig()` instead of import-time config -- `vitest.config.mts` covers the test need.
+
+Already done, for the record: colour-blind division colours (`mmrService.ts`), draft
+auto-pick (`DRAFT_PICK_TIMEOUT_SECONDS`), split-report notice, Requeue button, seasons,
+rematch, multi-queue, streaks, match duration, bans.
 
 ## Multi-queue design (phase 5)
 
@@ -519,7 +548,9 @@ Chris's own server was set up by hand before this existed (all five 3v3 division
 "Live setup"); `/setup` there would find everything by name except the queue channels,
 which it keeps because they are already registered. No need to run it.
 
-## Where `feature_plan1.md` is wrong
+## Where the old `feature_plan1.md` was wrong
+
+Retired 2026-11-03; kept here because the design calls still stand.
 
 - **Features 5 (Match Duration) and 6 (Ban/Cooldown) were already built** in the initial
   commit. The plan lists them as to-do.
@@ -573,8 +604,6 @@ which it keeps because they are already registered. No need to run it.
   measure header text and widen the canvas when the header is the widest element.
 - The queue panel at 3v3 is deliberately **pixel-identical** to before: `80 + n·240 +
   (n−1)·20` lands on exactly 840px at n=3.
-- `feature_plan1.md` is untracked on purpose and `git add -A` keeps trying to commit it.
-  Untrack it (`git rm --cached`) if it sneaks in.
 
 ## Gotchas found in earlier sessions
 
