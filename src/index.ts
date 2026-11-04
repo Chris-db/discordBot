@@ -21,6 +21,7 @@ import { installErrorReporter, flushErrorReports } from './services/errorReporte
 import { loginWithRetry } from './services/login';
 import { withGuildTheme } from './services/themeService';
 import { ensureGuildDefaults } from './services/guildSetup';
+import { startBanter } from './services/banter';
 // Registers the bundled fonts before anything can draw a card. The image modules import
 // this too, so it is belt and braces -- but it means a missing font file is reported at
 // boot rather than the first time someone completes a match.
@@ -45,10 +46,10 @@ registerFonts();
 // Initialize SQLite database schema
 initializeDatabase();
 
-// No MessageContent intent: the only message listener re-pins the queue panel, and it
-// needs `author.bot` and `channelId`, both of which arrive without the privileged intent.
-// Asking for it would mean every server that installs the bot has to grant a permission
-// the bot never uses.
+// No MessageContent intent. Re-pinning the queue panel needs only `author.bot` and
+// `channelId`, and banter reads text only from messages that @ the bot, which Discord
+// delivers in full without the privileged intent. Asking for it would mean a privileged
+// permission the bot has no use for, and Discord's approval once it is in 100 servers.
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -149,6 +150,8 @@ client.on(Events.MessageCreate, message => {
     logger.error('Error handling channel message:', error);
   }
 });
+
+startBanter(client);
 
 // A rejected promise nobody awaited is almost always a Discord call that failed after the
 // interaction had already been answered. Log it and carry on.

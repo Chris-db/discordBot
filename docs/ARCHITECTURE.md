@@ -62,6 +62,13 @@ cancels in-flight setups and posts a "re-queue to play" notice), `sweepStrayQueu
 daily SQLite backups (`backupService.ts`), the uptime heartbeat (`heartbeat.ts`), and the
 error reporter (`errorReporter.ts`).
 
+**Banter** (`banter.ts`): @ the bot and it replies with a hardcoded line, chosen by whether
+the message asks for a joke, says thanks, asks a question or none of those. About 1 plain
+ping in 15 asks for the person's Epic display name and calls their next message in that
+channel "nice". It can't read that message, since there is no MessageContent intent,
+and doesn't need to. Its state is in memory only and it stands alone so it is easy to
+remove; the steps are at the top of the file.
+
 ## Data model
 
 - **A ladder is `(guild_id, team_size)`.** 2v2, 3v3 and 4v4 are fully separate: their own

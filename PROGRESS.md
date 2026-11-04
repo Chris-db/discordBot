@@ -3,7 +3,7 @@
 Where the bot stands and what is left to do. Update this at the end of a session that
 changes either; put the story of the session in `docs/history/BUILD-LOG.md`.
 
-Last updated: 2026-11-03 (docs reorganised; Double or Nothing renamed to Gamble)
+Last updated: 2026-11-04 (banter added)
 
 | For | Read |
 |---|---|
@@ -17,7 +17,7 @@ Last updated: 2026-11-03 (docs reorganised; Double or Nothing renamed to Gamble)
 Live on the Pi since 2026-09-10 and auto-deploying from `main`. Every core flow has been
 played in Discord: queue, ready check, all three modes, report, rematch, Back to Queue,
 Gamble (with the wheel and its "Tap to spin" cover), `/replay check`, `/setup`, themes, and
-a second division channel. Tests: 421 passing; typecheck and build clean.
+a second division channel. Tests: 442 passing; typecheck and build clean.
 
 **Servers:** Chris's own; Vanilla's (`1348387644693938370`, joined 2026-09-11); a throwaway
 test server where the dev bot lives.
@@ -46,6 +46,7 @@ list, each item checked against the code.
 - **Help button on the queue panel.** `/help` exists only as a command.
 - **Image smoke tests for every card.** Only the wheel, profile and palette render in tests.
 - **Pin Node 24** in `package.json` `engines`. CI pins it; nothing else does.
+- **Remove banter** once the joke gets old. `src/services/banter.ts` says how.
 - **Code readability**, one small PR each, behaviour unchanged: split `queries.ts`
   (1,249 lines) and `votingService.ts` (1,027); typed DB rows instead of `row: any`
   (`parseQueueRow`, `parseMatchRow`); a shared drawing kit for the `*Image.ts` cards.
