@@ -219,11 +219,5 @@ export async function generateQueuePanelImage(
     }
   }
 
-  // Footer text
-  ctx.textAlign = 'center';
-  ctx.fillStyle = P.textDim;
-  ctx.font = `12px ${FONT_STACK}`;
-  ctx.fillText('Click Join Queue below to claim your spot in the lobby', width / 2, height - 16);
-
   return canvas.toBuffer('image/png');
 }
