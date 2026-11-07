@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+  <!-- Server icon: a disc split into the two team colours, the ball in the middle.
+       Same blue, orange and slate as the bot avatar so the two read as a pair. -->
+  <rect width="512" height="512" fill="#0f172a"/>
+  <path d="M 246 86 A 170 170 0 0 0 246 426 Z" fill="#00b0ff"/>
+  <path d="M 266 86 A 170 170 0 0 1 266 426 Z" fill="#ff9100"/>
+  <circle cx="256" cy="256" r="56" fill="#f8fafc" stroke="#0f172a" stroke-width="18"/>
+</svg>

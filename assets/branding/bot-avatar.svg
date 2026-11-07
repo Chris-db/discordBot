@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+  <!-- Bot avatar: blue and orange chevrons facing off. A gap between the tips keeps it
+       reading as two sides rather than an "X". Discord crops to a circle; all of it
+       sits well inside. -->
+  <rect width="512" height="512" fill="#0f172a"/>
+  <g fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 132 160 L 220 256 L 132 352" stroke="#00b0ff"/>
+    <path d="M 380 160 L 292 256 L 380 352" stroke="#ff9100"/>
+  </g>
+</svg>
