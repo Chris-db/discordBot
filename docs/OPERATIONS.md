@@ -85,8 +85,15 @@ throwaway test server. Run it from Windows on the branch:
 ENV_FILE=.env.dev npm run dev
 ```
 
-`.env.dev` (gitignored) carries the dev token and client id and `DB_PATH=data/dev.sqlite`,
-so it starts from an empty ladder: run `/setup` in the test server, then `/queue fill-bots`.
+`.env.dev` (gitignored) carries the dev token and client id, `DB_PATH=data/dev.sqlite` and
+`TEST_GUILD_IDS=<test server id>`, so it starts from an empty ladder: run `/setup` in the
+test server, then `/queue fill-bots`.
+
+**Test bots** (`/queue fill-bots`, `force-pop`) only run in servers listed in
+`TEST_GUILD_IDS`, in both `.env` files. They leave real leaderboard rows, so never list a
+live server. To clear them out of one server, back up first, then delete
+`discord_id LIKE 'test_bot_%'` for that `guild_id` from `player_ladders` and `players`. Old
+matches can keep their bot ids; the code skips them.
 In the slash-command popup pick the dev bot's copy (Discord shows the bot avatar); buttons
 always go to the bot that posted the card. Invite it with Administrator, or with
 `&permissions=288484368` on the invite URL.
