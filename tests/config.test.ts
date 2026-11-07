@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import config, { validateConfig, AppConfig } from '../src/config';
+import config, { validateConfig, AppConfig, parseIdList, isTestGuild } from '../src/config';
 
 const good: AppConfig = {
   ...config,
@@ -36,5 +36,19 @@ describe('validateConfig', () => {
   it('rejects zero and negative durations', () => {
     expect(validateConfig({ ...good, readyCheckTimeoutSeconds: 0 })).toHaveLength(1);
     expect(validateConfig({ ...good, matchTimeoutHours: -1 })).toHaveLength(1);
+  });
+});
+
+describe('test-bot servers', () => {
+  it('reads a comma-separated list and ignores blanks', () => {
+    expect(parseIdList(' 111, 222,,  ')).toEqual(['111', '222']);
+    expect(parseIdList(undefined)).toEqual([]);
+  });
+
+  it('allows the bots only in listed servers', () => {
+    const c = { ...good, testGuildIds: ['111'] };
+    expect(isTestGuild('111', c)).toBe(true);
+    expect(isTestGuild('1567470007531737189', c)).toBe(false);
+    expect(isTestGuild('111', { ...good, testGuildIds: [] })).toBe(false);
   });
 });

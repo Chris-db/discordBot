@@ -27,7 +27,7 @@ import {
 } from '../database/queries';
 import { DEFAULT_TEAM_SIZE } from '../database/migrations';
 import db from '../database/db';
-import config from '../config';
+import config, { isTestGuild } from '../config';
 import { createMatchChannels } from './channelService';
 import { prefetchAvatar } from '../utils/avatarCache';
 import { getQueuePanelButtons } from '../ui/buttons';
@@ -612,6 +612,13 @@ export async function fillQueueWithBots(
   guildId: string,
   skipVoting: boolean = false
 ): Promise<QueueClickResult> {
+  // Checked here rather than in the command so force-pop, which fills first, is covered too.
+  if (!isTestGuild(guildId)) {
+    return {
+      success: false,
+      message: '❌ Test bots are turned off in this server. Add its id to `TEST_GUILD_IDS` to allow them.',
+    };
+  }
   // A test fill only makes sense where a panel is. This used to create the row, and a
   // row is all the message listener needed to start re-posting panels into #general.
   const queue = getQueue(channelId);

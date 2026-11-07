@@ -33,7 +33,10 @@ before `/setup` existed (running `/setup` there would find everything and change
 | B | `1547879043058114560` |
 | C | `1547879120459931679` |
 
-The test bots sit in C; `/queue fill-bots` bypasses the division gate on purpose.
+The test bots sit in C; `/queue fill-bots` bypasses the division gate on purpose. Since
+2026-11-07 it runs only in servers listed in `TEST_GUILD_IDS`. That day five bots were
+removed from "6mans server" (`1567470007531737189`), a live server; they had played one
+match, #35, which stays as history.
 
 ## Backlog
 

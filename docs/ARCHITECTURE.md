@@ -124,6 +124,9 @@ Each of these cost a real bug once.
 - **Write votes with `mutateMatchReportStatus`**, which reads and writes in one
   transaction. Never hand-roll a read-modify-write.
 - **Never re-derive rank from MMR.** Use `getDivisionTier(player.division)`.
+- **Test bots are real rows.** `fillQueueWithBots` writes `players` and `player_ladders`
+  rows for `test_bot_*`, so they stay on the leaderboard. It refuses unless the server is in
+  `TEST_GUILD_IDS`; keep live servers off that list.
 - **A migration is a frozen snapshot.** Never call a shared helper whose shape can change
   later (migration 2 has its own `seedGuildDefaultsV2` for this reason).
 

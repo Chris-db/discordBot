@@ -49,6 +49,17 @@ export interface AppConfig {
   githubToken?: string;
   /** Minimum minutes between two notes about the same error on its issue. */
   errorReportCooldownMinutes: number;
+  /**
+   * Servers where `/queue fill-bots` and `force-pop` may run. The test bots get real player
+   * rows, so a fill in a live server leaves fake names on its leaderboard; that happened in
+   * "6mans server" on 2026-11-07. Unset means no server allows them.
+   */
+  testGuildIds: string[];
+}
+
+/** A comma-separated list of ids, with blanks and spaces ignored. */
+export function parseIdList(raw: string | undefined): string[] {
+  return (raw ?? '').split(',').map(id => id.trim()).filter(id => id.length > 0);
 }
 
 const config: AppConfig = {
@@ -72,9 +83,15 @@ const config: AppConfig = {
   githubRepo: process.env.GITHUB_REPO || undefined,
   githubToken: process.env.GITHUB_TOKEN || undefined,
   errorReportCooldownMinutes: parseInt(process.env.ERROR_REPORT_COOLDOWN_MINUTES || '60', 10),
+  testGuildIds: parseIdList(process.env.TEST_GUILD_IDS),
 };
 
 export default config;
+
+/** Whether the test-bot commands may run in this server. */
+export function isTestGuild(guildId: string, c: AppConfig = config): boolean {
+  return c.testGuildIds.includes(guildId);
+}
 
 /**
  * Everything that would otherwise fail later, and quietly. An empty token used to leave
