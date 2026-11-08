@@ -80,6 +80,18 @@ export const LINES = {
     'nice one',
     'very nice',
   ],
+  // Someone asks the bot "who me" and it points the finger back with a GIF. These are the
+  // direct .gif files behind Klipy pages, because Discord shows a bare image link as just
+  // the GIF, where a page link would add a "KLIPY: ..." title card. To add one, open the
+  // Klipy page's source and take the og:image whose type is image/gif.
+  whoMe: [
+    // https://klipy.com/gifs/jerry-meme-tom-and-jerry-meme
+    'https://static2.klipy.com/ii/925f17378dd1893b674a723c07535afe/94/9c/zCfoJNjx.gif',
+    // https://klipy.com/gifs/get-a-load-of-this-pointing
+    'https://static2.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/ff/bb/140xLj2juA22K4TCdJ.gif',
+    // https://klipy.com/gifs/ishowspeed-this-guy
+    'https://static2.klipy.com/ii/925f17378dd1893b674a723c07535afe/91/25/TWkhXjyD.gif',
+  ],
 };
 
 const COOLDOWN_MS = 15_000;
@@ -87,11 +99,15 @@ const TROLL_CHANCE = 1 / 15;
 const TROLL_REST_MS = 7 * 24 * 60 * 60_000;
 const TROLL_ANSWER_WINDOW_MS = 2 * 60_000;
 
-type LineCategory = 'joke' | 'thanks' | 'question' | 'plain';
+type LineCategory = 'whoMe' | 'joke' | 'thanks' | 'question' | 'plain';
 
-/** Picks which list a ping answers from. A joke request wins, so "tell me a joke?" gets one. */
+/**
+ * Picks which list a ping answers from. "who me" wins over everything, since it would
+ * otherwise read as a question, and then a joke request, so "tell me a joke?" gets one.
+ */
 export function categorize(content: string): LineCategory {
   const text = content.replace(/<@[!&]?\d+>/g, '').trim().toLowerCase();
+  if (/\bwho\W*me\b/.test(text)) return 'whoMe';
   if (/\bjokes?\b/.test(text)) return 'joke';
   if (/\b(thanks|thank you|thx|ty|good bot)\b/.test(text)) return 'thanks';
   if (
