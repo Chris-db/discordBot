@@ -44,6 +44,11 @@ describe('categorize', () => {
     ['good bot', 'thanks'],
     ['you there?', 'question'],
     ['what is the time', 'question'],
+    ['who me', 'whoMe'],
+    ['who me?', 'whoMe'],
+    ['Who, me?', 'whoMe'],
+    ['wait who me lol', 'whoMe'],
+    ['who meant this', 'question'],
     ['hello', 'plain'],
     ['', 'plain'],
     ['the show is good', 'plain'],
@@ -59,6 +64,14 @@ describe('who gets a reply', () => {
     await handle(message);
     expect(LINES.question).toContain(sentText(reply));
     expect(reply.mock.calls[0][0].allowedMentions).toEqual({ parse: [], repliedUser: false });
+  });
+
+  it('answers "who me" with one of the GIFs, and never with the Epic name troll', async () => {
+    const { handle } = harness([...TROLL]);
+    const { message, reply } = fakeMessage({ content: 'who me?' });
+    await handle(message);
+    expect(LINES.whoMe).toContain(sentText(reply));
+    expect(sentText(reply)).toMatch(/^https:\/\/\S+\.gif$/);
   });
 
   it('ignores messages that do not @ the bot, which covers @everyone and role pings', async () => {
