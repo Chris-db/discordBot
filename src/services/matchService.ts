@@ -16,6 +16,7 @@ import {
 import {
   grantTeamVoiceAccessAndMove,
   scheduleMatchChannelDeletion,
+  deleteMatchChannels,
   broadcastMatchToFeed,
   updateMatchFeedCard,
   findFeedChannel,
@@ -493,6 +494,36 @@ export async function completeMatch(
   logger.info(`Completed match id ${matchId}. Winner: ${winner}`);
 }
 
+/** The states a match can be cancelled from. Anything else has already ended. */
+const CANCELABLE_STATES: Match['state'][] = ['READY_CHECK', 'VOTING', 'DRAFTING', 'IN_PROGRESS'];
+
+/**
+ * `/match cleanup match:N`: deletes a match's channels now, and cancels the match only if
+ * it was still live.
+ *
+ * It used to write CANCELLED over whatever was there, so an admin clearing the leftover
+ * channels of a finished match also erased who won it.
+ */
+export async function cleanupMatch(
+  client: Client,
+  matchId: number
+): Promise<{ cancelled: boolean }> {
+  const match = getMatch(matchId);
+  if (!match) return { cancelled: false };
+
+  await deleteMatchChannels(client, matchId);
+
+  if (!CANCELABLE_STATES.includes(match.state)) return { cancelled: false };
+
+  updateMatch(matchId, {
+    state: 'CANCELLED',
+    winner: 'NONE',
+    completed_at: new Date().toISOString(),
+  });
+  logger.info(`Cleaned up and cancelled match id ${matchId}`);
+  return { cancelled: true };
+}
+
 /**
  * Cancels a match and deletes temporary voice channels.
  */
@@ -506,8 +537,7 @@ export async function cancelMatch(
     return { success: false, message: 'Match not found.' };
   }
 
-  const cancelableStates = ['READY_CHECK', 'VOTING', 'DRAFTING', 'IN_PROGRESS'];
-  if (!cancelableStates.includes(match.state)) {
+  if (!CANCELABLE_STATES.includes(match.state)) {
     if (match.text_channel_id) {
       scheduleMatchChannelDeletion(client, matchId, 100);
     }
