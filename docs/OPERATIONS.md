@@ -46,10 +46,20 @@ Both become GitHub Issues (`src/services/errorReporter.ts`, `feedbackService.ts`
   switched off (2026-11-19): nobody used it, and the repo is going public. The comment
   under `commands` in `src/handlers/commandHandler.ts` says how to bring it back.
 - Hard cap of 30 GitHub calls an hour. State lives in `data/error-reports.json` on the Pi.
-- Needs `GITHUB_REPO` and `GITHUB_TOKEN` in the Pi's `.env` (a fine-grained PAT for this
-  repo only, Issues read and write).
+- Needs `GITHUB_REPO` and `GITHUB_TOKEN` in the Pi's `.env`. `GITHUB_REPO` is
+  `Chris-db/discordBot-private`, not this repo: this one is public, and reports carry log
+  lines that can name players and servers. The token is a fine-grained PAT for that private
+  repo only, with Issues read and write. The deploy timer's `deploy-failed` issues go there
+  too.
 
 Chris triages these issues by hand.
+
+## The two repos
+
+`Chris-db/discordBot` is public and is what the Pi deploys from. Before it went public
+(2026-11-19), the history was rewritten to drop a few banter lines, and the original repo
+was renamed to `Chris-db/discordBot-private`. That one keeps the original history, PRs #1–#22
+(the public repo's PR numbers start again from 1) and the error-report issues. Don't push anything from it to the public repo.
 
 ## Uptime heartbeat
 

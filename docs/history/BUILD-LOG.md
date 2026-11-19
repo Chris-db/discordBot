@@ -422,8 +422,15 @@ The command is still in the code and can be turned back on. The sample names in
 `renderAll.ts`, the theme preview and the replay tests were real players' tags; they are
 fictional now. The repo is MIT licensed. PITCH.md lost its pricing, since the bot is
 free, and MONITOR.md is gone: it described the disabled cloud triage routine, and the rest
-of it already lives in OPERATIONS.md. Still open: point error reports at a private repo
-(see PROGRESS.md).
+of it already lives in OPERATIONS.md.
+
+Then the history itself was cleaned. Chris didn't want the old joke lines readable in old
+commits, and GitHub keeps every PR's original diff even after a force-push. So the original
+repo was renamed `discordBot-private`, and `git filter-branch` rewrote a copy of `main` to
+drop the two joke lines and make the troll's lines neutral. That copy was pushed to a new
+`discordBot`. All 138 commits kept their authors, dates and messages; only `banter.ts`,
+`ARCHITECTURE.md` and this log changed in any of them. The Pi was pointed at the new history
+and error reports at the private repo (see OPERATIONS.md, "The two repos").
 
 ## Where the old `feature_plan1.md` was wrong
 
