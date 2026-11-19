@@ -3,8 +3,6 @@ import { logger } from '../utils/logger';
 
 /**
  * Gives the bot a personality: @ it and it answers with a dry, oblivious, hardcoded line.
- * Now and then it asks someone for their Epic display name and says "nice" to
- * whatever they type next.
  *
  * This is a joke that is expected to get old, so it is built to be thrown away. To remove
  * it, delete this file and tests/banter.test.ts, then remove `startBanter` from index.ts.
@@ -70,16 +68,6 @@ export const LINES = {
     'who me',
     'who me',
   ],
-  trollAsk: [
-    'whats your epic display name',
-    'hey whats your epic display name',
-    'quick question whats your epic display name',
-  ],
-  trollPayoff: [
-    'nice',
-    'nice one',
-    'very nice',
-  ],
   // Someone asks the bot "who me" and it points the finger back with a GIF. These are the
   // direct .gif files behind Klipy pages, because Discord shows a bare image link as just
   // the GIF, where a page link would add a "KLIPY: ..." title card. To add one, open the
@@ -95,9 +83,6 @@ export const LINES = {
 };
 
 const COOLDOWN_MS = 15_000;
-const TROLL_CHANCE = 1 / 15;
-const TROLL_REST_MS = 7 * 24 * 60 * 60_000;
-const TROLL_ANSWER_WINDOW_MS = 2 * 60_000;
 
 type LineCategory = 'whoMe' | 'joke' | 'thanks' | 'question' | 'plain';
 
@@ -120,16 +105,14 @@ export function categorize(content: string): LineCategory {
 }
 
 /**
- * Builds the message handler. All its state lives in memory on purpose: a restart forgets
- * who was trolled, which costs nothing, and the feature leaves no table behind when it goes.
+ * Builds the message handler. Its cooldowns live in memory on purpose: a restart forgets
+ * them, which costs nothing, and the feature leaves no table behind when it goes.
  */
 export function createBanterHandler(
   random: () => number = Math.random,
   now: () => number = Date.now
 ): (message: Message) => Promise<void> {
   const nextReplyAt = new Map<string, number>();
-  const trollRestUntil = new Map<string, number>();
-  const awaitingAnswerUntil = new Map<string, number>();
 
   const pick = (lines: string[]) => lines[Math.floor(random() * lines.length)];
 
@@ -137,20 +120,6 @@ export function createBanterHandler(
     if (message.author.bot || !message.guildId) return;
 
     const personKey = `${message.guildId}:${message.author.id}`;
-    const answerKey = `${message.channelId}:${message.author.id}`;
-
-    // Without the MessageContent intent we can't read an answer that doesn't @ the bot, but
-    // we are told that a message arrived. The payoff doesn't need the words, so any next
-    // message counts as the answer.
-    const answerDeadline = awaitingAnswerUntil.get(answerKey);
-    if (answerDeadline !== undefined) {
-      awaitingAnswerUntil.delete(answerKey);
-      if (now() <= answerDeadline) {
-        nextReplyAt.set(personKey, now() + COOLDOWN_MS);
-        await replyQuietly(message, pick(LINES.trollPayoff));
-        return;
-      }
-    }
 
     // mentions.users holds only direct @s of a user, so @everyone and role pings stay out.
     const botId = message.client.user?.id;
@@ -159,18 +128,7 @@ export function createBanterHandler(
     if (now() < (nextReplyAt.get(personKey) ?? 0)) return;
     nextReplyAt.set(personKey, now() + COOLDOWN_MS);
 
-    const category = categorize(message.content);
-    const canTroll = now() >= (trollRestUntil.get(personKey) ?? 0);
-    if (category === 'plain' && canTroll && random() < TROLL_CHANCE) {
-      const asked = await replyQuietly(message, pick(LINES.trollAsk));
-      if (asked) {
-        trollRestUntil.set(personKey, now() + TROLL_REST_MS);
-        awaitingAnswerUntil.set(answerKey, now() + TROLL_ANSWER_WINDOW_MS);
-      }
-      return;
-    }
-
-    await replyQuietly(message, pick(LINES[category]));
+    await replyQuietly(message, pick(LINES[categorize(message.content)]));
   };
 }
 

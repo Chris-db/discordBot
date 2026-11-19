@@ -1,13 +1,48 @@
-# Rocket League 6mans Discord Bot 🚀
+# Rocket League 6mans Discord Bot
 
-A modern, high-performance **Rocket League 6mans Discord Bot** built with **Node.js**, **TypeScript**, **discord.js v14**, and **SQLite (`better-sqlite3`)**.
+A Discord bot that runs pickup games ("6mans") for Rocket League communities: players
+queue, the bot builds balanced teams, sets up private channels and a lobby, collects the
+result and keeps an MMR ladder. It is live on several Discord servers, self-hosted on a
+Raspberry Pi 5 running Ubuntu Server.
 
-This bot solves the UI/UX friction and common complaints of legacy bots like **NeatQueue** by offering:
-- **Interactive UI Buttons**: Join/leave queues, view stats, and inspect leaderboards without typing commands.
-- **Three Mode Voting**: When 6 players join, vote between **Captains Draft**, **Balanced (ELO)**, or **Random**.
-- **Interactive Captains Draft**: Captains draft teammates using a visual **Discord Select Menu (Dropdown)** showing player MMRs.
-- **Automated Lobbies & Voice Channels**: Automatically generates a Rocket League Lobby Name/Password and creates temporary **Team Blue 🔵** and **Team Orange 🟠** voice channels.
-- **Frictionless Reporting & Admin Override**: Players report match results with button confirmation; Admins and Mods can instantly override or cancel matches.
+**Stack:** TypeScript, Node.js 24, discord.js v14, SQLite (`better-sqlite3`), `canvas` for
+the generated image cards, Vitest.
+
+## What it does
+
+- **Button-driven queue.** Players join, leave and check stats from a panel; no commands
+  to remember.
+- **Team-mode vote.** When the queue fills, players choose Captains Draft, Balanced (by
+  MMR) or Random.
+- **Captains draft** from a dropdown that shows each player's MMR.
+- **Match setup:** a private match channel, a generated lobby name and password, and
+  temporary team voice channels.
+- **Reporting and moderation:** results are confirmed by the players; admins can override
+  or cancel.
+- **Ladders per server and team size** (2v2, 3v3, 4v4), with rank divisions, seasons,
+  promotion and relegation.
+
+## How it runs
+
+The production bot runs on a Raspberry Pi 5 with Ubuntu Server, managed by systemd.
+
+- **Continuous deployment.** A systemd timer checks `main` every 15 minutes. When it has
+  moved, the Pi pulls, runs the test suite, builds into a separate folder and swaps it in
+  before restarting the service. A failed test or build rolls back, leaves the running bot
+  untouched and opens a `deploy-failed` GitHub issue
+  ([`scripts/pi/`](scripts/pi/)).
+- **CI** runs the typecheck and tests on every pull request.
+- **Backups:** a daily SQLite snapshot on the Pi, plus a nightly off-site copy to a
+  private repo ([`scripts/offsite-backup.sh`](scripts/offsite-backup.sh)).
+- **Monitoring:** unexpected errors are filed as GitHub issues automatically, with the
+  commit, host and recent log lines attached. While connected to Discord, the bot pings an
+  external uptime monitor, which alerts when the pings stop. The Pi needs no open ports.
+- **Resilience:** a Discord outage means the bot waits and retries rather than exiting.
+  After a restart, it cleans up matches that were mid-setup and tells those players to
+  queue again.
+
+How the code is organised, and why, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Running and fixing it is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 

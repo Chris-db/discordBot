@@ -409,6 +409,16 @@ Chris's own server was set up by hand before this existed (all five 3v3 division
 "Live setup"); `/setup` there would find everything by name except the queue channels,
 which it keeps because they are already registered. No need to run it.
 
+## Getting ready to go public (2026-11-19)
+
+Chris plans to make the repo public as a portfolio piece for an internship application.
+Before that: two banter jokes that wouldn't read well to an employer came out, along with
+the Epic display name troll, its tests and its docs. The Pi's
+hostname in OPERATIONS.md became a placeholder. The username and `/home/chris` paths stay,
+because the systemd unit and deploy script depend on them. The README now opens with what
+the project is and how it runs on the Pi. Still open: where feedback and error issues go
+once the repo is public (see PROGRESS.md).
+
 ## Where the old `feature_plan1.md` was wrong
 
 Retired 2026-11-03; kept here because the design calls still stand.

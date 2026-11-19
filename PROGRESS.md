@@ -3,7 +3,7 @@
 Where the bot stands and what is left to do. Update this at the end of a session that
 changes either; put the story of the session in `docs/history/BUILD-LOG.md`.
 
-Last updated: 2026-11-04 (banter added)
+Last updated: 2026-11-19 (cleanup before making the repo public)
 
 | For | Read |
 |---|---|
@@ -50,6 +50,10 @@ list, each item checked against the code.
 - **Image smoke tests for every card.** Only the wheel, profile and palette render in tests.
 - **Pin Node 24** in `package.json` `engines`. CI pins it; nothing else does.
 - **Remove banter** once the joke gets old. `src/services/banter.ts` says how.
+- **Before making the repo public:** decide where `/feedback` and error reports go. Today
+  both open GitHub Issues on this repo, which a public repo shows to everyone (player
+  names, server names, stack traces). Options: a separate private repo for issues, or a
+  private Discord channel.
 - **Code readability**, one small PR each, behaviour unchanged: split `queries.ts`
   (1,249 lines) and `votingService.ts` (1,027); typed DB rows instead of `row: any`
   (`parseQueueRow`, `parseMatchRow`); a shared drawing kit for the `*Image.ts` cards.

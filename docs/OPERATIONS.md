@@ -4,7 +4,7 @@ Running, deploying, testing and rescuing the bot. Architecture is in `ARCHITECTU
 
 ## Where it runs
 
-The bot runs on the Raspberry Pi (`pi5.local`, user `chris`) as the systemd service
+The bot runs on the Raspberry Pi (reached over SSH as `<pi-host>`, user `chris`) as the systemd service
 `6mans.service`, from a clone at `/home/chris/discordBot`. `main` on GitHub is the source of
 truth. The Pi is the permanent host; a VPS only if funding turns up.
 
@@ -28,7 +28,7 @@ CI (`.github/workflows/test.yml`) runs typecheck and tests on Node 24 for every 
 On the Pi:
 
 ```bash
-ssh chris@pi5.local
+ssh chris@<pi-host>
 sudo systemctl start 6mans-deploy.service      # deploy now instead of waiting
 journalctl -u 6mans-deploy -n 30 --no-pager    # what the last deploy did
 journalctl -u 6mans -f                         # bot logs
