@@ -15,8 +15,7 @@ import {
 } from '../database/queries';
 import type { Match } from '../database/queries';
 import { formatTeamSize } from '../ui/teamSize';
-import { forceReportMatch, cancelMatch } from '../services/matchService';
-import { deleteMatchChannels } from '../services/channelService';
+import { forceReportMatch, cancelMatch, cleanupMatch } from '../services/matchService';
 import { autoDeleteReply } from '../utils/autoDelete';
 import { RL_COLORS } from '../ui/embeds';
 
@@ -210,14 +209,11 @@ export const matchCommand = {
         if (!match) {
           return interaction.reply({ content: noSuchMatch(interaction), flags: MessageFlags.Ephemeral });
         }
-        await deleteMatchChannels(interaction.client, match.match_id);
-        updateMatch(match.match_id, {
-          state: 'CANCELLED',
-          winner: 'NONE',
-          completed_at: new Date().toISOString(),
-        });
+        const { cancelled } = await cleanupMatch(interaction.client, match.match_id);
         return interaction.reply({
-          content: `✅ Cleaned up temporary channels and cancelled DB record for Match #${match.match_number}.`,
+          content: cancelled
+            ? `✅ Cleaned up temporary channels and cancelled DB record for Match #${match.match_number}.`
+            : `✅ Cleaned up temporary channels for Match #${match.match_number}. It had already ended, so its result is unchanged.`,
           flags: MessageFlags.Ephemeral,
         });
       } else {
