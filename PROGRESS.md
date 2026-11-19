@@ -50,10 +50,6 @@ list, each item checked against the code.
 - **Image smoke tests for every card.** Only the wheel, profile and palette render in tests.
 - **Pin Node 24** in `package.json` `engines`. CI pins it; nothing else does.
 - **Remove banter** once the joke gets old. `src/services/banter.ts` says how.
-- **Before making the repo public:** point error reports at a private repo. `bot-error`
-  and `deploy-failed` issues go to `GITHUB_REPO` in the Pi's `.env`, and their log lines
-  can name players and servers. Make a private repo, set `GITHUB_REPO` to it and give
-  `GITHUB_TOKEN` Issues access there; no code change. (`/feedback` is switched off.)
 - **Code readability**, one small PR each, behaviour unchanged: split `queries.ts`
   (1,249 lines) and `votingService.ts` (1,027); typed DB rows instead of `row: any`
   (`parseQueueRow`, `parseMatchRow`); a shared drawing kit for the `*Image.ts` cards.
