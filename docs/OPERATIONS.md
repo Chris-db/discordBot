@@ -4,7 +4,7 @@ Running, deploying, testing and rescuing the bot. Architecture is in `ARCHITECTU
 
 ## Where it runs
 
-The bot runs on the Raspberry Pi (`pi5.local`, user `chris`) as the systemd service
+The bot runs on the Raspberry Pi (reached over SSH as `<pi-host>`, user `chris`) as the systemd service
 `6mans.service`, from a clone at `/home/chris/discordBot`. `main` on GitHub is the source of
 truth. The Pi is the permanent host; a VPS only if funding turns up.
 
@@ -28,7 +28,7 @@ CI (`.github/workflows/test.yml`) runs typecheck and tests on Node 24 for every 
 On the Pi:
 
 ```bash
-ssh chris@pi5.local
+ssh chris@<pi-host>
 sudo systemctl start 6mans-deploy.service      # deploy now instead of waiting
 journalctl -u 6mans-deploy -n 30 --no-pager    # what the last deploy did
 journalctl -u 6mans -f                         # bot logs
@@ -42,13 +42,14 @@ Both become GitHub Issues (`src/services/errorReporter.ts`, `feedbackService.ts`
 - Every `logger.error` becomes one issue labelled `bot-error`, fingerprinted. Repeats are
   comments, at most one an hour; an error that comes back after its issue was closed opens
   a new one. Each report carries the stack, the commit and the log lines before it.
-- `/feedback <message>` files an issue labelled `feedback`.
+- `/feedback <message>` would file an issue labelled `feedback`, but the command is
+  switched off (2026-11-19): nobody used it, and the repo is going public. The comment
+  under `commands` in `src/handlers/commandHandler.ts` says how to bring it back.
 - Hard cap of 30 GitHub calls an hour. State lives in `data/error-reports.json` on the Pi.
 - Needs `GITHUB_REPO` and `GITHUB_TOKEN` in the Pi's `.env` (a fine-grained PAT for this
   repo only, Issues read and write).
 
-`MONITOR.md` describes the cloud routine that used to triage these every 6 hours. It is
-disabled; Chris triages by hand.
+Chris triages these issues by hand.
 
 ## Uptime heartbeat
 

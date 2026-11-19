@@ -19,7 +19,7 @@
     "elo",
     "matchmaking"
   ],
-  "author": "Antigravity",
+  "author": "Chris-db",
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^1.0.3",

@@ -409,6 +409,22 @@ Chris's own server was set up by hand before this existed (all five 3v3 division
 "Live setup"); `/setup` there would find everything by name except the queue channels,
 which it keeps because they are already registered. No need to run it.
 
+## Getting ready to go public (2026-11-19)
+
+Chris plans to make the repo public as a portfolio piece for an internship application.
+Before that: two banter jokes that wouldn't read well to an employer came out, along with
+the Epic display name troll, its tests and its docs. The Pi's
+hostname in OPERATIONS.md became a placeholder. The username and `/home/chris` paths stay,
+because the systemd unit and deploy script depend on them. The README now opens with what
+the project is and how it runs on the Pi, with four rendered cards in `docs/images/`.
+`/feedback` was switched off, since nobody used it and its issues would have been public.
+The command is still in the code and can be turned back on. The sample names in
+`renderAll.ts`, the theme preview and the replay tests were real players' tags; they are
+fictional now. The repo is MIT licensed. PITCH.md lost its pricing, since the bot is
+free, and MONITOR.md is gone: it described the disabled cloud triage routine, and the rest
+of it already lives in OPERATIONS.md. Still open: point error reports at a private repo
+(see PROGRESS.md).
+
 ## Where the old `feature_plan1.md` was wrong
 
 Retired 2026-11-03; kept here because the design calls still stand.

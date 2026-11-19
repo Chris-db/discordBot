@@ -64,11 +64,10 @@ error reporter (`errorReporter.ts`).
 
 **Banter** (`banter.ts`): @ the bot and it replies with a hardcoded line, chosen by whether
 the message says "who me", asks for a joke, says thanks, asks a question or none of those.
-"who me" gets one of a few GIFs, sent as a bare `.gif` link so Discord shows only the GIF. About 1 plain
-ping in 15 asks for the person's Epic display name and calls their next message in that
-channel "nice". It can't read that message, since there is no MessageContent intent,
-and doesn't need to. Its state is in memory only and it stands alone so it is easy to
-remove; the steps are at the top of the file.
+"who me" gets one of a few GIFs, sent as a bare `.gif` link so Discord shows only the GIF.
+Each person gets at most one reply per 15 seconds. Its state is in memory only and it
+stands alone so it is easy to remove; the steps are at the top of the file. The lines are
+public in this repo, so keep them ones you'd be happy for an employer to read.
 
 ## Data model
 
