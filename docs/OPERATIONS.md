@@ -42,7 +42,9 @@ Both become GitHub Issues (`src/services/errorReporter.ts`, `feedbackService.ts`
 - Every `logger.error` becomes one issue labelled `bot-error`, fingerprinted. Repeats are
   comments, at most one an hour; an error that comes back after its issue was closed opens
   a new one. Each report carries the stack, the commit and the log lines before it.
-- `/feedback <message>` files an issue labelled `feedback`.
+- `/feedback <message>` would file an issue labelled `feedback`, but the command is
+  switched off (2026-11-19): nobody used it, and the repo is going public. The comment
+  under `commands` in `src/handlers/commandHandler.ts` says how to bring it back.
 - Hard cap of 30 GitHub calls an hour. State lives in `data/error-reports.json` on the Pi.
 - Needs `GITHUB_REPO` and `GITHUB_TOKEN` in the Pi's `.env` (a fine-grained PAT for this
   repo only, Issues read and write).

@@ -102,12 +102,12 @@ const threeVthree = () =>
     MatchStartEpoch: ['QWordProperty', 1788796031n],
     WinningTeam: ['IntProperty', 0],
     PlayerStats: ['ArrayProperty', [
-      player('Zeph', 0, 2), player('ravi_rl1', 0, 1), player('Jérôme', 0, 0),
-      player('a8chi', 1, 1), player('wilxnt', 1, 0), player('goldninja', 1, 0),
+      player('Tom', 0, 2), player('aerial_ana', 0, 1), player('Jérôme', 0, 0),
+      player('kai_kickoff', 1, 1), player('demo_dani', 1, 0), player('fin', 1, 0),
     ]],
     Date: ['StrProperty', '2026-09-07 20-59-32'],
     MatchType: ['NameProperty', 'Private'],
-    PlayerName: ['StrProperty', 'Zeph'],
+    PlayerName: ['StrProperty', 'Tom'],
     MapName: ['NameProperty', 'EuroStadium_P'],
     Id: ['StrProperty', 'ABC123'],
   });
@@ -122,12 +122,12 @@ describe('parseReplayHeader', () => {
     expect(h.winner).toBe('BLUE');
     expect(h.matchType).toBe('Private');
     expect(h.matchStartEpoch).toBe(1788796031);
-    expect(h.recordedBy).toBe('Zeph');
+    expect(h.recordedBy).toBe('Tom');
     expect(h.players.map(p => `${p.name}:${p.team}:${p.goals}`)).toEqual([
-      'Zeph:0:2', 'ravi_rl1:0:1', 'Jérôme:0:0', 'a8chi:1:1', 'wilxnt:1:0', 'goldninja:1:0',
+      'Tom:0:2', 'aerial_ana:0:1', 'Jérôme:0:0', 'kai_kickoff:1:1', 'demo_dani:1:0', 'fin:1:0',
     ]);
     // Epic ids come from the nested PlayerID struct when OnlineID is zero.
-    expect(h.players[0].onlineId).toBe('epic_Zeph');
+    expect(h.players[0].onlineId).toBe('epic_Tom');
     expect(h.players[0].platform).toBe('Epic');
   });
 

@@ -416,8 +416,11 @@ Before that: two banter jokes that wouldn't read well to an employer came out, a
 the Epic display name troll, its tests and its docs. The Pi's
 hostname in OPERATIONS.md became a placeholder. The username and `/home/chris` paths stay,
 because the systemd unit and deploy script depend on them. The README now opens with what
-the project is and how it runs on the Pi. Still open: where feedback and error issues go
-once the repo is public (see PROGRESS.md).
+the project is and how it runs on the Pi, with four rendered cards in `docs/images/`.
+`/feedback` was switched off, since nobody used it and its issues would have been public.
+The command is still in the code and can be turned back on. The sample names in
+`renderAll.ts`, the theme preview and the replay tests were real players' tags; they are
+fictional now. Still open: point error reports at a private repo (see PROGRESS.md).
 
 ## Where the old `feature_plan1.md` was wrong
 

@@ -20,8 +20,8 @@ export async function renderThemePreview(
   division: string
 ): Promise<{ queue: Buffer; result: Buffer }> {
   const roster = [
-    sample('Zeph', 1327, division, 3), sample('ravi', 1312, division), sample('a8chi', 1292, division),
-    sample('wilxnt', 1288, division), sample('goldninja', 1270, division, 5), sample('josho', 1255, division),
+    sample('Tom', 1327, division, 3), sample('ana', 1312, division), sample('kai_kickoff', 1292, division),
+    sample('demo_dani', 1288, division), sample('fin', 1270, division, 5), sample('boost_ben', 1255, division),
   ];
   const blue = roster.slice(0, 3);
   const orange = roster.slice(3);

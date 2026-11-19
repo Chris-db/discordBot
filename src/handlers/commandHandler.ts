@@ -13,7 +13,6 @@ import { seasonCommand } from '../commands/season';
 import { divisionCommand } from '../commands/division';
 import { replayCommand } from '../commands/replay';
 import { themeCommand } from '../commands/theme';
-import { feedbackCommand } from '../commands/feedback';
 import { setupCommand } from '../commands/setup';
 import config from '../config';
 import { logger } from '../utils/logger';
@@ -31,9 +30,13 @@ export const commands = [
   divisionCommand,
   replayCommand,
   themeCommand,
-  feedbackCommand,
   setupCommand,
 ];
+
+// /feedback (commands/feedback.ts) is switched off: nobody used it, and in a public repo its
+// GitHub issues would show players' messages to everyone. Commands re-register on boot, so
+// leaving it out of this list removes it from Discord. To bring it back, import it and add
+// it here, then put its line back in /help and the README.
 
 /**
  * Executes a slash command when received.

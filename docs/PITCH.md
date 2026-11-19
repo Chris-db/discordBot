@@ -14,8 +14,7 @@ public application id plus the permissions it actually uses — nothing secret i
 > and updates everyone's rank. Ranks reset monthly. 2v2, 3v3 and 4v4 all work.
 >
 > Setup is literally one command (`/setup`) — it makes the channels for you. I run and
-> maintain it myself, so if something breaks or you want something changed, tell me (or
-> anyone can type `/feedback` in Discord and it lands with me).
+> maintain it myself, so if something breaks or you want something changed, tell me.
 >
 > Free for the month, no strings. If your lot like it we can talk about keeping it after.
 > Want the invite link?

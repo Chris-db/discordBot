@@ -92,8 +92,11 @@ describe('submitFeedback', () => {
 });
 
 describe('/feedback command', () => {
-  it('is registered with a required message option of sensible length', () => {
-    expect(commands.map(c => c.data.name)).toContain('feedback');
+  it('is switched off: not in the list that registers with Discord', () => {
+    expect(commands.map(c => c.data.name)).not.toContain('feedback');
+  });
+
+  it('keeps a required message option of sensible length, ready to switch back on', () => {
     const json = feedbackCommand.data.toJSON();
     const opt = json.options?.[0] as any;
     expect(opt.name).toBe('message');

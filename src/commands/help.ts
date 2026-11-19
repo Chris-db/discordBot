@@ -92,8 +92,7 @@ export const helpCommand = {
             '`/division list [size]` — See every division and its promotion thresholds\n' +
             '`/division check [user] [size]` — See a player\'s division and season standing\n' +
             '`/season info` — Current season, matches played, division sizes\n' +
-            '`/season history` — Past seasons and their champions\n' +
-            '`/feedback <message>` — Send a bug report or suggestion to whoever runs the bot',
+            '`/season history` — Past seasons and their champions',
           inline: false,
         },
         {

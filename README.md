@@ -22,6 +22,14 @@ the generated image cards, Vitest.
 - **Ladders per server and team size** (2v2, 3v3, 4v4), with rank divisions, seasons,
   promotion and relegation.
 
+Every stage gets an image card, drawn on the server with `canvas` (sample players):
+
+| Captains draft | Match-up |
+|---|---|
+| ![Captains draft card](docs/images/draft.png) | ![Match-up card](docs/images/match_vs.png) |
+| **Result** | **Player profile** |
+| ![Match result card](docs/images/result.png) | ![Player profile card](docs/images/profile_ranked.png) |
+
 ## How it runs
 
 The production bot runs on a Raspberry Pi 5 with Ubuntu Server, managed by systemd.
@@ -56,8 +64,6 @@ If someone is hosting the bot for you, setup is three steps:
    - `Three` (C/B/A) or `All five` (C/B/A/X/S) — separate ladders, players are placed by an admin with `/division place`.
    Add `roles:true` if you want each rank category visible only to its rank role. `/setup` is safe to run again — it only adds what is missing. Run it once per team size (`size:2v2`, `size:4v4`) if you want more than 3v3.
 3. Players click **Join Queue** on the panel in their rank channel. That is it.
-
-Bug or idea? Anyone can type **`/feedback <message>`** — it goes straight to the maintainer.
 
 ---
 ## 🛠️ Quick Setup Guide
@@ -139,7 +145,6 @@ read a ladder take an optional `size:` (2v2 / 3v3 / 4v4), defaulting to 3v3.
 | `/season end confirm:<name>` | Admin | Ends the season: snapshots standings, promotes/relegates, resets every MMR to its division's default. Refuses while anything is live. Never runs on its own |
 | `/ban add` / `remove` / `check` / `list` | Admin | Queue bans: `30m`, `12h`, `7d`, `2w`, `1mo` or `permanent` |
 | `/theme set` / `reset` / `preset` / `list` / `show` | Admin | The server's card colours |
-| `/feedback <message>` | Everyone | Sends a bug report or idea to the maintainer (files a GitHub issue) |
 | `/help` | Everyone | How the bot works |
 
 ---

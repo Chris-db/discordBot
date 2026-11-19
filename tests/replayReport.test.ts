@@ -75,21 +75,21 @@ describe('formatSeries', () => {
         orangeScore: 1,
         totalSecondsPlayed: 302,
         players: [
-          { name: 'Zeph', team: 0, score: 500, goals: 2, assists: 1, saves: 0, shots: 3, bot: false },
-          { name: 'ravi_rl1', team: 1, score: 200, goals: 1, assists: 0, saves: 2, shots: 1, bot: false },
+          { name: 'Tom', team: 0, score: 500, goals: 2, assists: 1, saves: 0, shots: 3, bot: false },
+          { name: 'aerial_ana', team: 1, score: 200, goals: 1, assists: 0, saves: 2, shots: 1, bot: false },
         ],
       }),
       game({ matchStartEpoch: 2000, blueScore: 2, orangeScore: 0 }),
     ]);
     const text = formatSeries(s, match(), {
-      blue: [{ username: 'zephyerrl' } as any],
-      orange: [{ username: 'ravi' } as any],
+      blue: [{ username: 'turbo_tom' } as any],
+      orange: [{ username: 'ana' } as any],
     });
 
     expect(text).toContain('**Match #42** · IN PROGRESS');
-    expect(text).toContain('🔵 zephyerrl');
+    expect(text).toContain('🔵 turbo_tom');
     expect(text).toContain('**Game 1** — 🔵 **3** – **1** 🟠 · 5:02');
-    expect(text).toMatch(/Zeph\s+2g\s+1a\s+0s\s+500/);
+    expect(text).toMatch(/Tom\s+2g\s+1a\s+0s\s+500/);
     expect(text).toContain('**Series:** 🔵 2 – 0 🟠');
     expect(text).toContain('/match report match:42');
   });

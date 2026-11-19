@@ -39,8 +39,8 @@ const p = (name: string, mmr: number, division: string, extra: Partial<Player> =
   }) as Player;
 
 const roster = [
-  p('zephyerrl', 1327, 'B', { streak: 3 }), p('ravi_rl1', 1312, 'B'), p('a8chi', 1292, 'B', { streak: -2 }),
-  p('wilxnt', 1288, 'B'), p('goldninja_rl', 1270, 'B', { streak: 5 }), p('josho', 1255, 'B'),
+  p('turbo_tom', 1327, 'B', { streak: 3 }), p('aerial_ana', 1312, 'B'), p('kai_rl', 1292, 'B', { streak: -2 }),
+  p('demo_dani', 1288, 'B'), p('musty_max', 1270, 'B', { streak: 5 }), p('boost_ben', 1255, 'B'),
 ];
 const blue = roster.slice(0, 3);
 const orange = roster.slice(3);
@@ -75,25 +75,25 @@ async function main(): Promise<void> {
   await write('result', generateMatchResultImage(client, 42, 'BLUE', result(blue, 14), result(orange, -14), '26m'));
   await write('gamble_doubled', generateGambleResultImage(client, 42, 'BLUE', 'DOUBLED', result(blue, 28), result(orange, -28)));
   await write('gamble_inverted', generateGambleResultImage(client, 42, 'ORANGE', 'INVERTED', result(blue, -14), result(orange, 14)));
-  await write('leaderboard', generateLeaderboardImage(client, [...roster, p('sudoroso', 1201, 'B'), p('Cometteninho', 1190, 'B')], 1, 3));
+  await write('leaderboard', generateLeaderboardImage(client, [...roster, p('ceiling_cal', 1201, 'B'), p('WavedashWren', 1190, 'B')], 1, 3));
   // The profile card's bar and fourth stat come from profileCard.ts; these are the four
   // shapes it can take, drawn from fixtures rather than the database.
   const profile = (player: Player, rank: number, bar: MmrBar, bestTeammate?: BestTeammate): ProfileCardData =>
     ({ player, rank, totalPlayers: 8, bar, bestTeammate });
   await write('profile_ranked', generatePlayerProfileImage(client, profile(
     roster[0], 1, { from: 1300, to: 1400, progress: 0.27, label: 'Promotes to Rank A at 1400' },
-    { discord_id: 'id_wilxnt', username: 'wilxnt', wins: 7, games: 9 }
+    { discord_id: 'id_demo_dani', username: 'demo_dani', wins: 7, games: 9 }
   )));
   await write('profile_one_ladder', generatePlayerProfileImage(client, profile(
-    p('zephyerrl', 1016, 'C', { wins: 1, losses: 1, streak: -1 }), 2, { from: 1000, to: 1180, progress: 0.09, label: 'Ladder top: 1180 (ravi_rl1)' },
-    { discord_id: 'id_a8chi', username: 'a8chi', wins: 1, games: 2 }
+    p('turbo_tom', 1016, 'C', { wins: 1, losses: 1, streak: -1 }), 2, { from: 1000, to: 1180, progress: 0.09, label: 'Ladder top: 1180 (aerial_ana)' },
+    { discord_id: 'id_kai_rl', username: 'kai_rl', wins: 1, games: 2 }
   )));
   await write('profile_on_top', generatePlayerProfileImage(client, profile(
-    p('ravi_rl1', 1180, 'C', { wins: 9, losses: 3, streak: 4 }), 1, { from: 1000, to: 1180, progress: 1, label: "You're on top 👑" },
+    p('aerial_ana', 1180, 'C', { wins: 9, losses: 3, streak: 4 }), 1, { from: 1000, to: 1180, progress: 1, label: "You're on top 👑" },
     { discord_id: 'id_x', username: 'averyveryverylongdiscordname', wins: 5, games: 6 }
   )));
   await write('profile_new', generatePlayerProfileImage(client, profile(
-    p('josho', 1000, 'C', { wins: 0, losses: 0, streak: 0 }), 0, { from: 1000, to: 1200, progress: 0, label: 'Promotes to Rank B at 1200' }
+    p('boost_ben', 1000, 'C', { wins: 0, losses: 0, streak: 0 }), 0, { from: 1000, to: 1200, progress: 0, label: 'Promotes to Rank B at 1200' }
   )));
   await write('history', generateMatchHistoryImage(client, [match(42, 'BLUE'), match(41, 'ORANGE'), match(40, 'BLUE', { winner: 'NONE', state: 'CANCELLED' })], undefined));
   console.log(`rendered ${fs.readdirSync(out).length} cards to ${out}`);
