@@ -49,8 +49,7 @@ Both become GitHub Issues (`src/services/errorReporter.ts`, `feedbackService.ts`
 - Needs `GITHUB_REPO` and `GITHUB_TOKEN` in the Pi's `.env` (a fine-grained PAT for this
   repo only, Issues read and write).
 
-`MONITOR.md` describes the cloud routine that used to triage these every 6 hours. It is
-disabled; Chris triages by hand.
+Chris triages these issues by hand.
 
 ## Uptime heartbeat
 

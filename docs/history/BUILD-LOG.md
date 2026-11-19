@@ -420,7 +420,10 @@ the project is and how it runs on the Pi, with four rendered cards in `docs/imag
 `/feedback` was switched off, since nobody used it and its issues would have been public.
 The command is still in the code and can be turned back on. The sample names in
 `renderAll.ts`, the theme preview and the replay tests were real players' tags; they are
-fictional now. Still open: point error reports at a private repo (see PROGRESS.md).
+fictional now. The repo is MIT licensed. PITCH.md lost its pricing, since the bot is
+free, and MONITOR.md is gone: it described the disabled cloud triage routine, and the rest
+of it already lives in OPERATIONS.md. Still open: point error reports at a private repo
+(see PROGRESS.md).
 
 ## Where the old `feature_plan1.md` was wrong
 

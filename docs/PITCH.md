@@ -6,7 +6,7 @@ public application id plus the permissions it actually uses — nothing secret i
 ## The DM (send to the server owner / an admin)
 
 > Hey — I built a 6mans bot for Rocket League and I'm looking for one or two SA servers
-> to run it on for free for a month. Curious if yours would want it?
+> to run it on for free. Curious if yours would want it?
 >
 > What it does: players click **Join** in a queue channel, when it's full it makes a
 > private lobby channel + team voice channels, gives everyone the RL lobby name/password,
@@ -16,8 +16,7 @@ public application id plus the permissions it actually uses — nothing secret i
 > Setup is literally one command (`/setup`) — it makes the channels for you. I run and
 > maintain it myself, so if something breaks or you want something changed, tell me.
 >
-> Free for the month, no strings. If your lot like it we can talk about keeping it after.
-> Want the invite link?
+> It's free, no strings. Want the invite link?
 
 ## When they say yes
 
@@ -53,7 +52,3 @@ No Administrator. No reading message content.
   saved `.replay` file with `/replay check`.
 - **Can we keep our existing roles/channels?** Yes — `/setup` reuses anything with a
   matching name and only adds what's missing.
-- **Cost after the month?** R100/month per server, or R1 000/year. The first two servers get
-  a founding price of R50/month locked in for good, in exchange for honest feedback.
-  (Anchor: NeatQueue premium is ~$5/month ≈ R90; the bot costs ~nothing to run, so the
-  price is about proving people will pay, not income.)

@@ -168,3 +168,9 @@ division only changes at a season end, by promotion or relegation, or when an ad
 | [docs/TESTING.md](docs/TESTING.md) | Checklist for a live test run |
 | [docs/PITCH.md](docs/PITCH.md) | Copy for offering the bot to a new server |
 | [docs/history/](docs/history/) | The original audit and the build log |
+
+---
+
+## License
+
+[MIT](LICENSE)
