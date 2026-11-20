@@ -94,6 +94,9 @@ export function startHeartbeat(client: GatewayClient, options: HeartbeatOptions 
 
   let lastFailed = false;
   let lastSkipped = false;
+  // A fresh process has no failure to recover from, so without this line a restart that
+  // works logs nothing about the ping at all, and "working" looks the same as "never ran".
+  let everSent = false;
   const tick = async () => {
     const result = await beat(client, url, fetchImpl, timeoutMs);
     if (result === 'skipped' && !lastSkipped) {
@@ -106,7 +109,10 @@ export function startHeartbeat(client: GatewayClient, options: HeartbeatOptions 
       logger.warn(`Heartbeat ping to ${describe(url)} failed. The uptime monitor will think the bot is down until this recovers.`);
     } else if (result === 'sent' && lastFailed) {
       logger.info(`Heartbeat ping to ${describe(url)} is working again.`);
+    } else if (result === 'sent' && !everSent) {
+      logger.info(`Heartbeat: first ping to ${describe(url)} sent.`);
     }
+    if (result === 'sent') everSent = true;
     if (result !== 'skipped') lastFailed = result === 'failed';
   };
 

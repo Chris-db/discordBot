@@ -71,7 +71,8 @@ is a secret.
 
 To rebuild it: create a Healthchecks.io check (period 5 min, grace 5 min), put the ping URL
 in `HEARTBEAT_URL` in `~/discordBot/.env` on the Pi, restart `6mans`, and look for
-`Heartbeat: pinging hc-ping.com every 5 min` in the log. To prove it, stop the service,
+`Heartbeat: pinging hc-ping.com every 5 min` in the log, then
+`Heartbeat: first ping to hc-ping.com sent.` once the gateway is connected. To prove it, stop the service,
 wait about 10 minutes for the alert, then start it again.
 
 If the log says `Heartbeat ping to hc-ping.com failed` while the bot is clearly online,
