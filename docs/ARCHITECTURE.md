@@ -144,6 +144,12 @@ Each of these cost a real bug once.
   which looks like a performance bug and is not one.
 - Ephemeral replies use `flags: MessageFlags.Ephemeral`, not `ephemeral: true`.
 
+**Network**
+- **Node's happy-eyeballs gives each address only 250 ms to connect.** From the Pi a
+  far-away host can take longer (hc-ping.com: about 305 ms), and with no working IPv6
+  every attempt fails with `ETIMEDOUT` while curl works. `relaxHappyEyeballs()`
+  (`utils/network.ts`) raises it to 2 s at startup; keep it the first thing `index.ts` does.
+
 **Images**
 - **Render and look at every image change.** Wrong streak values, tofu emoji and a
   clipped draft card all passed the tests. `scripts/renderAll.ts` renders every card with

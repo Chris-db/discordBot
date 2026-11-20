@@ -27,7 +27,12 @@ import { startBanter } from './services/banter';
 // boot rather than the first time someone completes a match.
 import { registerFonts } from './utils/fonts';
 import { logger } from './utils/logger';
+import { relaxHappyEyeballs } from './utils/network';
 import db from './database/db';
+
+// Before anything connects: Node's 250 ms per-address connect limit is shorter than the
+// Pi's round trip to some hosts, which made every heartbeat fail. See utils/network.ts.
+relaxHappyEyeballs();
 
 // Refuse to start on a broken .env. Under systemd a process that idles with a warning
 // looks identical to one that is working; a clear exit shows up in `systemctl status`.

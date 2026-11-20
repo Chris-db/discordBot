@@ -74,6 +74,13 @@ in `HEARTBEAT_URL` in `~/discordBot/.env` on the Pi, restart `6mans`, and look f
 `Heartbeat: pinging hc-ping.com every 5 min` in the log. To prove it, stop the service,
 wait about 10 minutes for the alert, then start it again.
 
+If the log says `Heartbeat ping to hc-ping.com failed` while the bot is clearly online,
+check the connection from the Pi: `curl -4 -sS https://hc-ping.com` and
+`curl -6 -sS https://hc-ping.com`. The Pi has no working IPv6, so Node relies on falling
+back to IPv4 within its per-address connect limit. Node's 250 ms default was too short for
+hc-ping.com (about 305 ms from the Pi) and broke every ping on 2026-11-20; the bot now
+raises it to 2 s at startup (`src/utils/network.ts`).
+
 ## Backups
 
 - **On the Pi:** one `VACUUM INTO` snapshot a day in `data/backups/` (checked hourly, so a
