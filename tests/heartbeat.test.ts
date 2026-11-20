@@ -95,6 +95,33 @@ describe('startHeartbeat', () => {
     stop();
   });
 
+  it('says once that the first ping after start got through', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const { fetchImpl } = recorder();
+    const stop = startHeartbeat(clientThatIs(true), { url: 'https://hc-ping.com/abc', fetchImpl, intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(3000);
+    const lines = info.mock.calls.map(c => String(c[0]));
+    expect(lines.filter(l => l === 'Heartbeat: first ping to hc-ping.com sent.').length).toBe(1);
+    stop();
+  });
+
+  it('reports a first success after failures as recovery, not as a first ping', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    let ok = false;
+    const fetchImpl: FetchLike = async () => ({ ok, status: ok ? 200 : 503 });
+    const stop = startHeartbeat(clientThatIs(true), { url: 'https://hc-ping.com/abc', fetchImpl, intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    ok = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    const lines = info.mock.calls.map(c => String(c[0]));
+    expect(lines).toContain('Heartbeat ping to hc-ping.com is working again.');
+    expect(lines.some(l => l.startsWith('Heartbeat: first ping'))).toBe(false);
+    stop();
+  });
+
   it('does nothing at all without a URL', () => {
     vi.useFakeTimers();
     const { calls, fetchImpl } = recorder();
